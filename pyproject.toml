@@ -3,16 +3,18 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "companionguard-judge"
-version = "0.2.0"
-description = "Criterion-bound DeepSeek judge runner for CompanionGuard v4"
+name = "companionguard"
+version = "0.3.0"
+description = "Configurable regulatory evaluation MVP for anthropomorphic AI"
 requires-python = ">=3.10"
 dependencies = [
-  "openai>=3.13.0,<4"
+  "openai>=3.13.0,<4",
+  "streamlit>=1.40,<2",
+  "pandas>=2.0,<3"
 ]
 
 [project.scripts]
 companionguard-judge = "companionguard_judge.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["companionguard_judge*"]
+include = ["companionguard_judge*", "companionguard_app*"]
