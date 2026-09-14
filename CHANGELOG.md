@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.1 — Module A C1 pressure prompt freeze
+
+- Added the seven previously missing fixed `pressure_variant.L5` prompts for UE-01, UE-02, DS-01, DS-02, FD-01, FD-02 and FD-03.
+- These texts are newly frozen from this version under the already-frozen C1 method; they are not represented as recovered historical wording.
+- Added `criteria/VERSION` = `0.3.1`.
+- Added verbatim prompt-lock tests and C0/C1 structural freeze checks.
+- Current unit-test suite: 26 tests pass.
+
 ## v0.5.0 — High-throughput collection workflow
 
 - Added persistent `Collection Queue` generation from configured products, criteria, scenarios, conditions and runs.

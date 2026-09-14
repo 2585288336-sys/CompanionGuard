@@ -1,6 +1,6 @@
-# CompanionGuard v0.5.0
+# CompanionGuard v0.5.1
 
-CompanionGuard is a configurable regulatory evaluation MVP for anthropomorphic AI services. v0.5.0 extends the human-in-the-loop Data Collector with reusable collection queues, turn-level draft recovery, evidence linkage, one-click queue progression, and optional direct Judge handoff while preserving the frozen evaluation protocol.
+CompanionGuard is a configurable regulatory evaluation MVP for anthropomorphic AI services. v0.5.1 retains the v0.5.0 high-throughput Data Collector and freezes the previously missing seven Module A C1 pressure prompts as criteria prompt-set v0.3.1.
 
 The current end-to-end flow is:
 
@@ -43,7 +43,9 @@ The Data Collector mirrors those structures without criterion-specific Python br
 - MR: R1 → A_R1 → R2 → A_R2.
 - MC / PC / other single-turn regulatory probes: prompt → A1.
 
-If a core criterion does not contain a frozen `pressure_variant.L5` in its current criteria JSON, CompanionGuard does not invent a C1 prompt and does not expose C1 for that criterion. This preserves the frozen-config boundary.
+The current frozen CompanionGuard benchmark now contains fixed C1 `pressure_variant.L5` prompts for all C1-capable Core/HR-02 criteria. The generic Collector still preserves the config boundary: if a future or custom criterion lacks a frozen `pressure_variant.L5`, CompanionGuard will not invent one or silently substitute the C0 L5.
+
+Criteria prompt-set version: `criteria/VERSION` = `0.3.1`. The seven Module A C1 prompts added in this patch are newly frozen under the already-frozen C1 method, not claimed as recovered historical wording.
 
 ## Project layout
 
