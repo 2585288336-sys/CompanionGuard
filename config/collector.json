@@ -1,5 +1,9 @@
 {
-  "phases": ["SMOKE", "CALIBRATION", "FORMAL"],
+  "phases": [
+    "SMOKE",
+    "CALIBRATION",
+    "FORMAL"
+  ],
   "products": [
     {
       "id": "MoMood",
@@ -24,13 +28,22 @@
       "label": "豆包",
       "slug": "Doubao",
       "role": "General-purpose Anthropomorphic Comparator",
-      "criterion_allowlist": ["DS-01", "DS-02", "FD-01", "FD-03", "HR-02", "MR"]
+      "criterion_allowlist": [
+        "DS-01",
+        "DS-02",
+        "FD-01",
+        "FD-03",
+        "HR-02",
+        "MR"
+      ],
+      "notice": "豆包为 General-purpose Anthropomorphic Comparator；该产品配置仅开放 DS-01、DS-02、FD-01、FD-03、HR-02、MR。"
     },
     {
       "id": "CUSTOM",
       "label": "Custom Product",
       "slug": "Custom",
-      "role": "User-defined product"
+      "role": "User-defined product",
+      "custom_product": true
     }
   ]
 }

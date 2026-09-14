@@ -6,18 +6,26 @@ from pathlib import Path
 from companionguard_app.collector import (
     allowed_criteria_for_product,
     build_collection_plan,
+    build_queue_items,
     build_raw_case,
+    create_collection_queue,
     create_collection_session,
     load_collector_config,
     make_case_id,
     mark_session_complete,
+    save_step_draft,
     save_step_response,
 )
 from companionguard_app.collector_storage import (
     append_raw_case,
+    get_collection_queue,
     get_collection_session,
     load_raw_cases,
+    make_queue_id,
+    reconcile_collection_queue,
     save_evidence_files,
+    update_queue_item_status,
+    upsert_collection_queue,
     upsert_collection_session,
 )
 from companionguard_app.service import criteria_index
@@ -112,6 +120,78 @@ class CollectorTests(unittest.TestCase):
                 complete = mark_session_complete(session)
                 self.assertEqual(complete["collection_status"], "COMPLETE")
 
+
+    def test_mr_second_round_is_a_real_collection_step(self):
+        plan = build_collection_plan(self.criteria["MR"], condition=None, scenario_id="MR-03")
+        self.assertEqual(len(plan), 2)
+        self.assertEqual(plan[0]["prompt_turn"], "R1")
+        self.assertEqual(plan[0]["response_turn"], "A_R1")
+        self.assertEqual(plan[1]["prompt_turn"], "R2")
+        self.assertEqual(plan[1]["response_turn"], "A_R2")
+
+    def test_queue_expansion_is_config_driven_across_structures(self):
+        available = allowed_criteria_for_product(self.criteria, self.config, "MoMood")
+        items = build_queue_items(
+            criteria=available,
+            criterion_ids=["HR-02", "MR", "MC"],
+            product_slug="AnyProduct",
+            phase="FORMAL",
+            run_numbers=[1, 2],
+            condition_filter=["C1", "C2"],
+        )
+        hr = [x for x in items if x["criterion_id"] == "HR-02"]
+        mr = [x for x in items if x["criterion_id"] == "MR"]
+        mc = [x for x in items if x["criterion_id"] == "MC"]
+        self.assertEqual(len(hr), 4)  # 2 conditions x 2 runs
+        self.assertEqual(len(mr), 6)  # 3 scenarios x 2 runs
+        self.assertEqual(len(mc), 18)  # 9 single-turn scenarios x 2 runs
+        self.assertEqual({x["condition"] for x in hr}, {"C1", "C2"})
+        self.assertEqual({x["condition"] for x in mr}, {None})
+
+    def test_empty_condition_filter_does_not_silently_add_core_conditions(self):
+        items = build_queue_items(
+            criteria=self.criteria,
+            criterion_ids=["HR-02", "MR"],
+            product_slug="P", phase="SMOKE", run_numbers=[1], condition_filter=[],
+        )
+        self.assertFalse([x for x in items if x["criterion_id"] == "HR-02"])
+        self.assertEqual(len([x for x in items if x["criterion_id"] == "MR"]), 3)
+
+    def test_draft_autosave_does_not_advance_turn(self):
+        criterion = self.criteria["MR"]
+        session = create_collection_session(
+            criterion=criterion, product_id="P", product_name="P", product_slug="P", product_role="",
+            scenario_id="MR-01", condition=None, run_number=1, phase="SMOKE", collection_date="2026-09-15",
+        )
+        updated = save_step_draft(session, step_index=0, draft_response="  pasted draft\n")
+        self.assertEqual(updated["current_step_index"], 0)
+        self.assertEqual(updated["steps"][0]["draft_response"], "  pasted draft\n")
+        self.assertIsNone(updated["steps"][0]["response"])
+
+    def test_queue_persistence_and_status_update(self):
+        items = build_queue_items(
+            criteria=self.criteria, criterion_ids=["MR"], product_slug="P", phase="FORMAL",
+            run_numbers=[1], condition_filter=["C0", "C1", "C2"],
+        )
+        with tempfile.TemporaryDirectory() as td:
+            queue_path = Path(td) / "queues.jsonl"
+            session_path = Path(td) / "sessions.jsonl"
+            raw_path = Path(td) / "raw.jsonl"
+            qid = make_queue_id(product_slug="P", phase="FORMAL", collection_date="2026-09-15", path=queue_path)
+            queue = create_collection_queue(
+                queue_id=qid, queue_name="test queue", product_id="P", product_name="P", product_slug="P",
+                product_role="", phase="FORMAL", collection_date="2026-09-15", items=items,
+            )
+            upsert_collection_queue(queue, path=queue_path)
+            first = items[0]
+            queue = update_queue_item_status(
+                queue_id=qid, case_id=first["case_id"], status="IN_PROGRESS", session_id=first["case_id"], path=queue_path,
+            )
+            self.assertEqual(queue["items"][0]["status"], "IN_PROGRESS")
+            restored = get_collection_queue(qid, path=queue_path)
+            self.assertEqual(restored["queue_name"], "test queue")
+            reconciled = reconcile_collection_queue(restored, sessions_path=session_path, raw_path=raw_path)
+            self.assertEqual(reconciled["items"][0]["status"], "PENDING")
 
     def test_response_is_preserved_verbatim(self):
         criterion = self.criteria["MC"]

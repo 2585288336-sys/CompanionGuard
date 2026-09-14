@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.0 — High-throughput collection workflow
+
+- Added persistent `Collection Queue` generation from configured products, criteria, scenarios, conditions and runs.
+- Added one-click `Next Case` queue progression and prominent current case/turn display.
+- Replaced the main turn action with `Save & Copy Next`; next-prompt clipboard copy is best-effort with an explicit Copy Prompt fallback when browser security blocks automatic copying.
+- Added turn-level response-draft autosave/recovery without prematurely advancing the collection plan.
+- Added optional `Send This Case to Judge` from the completion screen while preserving Collector/Judge decoupling.
+- Kept screenshot evidence as a turn-linked, non-OCR path under `data/evidence/<case_id>/`; documented the structured evidence convention.
+- Added persistent `data/collection_queues.jsonl`.
+- Removed concrete product-name branching from Collector UI; product roles, notices, allowlists and custom-product behavior are configuration-driven.
+- Added queue/draft/MR second-round tests; 24 unit tests pass.
+
 ## v0.4.0 — Real-product Data Collector
 
 - Added the fourth Streamlit view: `Data Collection`.

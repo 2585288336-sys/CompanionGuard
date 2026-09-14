@@ -1,6 +1,6 @@
-# CompanionGuard v0.4.0
+# CompanionGuard v0.5.0
 
-CompanionGuard is a configurable regulatory evaluation MVP for anthropomorphic AI services. v0.4.0 adds a human-in-the-loop Data Collector for running frozen prompts against real external products without manually assembling JSON.
+CompanionGuard is a configurable regulatory evaluation MVP for anthropomorphic AI services. v0.5.0 extends the human-in-the-loop Data Collector with reusable collection queues, turn-level draft recovery, evidence linkage, one-click queue progression, and optional direct Judge handoff while preserving the frozen evaluation protocol.
 
 The current end-to-end flow is:
 
@@ -119,8 +119,8 @@ The Collector is the primary real-product acquisition workflow:
 6. Copy the fixed prompt shown by CompanionGuard.
 7. Send it in the real product.
 8. Paste the model response exactly as shown.
-9. Click `Save & Next`.
-10. Repeat until the case is complete.
+9. Click `Save & Copy Next` (best-effort clipboard copy; browsers may require the visible Copy Prompt button).
+10. Repeat until the case is complete, then optionally choose `Send This Case to Judge`.
 
 Each saved response is persisted immediately to `data/collection_sessions.jsonl`. Exiting the page leaves the session `IN_PROGRESS`; it can be resumed after refresh or restart. The final turn triggers Judge-compatibility validation and writes one complete case to `data/raw_cases.jsonl`.
 
@@ -132,7 +132,31 @@ Screenshots are optional supporting evidence. Uploaded images are saved under:
 data/evidence/<case_id>/
 ```
 
-They are associated with the relevant response turn. Screenshot OCR / vision extraction is intentionally not part of the 24-hour MVP; text copy remains the primary data path.
+They are associated with the relevant response turn and their paths are written into `collection_trace[].evidence_files`. Multiple screenshots for one turn are numbered `_01`, `_02`, etc. Screenshot OCR / vision extraction is intentionally not part of the MVP; text copy remains the primary data path. See `docs/DATA_COLLECTION.md` for the evidence/archive convention.
+
+### Collection Queue and high-throughput collection
+
+The Data Collection page supports both **Collection Queue** and **Single Case** modes. A queue dynamically expands selected configured criteria into their frozen structures and chosen runs. It does not duplicate prompt text into queue configuration.
+
+Queue workflow:
+
+```text
+Create Queue
+  → Start / Resume Current Case
+  → Copy Prompt
+  → paste/send in external product
+  → paste verbatim response
+  → Save & Copy Next
+  → ...
+  → case COMPLETE
+  → Next Case
+```
+
+The current case and turn are displayed prominently to reduce case/condition/turn mistakes. Queue state is persisted in `data/collection_queues.jsonl`. In-progress response drafts are persisted in `data/collection_sessions.jsonl` without advancing the turn.
+
+`Save & Copy Next` uses a best-effort browser clipboard attempt after advancing. Browser security policy can block programmatic clipboard access; the next prompt always remains visible with an explicit `Copy Prompt` button as the reliable fallback.
+
+After case completion, the user can either continue collecting or optionally `Send This Case to Judge`. Direct Judge handoff is never required for collection and uses the same session-only BYOK/environment key behavior as Run Test.
 
 ### 3. Human Review
 
@@ -253,6 +277,7 @@ A completed Collector case has this shape:
 ```text
 data/raw_cases.jsonl             # complete real-product raw cases
 data/collection_sessions.jsonl   # resumable IN_PROGRESS/COMPLETE collection sessions
+data/collection_queues.jsonl     # reusable collection queues and case status
 data/evidence/                   # optional screenshots keyed by case_id
 data/judge_results.jsonl         # structured Judge results
 data/human_adjudication.csv      # human decisions / overrides

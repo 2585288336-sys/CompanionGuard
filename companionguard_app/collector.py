@@ -166,6 +166,93 @@ def make_case_id(
     )
 
 
+def build_queue_items(
+    *,
+    criteria: dict[str, dict[str, Any]],
+    criterion_ids: list[str],
+    product_slug: str,
+    phase: str,
+    run_numbers: list[int],
+    condition_filter: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Expand configured criteria into queueable case specifications.
+
+    This is deliberately criterion-agnostic: the expansion is driven by each
+    criterion's judge_template, scenarios and configured conditions.
+    """
+    items: list[dict[str, Any]] = []
+    position = 1
+    for criterion_id in criterion_ids:
+        criterion = criteria[criterion_id]
+        conditions = available_conditions(criterion)
+        if conditions == [None]:
+            selected_conditions: list[str | None] = [None]
+        else:
+            allowed = set(condition_filter if condition_filter is not None else [c for c in conditions if c])
+            selected_conditions = [c for c in conditions if c in allowed]
+        for scenario_id in scenario_ids(criterion):
+            for condition in selected_conditions:
+                for run_number in run_numbers:
+                    items.append({
+                        "position": position,
+                        "case_id": make_case_id(
+                            product_slug=product_slug,
+                            criterion_id=criterion_id,
+                            scenario_id=scenario_id,
+                            condition=condition,
+                            phase=phase,
+                            run_number=run_number,
+                        ),
+                        "criterion_id": criterion_id,
+                        "scenario_id": scenario_id,
+                        "condition": condition,
+                        "run_number": int(run_number),
+                        "status": "PENDING",
+                        "session_id": None,
+                    })
+                    position += 1
+    return items
+
+
+def create_collection_queue(
+    *,
+    queue_id: str,
+    queue_name: str,
+    product_id: str,
+    product_name: str,
+    product_slug: str,
+    product_role: str,
+    phase: str,
+    collection_date: str,
+    items: list[dict[str, Any]],
+    notes: str = "",
+) -> dict[str, Any]:
+    now = utc_now_iso()
+    return {
+        "queue_id": queue_id,
+        "queue_name": queue_name or queue_id,
+        "queue_status": "IN_PROGRESS" if items else "COMPLETE",
+        "product_id": product_id,
+        "product": product_name,
+        "product_slug": product_slug,
+        "product_role": product_role,
+        "phase": phase,
+        "collection_date": collection_date,
+        "notes": notes,
+        "items": deepcopy(items),
+        "created_at": now,
+        "updated_at": now,
+        "completed_at": None,
+    }
+
+
+def next_queue_item(queue: dict[str, Any]) -> dict[str, Any] | None:
+    for item in queue.get("items", []):
+        if item.get("status") in {"IN_PROGRESS", "PENDING"}:
+            return item
+    return None
+
+
 def create_collection_session(
     *,
     criterion: dict[str, Any],
@@ -179,6 +266,7 @@ def create_collection_session(
     phase: str,
     collection_date: str,
     notes: str = "",
+    queue_id: str | None = None,
 ) -> dict[str, Any]:
     case_id = make_case_id(
         product_slug=product_slug,
@@ -190,12 +278,13 @@ def create_collection_session(
     )
     plan = build_collection_plan(criterion, condition=condition, scenario_id=scenario_id)
     for step in plan:
-        step.update({"response": None, "saved_at": None, "evidence_files": []})
+        step.update({"response": None, "draft_response": None, "saved_at": None, "evidence_files": []})
 
     now = utc_now_iso()
     return {
         "session_id": case_id,
         "case_id": case_id,
+        "queue_id": queue_id,
         "collection_status": "IN_PROGRESS",
         "product_id": product_id,
         "product": product_name,
@@ -224,6 +313,23 @@ def create_collection_session(
     }
 
 
+def save_step_draft(
+    session: dict[str, Any],
+    *,
+    step_index: int,
+    draft_response: str,
+) -> dict[str, Any]:
+    """Persist an in-progress text draft without advancing the collection turn."""
+    if session.get("collection_status") != "IN_PROGRESS":
+        raise ValueError("Only IN_PROGRESS sessions can be edited.")
+    if step_index < 0 or step_index >= len(session.get("steps", [])):
+        raise IndexError("Invalid collection step index.")
+    updated = deepcopy(session)
+    updated["steps"][step_index]["draft_response"] = draft_response
+    updated["updated_at"] = utc_now_iso()
+    return updated
+
+
 def save_step_response(
     session: dict[str, Any],
     *,
@@ -241,6 +347,7 @@ def save_step_response(
     updated = deepcopy(session)
     step = updated["steps"][step_index]
     step["response"] = response
+    step["draft_response"] = None
     step["saved_at"] = utc_now_iso()
     if evidence_files is not None:
         step["evidence_files"] = list(evidence_files)
@@ -306,6 +413,7 @@ def build_raw_case(session: dict[str, Any], criterion: dict[str, Any]) -> dict[s
         "product_id": session.get("product_id"),
         "product_role": session.get("product_role"),
         "collection_status": "COMPLETE",
+        "queue_id": session.get("queue_id"),
     }
     case: dict[str, Any] = {
         "case_id": session["case_id"],
