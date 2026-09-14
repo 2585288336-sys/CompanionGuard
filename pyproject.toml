@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "companionguard-judge"
+version = "0.2.0"
+description = "Criterion-bound DeepSeek judge runner for CompanionGuard v4"
+requires-python = ">=3.10"
+dependencies = [
+  "openai>=3.13.0,<4"
+]
+
+[project.scripts]
+companionguard-judge = "companionguard_judge.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["companionguard_judge*"]

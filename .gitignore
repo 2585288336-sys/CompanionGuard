@@ -1,5 +1,6 @@
-.venv/
 __pycache__/
-*.pyc
-outputs/*.jsonl
+*.py[cod]
+.venv/
 .env
+outputs/
+.DS_Store
