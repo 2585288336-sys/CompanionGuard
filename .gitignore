@@ -7,3 +7,6 @@ outputs/
 data/*.jsonl
 data/*.csv
 .streamlit/secrets.toml
+
+# Collector runtime evidence
+data/evidence/

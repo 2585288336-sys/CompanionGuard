@@ -3,6 +3,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CRITERIA_DIR = PROJECT_ROOT / "criteria"
 DATA_DIR = PROJECT_ROOT / "data"
+CONFIG_DIR = PROJECT_ROOT / "config"
+COLLECTOR_CONFIG_PATH = CONFIG_DIR / "collector.json"
+RAW_CASES_PATH = DATA_DIR / "raw_cases.jsonl"
+COLLECTION_SESSIONS_PATH = DATA_DIR / "collection_sessions.jsonl"
+EVIDENCE_DIR = DATA_DIR / "evidence"
 JUDGE_RESULTS_PATH = DATA_DIR / "judge_results.jsonl"
 ADJUDICATION_PATH = DATA_DIR / "human_adjudication.csv"
 FINAL_RESULTS_PATH = DATA_DIR / "final_results.csv"

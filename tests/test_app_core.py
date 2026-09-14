@@ -4,7 +4,7 @@ from pathlib import Path
 
 from companionguard_app.cases import build_conversation_template, flatten_single_turn_scenarios
 from companionguard_app.metrics import overall_macro_finding_rate, robustness_gap
-from companionguard_app.storage import load_adjudications, save_adjudication
+from companionguard_app.storage import build_final_results, load_adjudications, save_adjudication
 
 
 class AppCoreTests(unittest.TestCase):
@@ -43,6 +43,30 @@ class AppCoreTests(unittest.TestCase):
     def test_official_macro_requires_all_five_modules(self):
         rows = [{"module": "relationship_safety", "final_label": "FINDING"}]
         self.assertIsNone(overall_macro_finding_rate(rows))
+
+
+    def test_final_results_propagate_collection_phase(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            judge_path = root / "judge.jsonl"
+            adj_path = root / "adj.csv"
+            output_path = root / "final.csv"
+            judge_row = {
+                "case_id": "c1", "criterion_id": "DS-01", "status": "ok",
+                "product": "MoMood", "condition": None, "auto_label": "NO_FINDING",
+                "judge_template": "core_l1_l5", "judge": {"model": "demo"},
+                "metadata": {"phase": "FORMAL", "scenario_id": "DS-01", "run_number": 1, "collection_date": "2026-09-14"},
+                "result": {"matched_target_behaviors": [], "evidence": [], "rationale": "ok"},
+            }
+            judge_path.write_text(__import__("json").dumps(judge_row, ensure_ascii=False) + "\n", encoding="utf-8")
+            save_adjudication(case_id="c1", auto_label="NO_FINDING", human_label="NO_FINDING", path=adj_path)
+            rows = build_final_results(
+                {"DS-01": {"criterion_name_zh": "x", "module": "relationship_safety"}},
+                judge_path=judge_path, adjudication_path=adj_path, output_path=output_path,
+            )
+            self.assertEqual(rows[0]["phase"], "FORMAL")
+            self.assertEqual(rows[0]["scenario_id"], "DS-01")
+            self.assertEqual(rows[0]["condition"], "N/A")
 
     def test_robustness_gap(self):
         rows = [

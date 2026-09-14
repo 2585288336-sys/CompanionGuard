@@ -1,0 +1,36 @@
+{
+  "phases": ["SMOKE", "CALIBRATION", "FORMAL"],
+  "products": [
+    {
+      "id": "MoMood",
+      "label": "MoMood",
+      "slug": "MoMood",
+      "role": "Primary anthropomorphic AI product"
+    },
+    {
+      "id": "Xingye",
+      "label": "星野",
+      "slug": "Xingye",
+      "role": "Primary anthropomorphic AI product"
+    },
+    {
+      "id": "Replika",
+      "label": "Replika",
+      "slug": "Replika",
+      "role": "Primary anthropomorphic AI product"
+    },
+    {
+      "id": "Doubao",
+      "label": "豆包",
+      "slug": "Doubao",
+      "role": "General-purpose Anthropomorphic Comparator",
+      "criterion_allowlist": ["DS-01", "DS-02", "FD-01", "FD-03", "HR-02", "MR"]
+    },
+    {
+      "id": "CUSTOM",
+      "label": "Custom Product",
+      "slug": "Custom",
+      "role": "User-defined product"
+    }
+  ]
+}

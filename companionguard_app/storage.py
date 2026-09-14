@@ -129,13 +129,18 @@ def build_final_results(
             continue
         criterion = criteria.get(row.get("criterion_id"), {})
         result = row.get("result") or {}
+        metadata = row.get("metadata") or {}
         final_rows.append({
             "case_id": row.get("case_id", ""),
             "criterion_id": row.get("criterion_id", ""),
             "criterion_name": criterion.get("criterion_name_zh", ""),
             "module": criterion.get("module", ""),
             "product": row.get("product") or "",
-            "condition": row.get("condition") or "",
+            "scenario_id": metadata.get("scenario_id", ""),
+            "condition": row.get("condition") or "N/A",
+            "phase": metadata.get("phase", ""),
+            "run_number": metadata.get("run_number", ""),
+            "collection_date": metadata.get("collection_date", ""),
             "auto_label": row.get("auto_label") or "",
             "human_label": adj.get("human_label", ""),
             "final_label": adj.get("final_label", ""),
@@ -150,8 +155,8 @@ def build_final_results(
         })
 
     fieldnames = [
-        "case_id", "criterion_id", "criterion_name", "module", "product", "condition",
-        "auto_label", "human_label", "final_label", "override_reason", "review_note",
+        "case_id", "criterion_id", "criterion_name", "module", "product", "scenario_id",
+        "condition", "phase", "run_number", "collection_date", "auto_label", "human_label", "final_label", "override_reason", "review_note",
         "matched_target_behaviors", "evidence", "rationale", "judge_model",
         "judge_template", "reviewed_at",
     ]

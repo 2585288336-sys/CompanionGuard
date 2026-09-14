@@ -14,6 +14,7 @@ from .cases import (
     flatten_single_turn_scenarios,
     parse_conversation_json,
 )
+from .collector_storage import load_raw_cases
 from .config import MODULE_LABELS, OVERRIDE_REASONS
 from .metrics import label_counts, module_finding_rates, overall_macro_finding_rate, robustness_gap
 from .service import criteria_index, run_batch_cases, run_single_case
@@ -169,12 +170,31 @@ def run_test_page() -> None:
             _judge_result_card(st.session_state["last_judge_result"])
 
     with batch_tab:
-        uploaded = st.file_uploader("上传cases JSONL", type=["jsonl", "json"])
-        if uploaded is not None:
-            raw = uploaded.getvalue().decode("utf-8")
-            try:
-                cases = [json.loads(line) for line in raw.splitlines() if line.strip()]
-                st.success(f"读取到 {len(cases)} 个case。")
+        source = st.radio(
+            "Case source",
+            ["Collected raw_cases.jsonl", "Upload JSONL"],
+            horizontal=True,
+        )
+        cases: list[dict[str, Any]] = []
+        try:
+            if source == "Collected raw_cases.jsonl":
+                cases = load_raw_cases()
+                if not cases:
+                    st.info("data/raw_cases.jsonl 还没有已完成的采集case。先到 Data Collection 完成至少一个case。")
+                else:
+                    phases = sorted({str(c.get("phase") or (c.get("metadata") or {}).get("phase") or "") for c in cases})
+                    phase_filter = st.multiselect("Phase", [p for p in phases if p], default=[p for p in phases if p])
+                    if phase_filter:
+                        cases = [c for c in cases if (c.get("phase") or (c.get("metadata") or {}).get("phase")) in phase_filter]
+                    st.success(f"从 data/raw_cases.jsonl 读取到 {len(cases)} 个case。")
+            else:
+                uploaded = st.file_uploader("上传cases JSONL", type=["jsonl", "json"])
+                if uploaded is not None:
+                    raw = uploaded.getvalue().decode("utf-8")
+                    cases = [json.loads(line) for line in raw.splitlines() if line.strip()]
+                    st.success(f"读取到 {len(cases)} 个case。")
+
+            if cases:
                 st.dataframe(
                     pd.DataFrame([
                         {
@@ -182,6 +202,7 @@ def run_test_page() -> None:
                             "criterion_id": c.get("criterion_id"),
                             "product": c.get("product"),
                             "condition": c.get("condition"),
+                            "phase": c.get("phase") or (c.get("metadata") or {}).get("phase"),
                         }
                         for c in cases
                     ]),
@@ -208,8 +229,8 @@ def run_test_page() -> None:
                             )
                         ok = sum(r.get("status") == "ok" for r in results)
                         st.success(f"完成：{ok}/{len(results)} 成功。结果已写入 data/judge_results.jsonl")
-            except Exception as e:
-                st.error(str(e))
+        except Exception as e:
+            st.error(str(e))
 
 
 def human_review_page() -> None:
@@ -240,10 +261,11 @@ def human_review_page() -> None:
     result = row.get("result") or {}
 
     st.subheader(f"{row.get('criterion_id')} · {criterion.get('criterion_name_zh', '')}")
-    m1, m2, m3 = st.columns(3)
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("Auto Label", row.get("auto_label", ""))
     m2.metric("Product", row.get("product") or "—")
     m3.metric("Condition", row.get("condition") or "—")
+    m4.metric("Phase", (row.get("metadata") or {}).get("phase") or "—")
 
     if result.get("matched_target_behaviors"):
         st.write("Matched T-code:", ", ".join(result["matched_target_behaviors"]))
@@ -306,15 +328,25 @@ def results_page() -> None:
         return
 
     df = pd.DataFrame(rows)
+    if "phase" not in df.columns:
+        df["phase"] = ""
+    formal = df[df["phase"] == "FORMAL"].copy()
+    if formal.empty:
+        st.info("当前没有 phase == FORMAL 的已复核结果。SMOKE/CALIBRATION/旧版无phase记录不会进入正式指标。")
+        with st.expander("Non-formal adjudicated records"):
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        return
+
+    st.caption("Official analysis view: only phase == FORMAL is included in metrics and the Finding Matrix.")
     st.sidebar.markdown("### Results Filters")
-    products = sorted(x for x in df["product"].dropna().unique() if x)
-    modules = sorted(x for x in df["module"].dropna().unique() if x)
-    conditions = sorted(x for x in df["condition"].dropna().unique() if x)
+    products = sorted(x for x in formal["product"].dropna().unique() if x)
+    modules = sorted(x for x in formal["module"].dropna().unique() if x)
+    conditions = sorted(x for x in formal["condition"].dropna().unique() if x)
     selected_products = st.sidebar.multiselect("Product", products, default=products)
     selected_modules = st.sidebar.multiselect("Module", modules, default=modules)
     selected_conditions = st.sidebar.multiselect("Condition", conditions, default=conditions)
 
-    filtered = df.copy()
+    filtered = formal.copy()
     if selected_products:
         filtered = filtered[filtered["product"].isin(selected_products)]
     if selected_modules:
@@ -329,11 +361,11 @@ def results_page() -> None:
     multiturn = robustness_gap(filtered_rows, "C2")
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Adjudicated Cases", len(filtered_rows))
+    c1.metric("Adjudicated FORMAL Cases", len(filtered_rows))
     c2.metric("Findings", counts["FINDING"])
     c3.metric("Overall Macro Finding Rate", _pct(macro))
     c4.metric("Review", counts["REVIEW"])
-    st.caption("Overall Macro Finding Rate 仅在五个冻结模块都有结果时显示。")
+    st.caption("Overall Macro Finding Rate 仅在五个冻结模块都有FORMAL结果时显示。")
 
     r1, r2 = st.columns(2)
     r1.metric("Pressure Robustness Gap", _pp(pressure))
@@ -353,15 +385,21 @@ def results_page() -> None:
 
     st.subheader("Finding Matrix")
     matrix_cols = [
-        "product", "criterion_id", "criterion_name", "condition", "final_label",
-        "matched_target_behaviors", "evidence", "override_reason",
+        "product", "criterion_id", "scenario_id", "condition", "run_number", "phase",
+        "criterion_name", "final_label", "matched_target_behaviors", "evidence", "override_reason",
     ]
+    matrix_cols = [c for c in matrix_cols if c in filtered.columns]
     st.dataframe(filtered[matrix_cols], use_container_width=True, hide_index=True)
 
     csv_bytes = filtered.to_csv(index=False).encode("utf-8-sig")
     st.download_button(
-        "Download filtered CSV",
+        "Download filtered FORMAL CSV",
         data=csv_bytes,
-        file_name="companionguard_final_results.csv",
+        file_name="companionguard_final_results_formal.csv",
         mime="text/csv",
     )
+
+    nonformal = df[df["phase"] != "FORMAL"]
+    if not nonformal.empty:
+        with st.expander("Non-formal records (excluded from official metrics)"):
+            st.dataframe(nonformal, use_container_width=True, hide_index=True)
