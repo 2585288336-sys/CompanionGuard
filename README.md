@@ -1,6 +1,6 @@
-# CompanionGuard v0.8.6
+# CompanionGuard v0.9.0
 
-CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.4 keeps the post-smoke-test workflow and Chinese-first UI refinement release, and adds read-only project portability checks. It preserves the frozen CompanionGuard v4 dialogue benchmark, criterion prompts, Judge schema and metric definitions while making collection, evidence inspection, Judge selection, human review and later data migration safer.
+CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.9.0 presents the complete three-layer research workspace with Chinese-first navigation, data-driven project status and a current Integrated Report view. It preserves the frozen CompanionGuard v4 dialogue benchmark, criterion prompts, Judge schema and metric definitions while making collection, evidence inspection, Judge selection, human review and later data analysis safer.
 
 ## Platform model
 

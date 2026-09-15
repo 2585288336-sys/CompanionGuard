@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.0 — UI/UX v0.9 research workspace
+
+- Reframed the Streamlit presentation as a complete three-layer regulatory testing system with a public Home, Project Overview, read-only Test Plan, grouped workspace navigation and restrained research SaaS styling.
+- Added data-driven project status, automatic-result presentation, light empty states for Layer 2/3, and a current Integrated Report view without changing the storage contract.
+- Preserved the frozen benchmark, project-relative evidence references, machine values and existing FORMAL data; existing projects require no migration.
+
 ## v0.8.6 — Deterministic report-generation layer
 
 - Added a derived report pipeline: FORMAL-only deterministic analysis → `report_context.json` → report draft → Python hard validation → grounding result → optional academic polish → final report.

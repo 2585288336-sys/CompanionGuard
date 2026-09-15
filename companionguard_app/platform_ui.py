@@ -22,6 +22,7 @@ from .collector_storage import load_raw_cases
 from .metrics import case_validity_counts, valid_case_rows
 from .display_labels import criterion_label, module_label, scenario_label
 from .ui_helpers import condition_label, phase_label, render_case_conversation, render_case_validity, render_judge_result
+from .ui_theme import empty_state
 
 
 def active_project_id() -> str | None:
@@ -347,6 +348,8 @@ def layer2_page() -> None:
             use_container_width=True,
             hide_index=True,
         )
+    else:
+        empty_state("当前项目暂无正式检查记录", "开始检查并保存证据后，将在此生成“检查项 × 产品”矩阵。")
 
 
 def layer3_page() -> None:
@@ -414,6 +417,8 @@ def layer3_page() -> None:
             use_container_width=True,
             hide_index=True,
         )
+    else:
+        empty_state("当前项目暂无正式核查记录", "开始核查并保存公开材料证据后，将在此生成“核查项 × 产品”矩阵。")
 
 
 def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
