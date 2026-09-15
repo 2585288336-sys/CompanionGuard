@@ -29,26 +29,26 @@ def build_integrated_report(
     layer3_path: Path,
 ) -> str:
     formal = [r for r in final_rows if r.get("phase") == "FORMAL"]
-    rel = reliability_metrics(final_rows)
+    rel = reliability_metrics(formal)
     l2 = load_jsonl(layer2_path)
     l3 = load_jsonl(layer3_path)
 
     product_names = [p.get("label") or p.get("name") or p.get("id", "") for p in project.get("products", [])]
     lines = [
-        f"# CompanionGuard Integrated Report — {project.get('project_name', project.get('project_id'))}",
+        f"# CompanionGuard 综合测试报告 / Integrated Report — {project.get('project_name', project.get('project_id'))}",
         "",
         f"- Project ID: `{project.get('project_id', '')}`",
         f"- Mode: `{project.get('mode', '')}`",
         f"- Products: {', '.join(product_names)}",
         "",
-        "## Layer 1 — Dialogue Behavioral Testing",
+        "## Layer 1｜对话行为测试 / Dialogue Behavioral Testing",
         "",
         f"- Adjudicated FORMAL cases: {len(formal)}",
         f"- Overall Macro Finding Rate: {_pct(overall_macro_finding_rate(formal))}",
         f"- Pressure condition gap (C1−C0): {_pp(robustness_gap(formal, 'C1'))}",
         f"- Multi-turn condition gap (C2−C0): {_pp(robustness_gap(formal, 'C2'))}",
         "",
-        "### Module Finding Rates",
+        "### 模块风险发现率 / Module Finding Rates",
     ]
     rates = module_finding_rates(formal)
     if rates:
@@ -57,21 +57,21 @@ def build_integrated_report(
     else:
         lines.append("- No complete FORMAL module results yet.")
 
-    lines += ["", "### Product Dialogue Summary", "", "| Product | FORMAL cases | Finding rate |", "|---|---:|---:|"]
+    lines += ["", "### 产品对话测试汇总 / Product Dialogue Summary", "", "| Product | FORMAL cases | Finding rate |", "|---|---:|---:|"]
     for product in product_names:
         rows = [r for r in formal if r.get("product") == product]
         lines.append(f"| {_escape(product)} | {len(rows)} | {_pct(finding_rate(rows))} |")
 
     lines += [
         "",
-        "### Judge–Human Reliability",
+        "### Judge—人工一致性 / Judge–Human Reliability",
         f"- Cases compared: {rel['n']}",
         f"- Exact Agreement: {_pct(rel['exact_agreement'])}",
         "- Cohen's κ: " + ("N/A" if rel["cohen_kappa"] is None else f"{rel['cohen_kappa']:.3f}"),
         f"- Finding Precision: {_pct(rel['finding_precision'])}",
         f"- Finding Recall: {_pct(rel['finding_recall'])}",
         "",
-        "## Layer 2 — Product Safeguard Checks",
+        "## Layer 2｜产品安全机制检查 / Product Safeguard Checks",
         "",
     ]
     l2_counts = Counter(str(r.get("status")) for r in l2)
@@ -83,7 +83,7 @@ def build_integrated_report(
         for r in sorted(l2, key=lambda x: (str(x.get("product")), str(x.get("check_code")))):
             lines.append(f"| {_escape(r.get('product'))} | {_escape(r.get('check_code'))} | {_escape(r.get('status'))} | {_escape(r.get('evidence_summary'))} |")
 
-    lines += ["", "## Layer 3 Lite — Public Compliance Evidence Audit", ""]
+    lines += ["", "## Layer 3 Lite｜公开合规证据核查 / Public Compliance Evidence Audit", ""]
     l3_counts = Counter(str(r.get("status")) for r in l3)
     lines.append(f"Recorded checks: {len(l3)}")
     for status, count in sorted(l3_counts.items()):
@@ -98,7 +98,7 @@ def build_integrated_report(
 
     lines += [
         "",
-        "## Interpretation Boundary",
+        "## 解释边界 / Interpretation Boundary",
         "",
         "CompanionGuard reports traceable testing evidence and risk findings. It does not convert the three evidence layers into a single 0–100 safety/compliance score and does not make a formal legal compliance determination.",
     ]
@@ -177,7 +177,7 @@ def build_dialogue_report(project: dict[str, Any], final_rows: list[dict[str, An
         lines.append(f"| {_escape(product)} | {row['formal_cases']} | {_pct(row['finding_rate'])} | {_escape(', '.join(row['coverage_types']))} |")
     lines += [
         "",
-        "## Interpretation Boundary",
+        "## 解释边界 / Interpretation Boundary",
         "",
         "Benchmark-subset/custom results are targeted evaluations and must not be presented as directly equivalent to full-benchmark aggregates. CompanionGuard does not output a single 0–100 safety score or a formal legal compliance determination.",
     ]

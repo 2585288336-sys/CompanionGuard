@@ -1,6 +1,6 @@
-# CompanionGuard v0.7.0
+# CompanionGuard v0.8.0
 
-CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.7.0 preserves the frozen CompanionGuard v4 dialogue benchmark while separating product identity, test coverage and LLM provider choice into independent configuration layers.
+CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.0 is the post-smoke-test UX and experiment-execution release. It preserves the frozen CompanionGuard v4 dialogue benchmark while adding granular Test Plans, Chinese-first bilingual UI, structured Judge presentation, raw-data inspection and safer project/workflow controls.
 
 ## Platform model
 
@@ -24,6 +24,18 @@ Test Project
 
 Runtime data is isolated under `data/projects/<project_id>/`. SMOKE/CALIBRATION/FORMAL share a project file set but remain explicitly phase-tagged; official benchmark metrics use `phase == FORMAL`. For cleaner experiments, use a separate project for UI smoke tests and formal evaluation.
 
+## v0.8 smoke-test fixes
+
+- **Clean-context rule:** every new case starts in a new/reset external-product conversation. C0, C1, C2, different criteria and different runs are independent cases; turns inside one case stay in the same conversation.
+- **Granular Test Plans:** Core/HR-02 conditions are selectable per criterion; MR/MC/PC scenarios are selectable individually (for example MR-02 or MC-01-A only).
+- **Chinese-first bilingual UI:** main navigation, Test Plan modules, criteria, conditions and key workflow actions display Chinese first with English assistance.
+- **Structured Judge output:** summary label, checkpoint labels, T-codes, evidence and rationale are rendered separately rather than as one paragraph.
+- **Data Explorer:** inspect transcript, raw case JSON, screenshot links and Judge/Human Review state for each completed case; JSON can be downloaded without manual editing.
+- **Project deletion:** smoke projects can be permanently removed from the Test Projects page with typed-ID confirmation.
+- **Workflow navigation:** persistent Previous/Next controls and active-project exit make the next step explicit without forcing a rigid wizard.
+- **Save-first-click fix:** response draft persistence no longer uses a textarea blur callback that could consume the first Save click; screenshot evidence remains optional.
+- **Formal-report isolation:** integrated report reliability now uses FORMAL adjudicated cases only, so SMOKE agreement/κ cannot appear beside zero FORMAL cases.
+
 ## Layer 1 · frozen dialogue structures
 
 The benchmark is driven by `criteria/*.json`; application code does not hard-code criterion-specific decisions.
@@ -44,7 +56,8 @@ A **Test Plan** independently specifies:
 
 - product;
 - criteria;
-- C0/C1/C2 selection where applicable;
+- **per-criterion C0/C1/C2 selection** where applicable;
+- **scenario-level selection** for MR/MC/PC/single-turn tests;
 - run numbers;
 - phase;
 - coverage type.
@@ -67,7 +80,7 @@ Presets are starting points, not product restrictions.
 
 ### Data Collector
 
-The researcher never edits JSON manually. The Collector controls case/turn alignment, fixed prompts, queue state, draft recovery, screenshot linkage and Judge-ready raw case creation. The researcher only sends prompts in the real external product and pastes verbatim replies back into CompanionGuard.
+The researcher never edits JSON manually. The Collector controls case/turn alignment, fixed prompts, queue state, draft recovery, screenshot linkage and Judge-ready raw case creation. The researcher only sends prompts in the real external product and pastes verbatim replies back into CompanionGuard. **Start every new case in a new/reset product conversation; keep all turns of that case in the same conversation.**
 
 Text copy is the primary response source. Screenshot evidence is optional and linked to the exact response turn. OCR is intentionally excluded from the MVP.
 
@@ -91,7 +104,7 @@ Integrated Report      → another configured model
 
 or all four may use one model.
 
-Supported adapter types in v0.7:
+Supported adapter types in v0.8:
 
 - OpenAI-style Chat Completions (broad compatibility);
 - OpenAI Responses-compatible APIs;

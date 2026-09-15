@@ -2,6 +2,7 @@ import streamlit as st
 
 from companionguard_app.collector_ui import data_collection_page
 from companionguard_app.platform_ui import (
+    data_explorer_page,
     layer2_page,
     layer3_page,
     dialogue_report_page,
@@ -18,45 +19,86 @@ st.set_page_config(
     layout="wide",
 )
 
+PAGES = [
+    ("projects", "测试项目 / Test Projects"),
+    ("data_collection", "Layer 1 · 数据采集 / Data Collection"),
+    ("data_explorer", "Layer 1 · 数据查看 / Data Explorer"),
+    ("judge", "Layer 1 · LLM 判定 / LLM Judge"),
+    ("human_review", "Layer 1 · 人工复核 / Human Review"),
+    ("reliability", "Layer 1 · 一致性 / Reliability"),
+    ("dialogue_results", "Layer 1 · 对话测试结果 / Dialogue Results"),
+    ("dialogue_report", "Layer 1 · 对话测试报告 / Dialogue Report"),
+    ("layer2", "Layer 2 · 产品安全机制 / Product Safeguards"),
+    ("layer3", "Layer 3 · 公开合规证据 / Public Evidence"),
+    ("integrated_report", "综合报告 / Integrated Report"),
+]
+PAGE_IDS = [x[0] for x in PAGES]
+PAGE_LABELS = dict(PAGES)
+
 st.sidebar.title("CompanionGuard")
-st.sidebar.caption("Criterion-driven regulatory testing platform")
-sidebar_project_selector()
+st.sidebar.caption("拟人化 AI 监管测试平台 / Regulatory testing platform")
+project = sidebar_project_selector()
 st.sidebar.divider()
 
-pages = [
-    "Test Projects",
-    "Layer 1 · Data Collection",
-    "Layer 1 · LLM Judge",
-    "Layer 1 · Human Review",
-    "Layer 1 · Reliability",
-    "Layer 1 · Dialogue Results",
-    "Layer 1 · Dialogue Report",
-    "Layer 2 · Product Safeguards",
-    "Layer 3 · Public Evidence",
-    "Integrated Report",
-]
-page = st.sidebar.radio("Navigation", pages)
+requested = st.session_state.pop("requested_nav", None)
+if requested in PAGE_IDS:
+    st.session_state["nav_page"] = requested
+if st.session_state.get("nav_page") not in PAGE_IDS:
+    st.session_state["nav_page"] = "projects"
+page = st.sidebar.radio(
+    "导航 / Navigation",
+    PAGE_IDS,
+    format_func=lambda pid: PAGE_LABELS[pid],
+    key="nav_page",
+)
 
-if page == "Test Projects":
+# Persistent workflow cue. This is guidance, not a hard wizard: users may jump
+# between layers when their protocol permits it.
+idx = PAGE_IDS.index(page)
+st.sidebar.divider()
+st.sidebar.caption(f"当前步骤 / Current: {idx + 1}/{len(PAGE_IDS)}")
+st.sidebar.progress((idx + 1) / len(PAGE_IDS))
+if project:
+    st.sidebar.caption("典型主线：项目 → 数据采集 → 数据核对 → LLM Judge → 人工复核 → 一致性/结果 → Layer 2/3 → 综合报告")
+
+if page == "projects":
     projects_page()
-elif page == "Layer 1 · Data Collection":
+elif page == "data_collection":
     data_collection_page()
-elif page == "Layer 1 · LLM Judge":
+elif page == "data_explorer":
+    data_explorer_page()
+elif page == "judge":
     run_test_page()
-elif page == "Layer 1 · Human Review":
+elif page == "human_review":
     human_review_page()
-elif page == "Layer 1 · Reliability":
+elif page == "reliability":
     reliability_page(get_criteria())
-elif page == "Layer 1 · Dialogue Results":
+elif page == "dialogue_results":
     results_page()
-elif page == "Layer 1 · Dialogue Report":
+elif page == "dialogue_report":
     dialogue_report_page(get_criteria())
-elif page == "Layer 2 · Product Safeguards":
+elif page == "layer2":
     layer2_page()
-elif page == "Layer 3 · Public Evidence":
+elif page == "layer3":
     layer3_page()
 else:
     report_page(get_criteria())
 
+st.divider()
+nav_left, nav_mid, nav_right = st.columns([1, 2, 1])
+with nav_left:
+    if idx > 0 and st.button("← 上一步 / Previous step", use_container_width=True, key=f"global_prev::{page}"):
+        st.session_state["requested_nav"] = PAGE_IDS[idx - 1]
+        st.rerun()
+with nav_mid:
+    if project:
+        st.caption(f"当前项目 / Active project：{project.get('project_name')} · {project.get('project_id')}")
+    else:
+        st.caption("当前未进入任何测试项目。")
+with nav_right:
+    if idx < len(PAGE_IDS) - 1 and st.button("下一步 / Next step →", use_container_width=True, type="primary", key=f"global_next::{page}"):
+        st.session_state["requested_nav"] = PAGE_IDS[idx + 1]
+        st.rerun()
+
 st.sidebar.divider()
-st.sidebar.caption("Layer 1 Dialogue · Layer 2 Product Evidence · Layer 3 Public Evidence · Human Adjudication")
+st.sidebar.caption("Layer 1 对话证据 · Layer 2 产品证据 · Layer 3 公开证据 · Human Adjudication")

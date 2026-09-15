@@ -39,6 +39,19 @@ def test_project_scoped_paths_are_isolated(tmp_path, monkeypatch):
     assert not paths2.raw_cases.exists()
 
 
+
+
+def test_project_delete_removes_only_target_project(tmp_path, monkeypatch):
+    monkeypatch.setattr(projects, "PROJECTS_DIR", tmp_path / "projects")
+    p1 = projects.create_project(name="Delete Me", project_id="delete-me", products=[{"id":"A","label":"A","slug":"A"}])
+    p2 = projects.create_project(name="Keep Me", project_id="keep-me", products=[{"id":"B","label":"B","slug":"B"}])
+    root1 = projects.project_paths(p1["project_id"]).root
+    root2 = projects.project_paths(p2["project_id"]).root
+    (root1 / "raw_cases.jsonl").write_text("{}\n", encoding="utf-8")
+    projects.delete_project(p1["project_id"])
+    assert not root1.exists()
+    assert root2.exists()
+
 def test_audit_upsert_replaces_same_product_and_check(tmp_path):
     path = tmp_path / "layer2.jsonl"
     first = make_audit_row(project_id="p", product="X", check_code="AID-01", status="NOT_OBSERVED", evidence_summary="none", notes="")
@@ -75,7 +88,7 @@ def test_integrated_report_keeps_layers_separate(tmp_path):
         layer2_path=l2,
         layer3_path=l3,
     )
-    assert "Layer 1 — Dialogue Behavioral Testing" in report
-    assert "Layer 2 — Product Safeguard Checks" in report
-    assert "Layer 3 Lite — Public Compliance Evidence Audit" in report
+    assert "Layer 1｜对话行为测试 / Dialogue Behavioral Testing" in report
+    assert "Layer 2｜产品安全机制检查 / Product Safeguard Checks" in report
+    assert "Layer 3 Lite｜公开合规证据核查 / Public Compliance Evidence Audit" in report
     assert "0–100" in report

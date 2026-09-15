@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -114,7 +115,7 @@ def create_project(
         "notes": notes,
         "created_at": now,
         "updated_at": now,
-        "schema_version": "0.7.0",
+        "schema_version": "0.8.0",
     }
     paths.manifest.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
     paths.reports.mkdir(parents=True, exist_ok=True)
@@ -131,6 +132,23 @@ def update_project(project: dict[str, Any]) -> dict[str, Any]:
     paths.root.mkdir(parents=True, exist_ok=True)
     paths.manifest.write_text(json.dumps(updated, ensure_ascii=False, indent=2), encoding="utf-8")
     return updated
+
+
+
+def delete_project(project_id: str) -> None:
+    """Permanently delete one project-scoped data directory.
+
+    This intentionally operates only under data/projects/<project_id>; source
+    code and criteria are never touched. The UI requires typed confirmation.
+    """
+    paths = project_paths(project_id)
+    if not paths.root.exists():
+        raise FileNotFoundError(f"Project does not exist: {project_id}")
+    projects_root = PROJECTS_DIR.resolve()
+    target = paths.root.resolve()
+    if target.parent != projects_root:
+        raise ValueError("Refusing to delete outside the project data directory.")
+    shutil.rmtree(target)
 
 
 def relative_project_path(path: Path) -> str:

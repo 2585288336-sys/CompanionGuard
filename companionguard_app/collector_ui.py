@@ -14,6 +14,7 @@ from .collector import (
     allowed_criteria_for_product,
     available_conditions,
     build_queue_items,
+    build_queue_items_from_selections,
     build_raw_case,
     create_collection_queue,
     create_collection_session,
@@ -47,6 +48,8 @@ from .llm_ui import llm_session_id, render_llm_profile_selector
 from .testplans import upsert_test_plan
 from .platform_ui import active_project, active_paths
 from .storage import completed_case_ids
+from .config import MODULE_LABELS, OFFICIAL_MODULE_ORDER
+from .ui_helpers import condition_label, phase_label, render_condition_banner, render_judge_result
 
 
 def _criterion_label(item: tuple[str, dict[str, Any]]) -> str:
@@ -251,73 +254,96 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
     paths = active_paths()
     if not paths:
         return
-    st.subheader("Collection Queue / Test Plan")
-    st.caption("Product and test coverage are independent. Choose any product, then compose a full benchmark, benchmark subset, or custom test plan.")
+    st.subheader("测试方案与采集队列 / Test Plan & Collection Queue")
+    st.caption("产品与测试覆盖彼此独立。先选择被测产品，再按模块自由组合具体 test、scenario 与实验条件。")
     product_id, product_name, product_slug, pconfig = _render_product_selector(config, prefix="collector_queue")
 
     preset_path = __import__("pathlib").Path(__file__).resolve().parents[1] / "config" / "test_plan_presets.json"
     presets = json.loads(preset_path.read_text(encoding="utf-8"))["presets"]
-    preset = st.selectbox("Test Plan preset", presets, format_func=lambda x: x["label"], key="collector_queue_preset")
+    preset = st.selectbox("测试方案预设 / Test Plan preset", presets, format_func=lambda x: x["label"], key="collector_queue_preset")
     available = dict(criteria)
     criterion_ids = sorted(available)
-    if preset.get("criterion_ids") == "*":
-        default_ids = criterion_ids
-    else:
-        default_ids = [cid for cid in preset.get("criterion_ids", []) if cid in available]
-    selected_ids = st.multiselect(
-        "Criteria to collect",
-        criterion_ids,
-        default=default_ids,
-        format_func=lambda cid: f"{cid} · {available[cid].get('criterion_name_zh', '')}",
-        key=f"collector_queue_criteria::{preset['id']}",
-    )
-    condition_filter = st.multiselect(
-        "Core conditions to include",
-        ["C0", "C1", "C2"],
-        default=preset.get("conditions", ["C0", "C1", "C2"]),
-        help="Only applies to Core/HR-02. MR/MC/PC keep their frozen structures. Missing C1 prompts are skipped rather than invented.",
-        key=f"collector_queue_conditions::{preset['id']}",
-    )
+    preset_ids = set(criterion_ids if preset.get("criterion_ids") == "*" else [cid for cid in preset.get("criterion_ids", []) if cid in available])
+    preset_conditions = preset.get("conditions", ["C0", "C1", "C2"])
+
+    st.markdown("### 选择测试 / Select tests")
+    st.caption("Core/HR-02 可逐 test 选择 C0/C1/C2；MR、MC、PC 等可逐 scenario 选择。未选择的内容不会进入 Queue。")
+    selections: dict[str, dict[str, Any]] = {}
+
+    for module in OFFICIAL_MODULE_ORDER:
+        module_criteria = [(cid, available[cid]) for cid in criterion_ids if available[cid].get("module") == module]
+        if not module_criteria:
+            continue
+        with st.expander(MODULE_LABELS.get(module, module), expanded=module in {"relationship_safety", "minor_protection"}):
+            for cid, criterion in module_criteria:
+                default_enabled = cid in preset_ids
+                enabled = st.checkbox(
+                    f"{cid} · {criterion.get('criterion_name_zh', '')}",
+                    value=default_enabled,
+                    key=f"plan_enable::{preset['id']}::{cid}",
+                )
+                if not enabled:
+                    continue
+                template = criterion.get("judge_template")
+                if template in ("core_l1_l5", "hr02_crisis"):
+                    available_cond = [c for c in available_conditions(criterion) if c]
+                    default_cond = [c for c in preset_conditions if c in available_cond]
+                    chosen_cond = st.multiselect(
+                        f"{cid} 实验条件 / Conditions",
+                        available_cond,
+                        default=default_cond or available_cond,
+                        format_func=condition_label,
+                        key=f"plan_conditions::{preset['id']}::{cid}",
+                    )
+                    if chosen_cond:
+                        selections[cid] = {"scenarios": scenario_ids(criterion), "conditions": chosen_cond}
+                else:
+                    scenarios = scenario_ids(criterion)
+                    chosen_scenarios = st.multiselect(
+                        f"{cid} 具体场景 / Scenarios",
+                        scenarios,
+                        default=scenarios,
+                        format_func=lambda sid, c=criterion: _scenario_label(c, sid),
+                        key=f"plan_scenarios::{preset['id']}::{cid}",
+                    )
+                    if chosen_scenarios:
+                        selections[cid] = {"scenarios": chosen_scenarios, "conditions": []}
+
     coverage_type = st.selectbox(
-        "Coverage type",
+        "覆盖类型 / Coverage type",
         ["FULL_BENCHMARK", "BENCHMARK_SUBSET", "CUSTOM"],
         index=["FULL_BENCHMARK", "BENCHMARK_SUBSET", "CUSTOM"].index(preset.get("coverage_type", "CUSTOM")),
-        help="Subset/custom results are valid targeted evaluations but must not be presented as a full-benchmark aggregate.",
+        help="子集/自定义评测是有效的定向评测，但不能把聚合结果表述为与完整 benchmark 直接等价。",
         key=f"collector_queue_coverage::{preset['id']}",
     )
     c1, c2, c3 = st.columns(3)
     with c1:
-        phase = st.selectbox("Phase", config["phases"], index=config["phases"].index("SMOKE"), key="collector_queue_phase")
+        phase = st.selectbox("阶段 / Phase", config["phases"], index=config["phases"].index("SMOKE"), format_func=phase_label, key="collector_queue_phase")
     with c2:
-        start_run = int(st.number_input("First run", min_value=1, max_value=99, value=1, step=1, key="collector_queue_start_run"))
+        start_run = int(st.number_input("起始 Run / First run", min_value=1, max_value=99, value=1, step=1, key="collector_queue_start_run"))
     with c3:
-        run_count = int(st.number_input("Number of runs", min_value=1, max_value=10, value=1, step=1, key="collector_queue_run_count"))
-    collection_date = st.date_input("Collection date", value=date.today(), key="collector_queue_date").isoformat()
-    queue_name = st.text_input("Test Plan / Queue name (optional)", key="collector_queue_name")
-    notes = st.text_area("Plan notes (optional)", height=70, key="collector_queue_notes")
+        run_count = int(st.number_input("Run 数量 / Number of runs", min_value=1, max_value=10, value=1, step=1, key="collector_queue_run_count"))
+    collection_date = st.date_input("采集日期 / Collection date", value=date.today(), key="collector_queue_date").isoformat()
+    queue_name = st.text_input("测试方案 / Queue 名称（可选）", key="collector_queue_name")
+    notes = st.text_area("方案备注 / Plan notes（可选）", height=70, key="collector_queue_notes")
 
     run_numbers = list(range(start_run, start_run + run_count))
     preview_items: list[dict[str, Any]] = []
-    if selected_ids and product_name:
-        preview_items = build_queue_items(
-            criteria=available,
-            criterion_ids=selected_ids,
-            product_slug=product_slug,
-            phase=phase,
-            run_numbers=run_numbers,
-            condition_filter=condition_filter,
+    if selections and product_name:
+        preview_items = build_queue_items_from_selections(
+            criteria=available, selections=selections, product_slug=product_slug, phase=phase, run_numbers=run_numbers
         )
         by_condition: dict[str, int] = {}
         for item in preview_items:
             key = item.get("condition") or "N/A"
             by_condition[key] = by_condition.get(key, 0) + 1
-        st.caption(f"Plan preview: {len(preview_items)} cases · " + " · ".join(f"{k}: {v}" for k, v in sorted(by_condition.items())))
+        st.caption(f"方案预览 / Plan preview：{len(preview_items)} cases · " + " · ".join(f"{k}: {v}" for k, v in sorted(by_condition.items())))
         if coverage_type != "FULL_BENCHMARK":
-            st.info("This is a targeted benchmark subset/custom evaluation. Its aggregate result must not be presented as directly equivalent to a full benchmark run.")
-        with st.expander("Preview plan cases"):
+            st.info("这是基准测试子集/自定义评测。其聚合结果不得表述为与完整 CompanionGuard Benchmark 直接等价。")
+        with st.expander("查看全部 case / Preview plan cases"):
             st.dataframe(preview_items, use_container_width=True, hide_index=True)
 
-    if st.button("Save Test Plan & Create Queue", type="primary", disabled=not bool(preview_items), key="collector_queue_create"):
+    if st.button("保存测试方案并创建队列 / Save Test Plan & Create Queue", type="primary", disabled=not bool(preview_items), key="collector_queue_create"):
         queue_id = make_queue_id(product_slug=product_slug, phase=phase, collection_date=collection_date, path=paths.collection_queues)
         plan = {
             "plan_id": queue_id,
@@ -327,8 +353,8 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
             "product_slug": product_slug,
             "preset_id": preset["id"],
             "coverage_type": coverage_type,
-            "criterion_ids": selected_ids,
-            "conditions": condition_filter,
+            "selections": selections,
+            "criterion_ids": list(selections),
             "run_numbers": run_numbers,
             "phase": phase,
             "collection_date": collection_date,
@@ -336,26 +362,19 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
         }
         upsert_test_plan(paths.test_plans, plan)
         queue = create_collection_queue(
-            queue_id=queue_id,
-            queue_name=queue_name,
-            product_id=product_id,
-            product_name=product_name,
-            product_slug=product_slug,
-            product_role=pconfig.get("role", ""),
-            phase=phase,
-            collection_date=collection_date,
-            items=preview_items,
-            notes=notes,
+            queue_id=queue_id, queue_name=queue_name, product_id=product_id, product_name=product_name,
+            product_slug=product_slug, product_role=pconfig.get("role", ""), phase=phase,
+            collection_date=collection_date, items=preview_items, notes=notes,
         )
         queue["project_id"] = active_project().get("project_id") if active_project() else None
         queue["test_plan_id"] = queue_id
         queue["coverage_type"] = coverage_type
+        queue["selections"] = selections
         upsert_collection_queue(queue, paths.collection_queues)
         queue = reconcile_collection_queue(queue, raw_path=paths.raw_cases, sessions_path=paths.collection_sessions)
         upsert_collection_queue(queue, paths.collection_queues)
         st.session_state["collector_active_queue"] = queue_id
         st.rerun()
-
 
 def _start_queue_case(queue: dict[str, Any], item: dict[str, Any], criteria: dict[str, dict[str, Any]]) -> None:
     paths = active_paths()
@@ -418,16 +437,17 @@ def _render_queue(criteria: dict[str, dict[str, Any]], queue_id: str) -> None:
     current = next_queue_item(queue)
     if current:
         st.info(
-            f"NEXT CASE  {current['position']}/{len(items)}  ·  {current['case_id']}  ·  "
+            f"下一 Case / NEXT CASE  {current['position']}/{len(items)}  ·  {current['case_id']}  ·  "
             f"{current['criterion_id']} / {current['scenario_id']} / {current.get('condition') or 'N/A'} / Run {current['run_number']}"
         )
         c1, c2 = st.columns([3, 1])
         with c1:
-            if st.button("Start / Resume Current Case", type="primary", use_container_width=True, key="queue_start_current"):
+            st.warning("开始下一 case 前，请在被测产品中新建对话/清空上下文。")
+            if st.button("开始 / 继续当前 Case", type="primary", use_container_width=True, key="queue_start_current"):
                 _start_queue_case(queue, current, criteria)
                 st.rerun()
         with c2:
-            if st.button("Exit Queue", use_container_width=True, key="queue_exit"):
+            if st.button("退出队列 / Exit Queue", use_container_width=True, key="queue_exit"):
                 st.session_state.pop("collector_active_queue", None)
                 st.rerun()
     else:
@@ -478,19 +498,7 @@ def _collector_judge_profile(case_id: str):
 
 
 def _render_judge_result(row: dict[str, Any]) -> None:
-    if row.get("status") != "ok":
-        st.error(row.get("error") or "Judge failed")
-        return
-    result = row.get("result") or {}
-    st.success(f"Judge complete · Auto label: {row.get('auto_label')}")
-    if result.get("matched_target_behaviors"):
-        st.write("Matched T-code:", ", ".join(result["matched_target_behaviors"]))
-    if result.get("evidence"):
-        for evidence in result["evidence"]:
-            if isinstance(evidence, dict) and evidence.get("quote"):
-                st.code(evidence["quote"], language=None)
-    if result.get("rationale"):
-        st.write(result["rationale"])
+    render_judge_result(row, compact=True)
 
 
 def _render_completed_session(criteria: dict[str, dict[str, Any]], session: dict[str, Any]) -> None:
@@ -576,16 +584,21 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
     total = len(session["steps"])
 
     st.markdown(
-        f"## {session['product']} · {session['criterion_id']} · {session.get('condition') or 'N/A'} · Run {session['run_number']}"
+        f"## {session['product']} · {session['criterion_id']} · {condition_label(session.get('condition'))} · Run {session['run_number']}"
     )
     st.info(
-        f"CURRENT TURN  {idx + 1} / {total}   ·   {step['prompt_turn']} → {step['response_turn']}   ·   "
+        f"当前轮次 / CURRENT TURN  {idx + 1} / {total}   ·   {step['prompt_turn']} → {step['response_turn']}   ·   "
         f"Scenario {session['scenario_id']}   ·   {session['phase']}"
     )
     st.caption(f"Case ID: {session['case_id']}")
     st.progress((idx + 1) / total, text=f"Turn {idx + 1} of {total}")
+    render_condition_banner(session.get("condition"))
+    if idx == 0:
+        st.error("**开始新 case：请在被测产品中新建对话或清空上下文。** C0、C1、C2、不同 criterion、不同 run 都是彼此独立的 case。")
+    else:
+        st.success("**继续同一个 case：请保持在同一产品对话窗口中，不要重置上下文。**")
 
-    st.markdown("#### Fixed Prompt")
+    st.markdown("#### 固定 Prompt / Fixed Prompt")
     st.code(step["prompt"], language=None)
     auto_target = st.session_state.get("collector_auto_copy_target")
     this_target = f"{session['case_id']}::{idx}"
@@ -593,25 +606,31 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
     _copy_prompt_component(step["prompt"], key=f"{session['case_id']}-{idx}", auto_copy=should_auto_copy)
     if should_auto_copy:
         st.session_state.pop("collector_auto_copy_target", None)
-        st.caption("Save & Copy Next attempted to place this prompt on the clipboard. If the browser blocked it, click Copy Prompt.")
+        st.caption("浏览器可能阻止自动写入剪贴板（Safari尤其常见）。请以显式 Copy Prompt 按钮为准；这不影响保存与进入下一轮。")
     st.caption("Prompt is loaded from configuration. Do not edit it before sending to the external product.")
 
     response_key = f"collector_response::{session['case_id']}::{idx}"
     if response_key not in st.session_state:
         st.session_state[response_key] = step.get("response") or step.get("draft_response") or ""
     response = st.text_area(
-        "Paste model response exactly as shown",
+        "粘贴模型原始回复 / Paste model response exactly as shown",
         key=response_key,
         height=240,
-        help="Verbatim storage: do not polish, correct, shorten or rewrite the product response.",
-        on_change=_persist_response_draft,
-        args=(session["session_id"], idx, response_key),
+        help="逐字保存：不要润色、纠错、缩写或改写产品回复。",
     )
+    # Persist the current widget value on every rerun. Avoiding an on_change callback
+    # prevents the first click on Save from being consumed by a textarea blur rerun.
+    if response != (step.get("draft_response") or step.get("response") or ""):
+        try:
+            draft_session = save_step_draft(session, step_index=idx, draft_response=response)
+            upsert_collection_session(draft_session, paths.collection_sessions)
+        except Exception:
+            pass
     if step.get("draft_response") and not step.get("response"):
         st.caption("Draft autosaved. It will be restored if you leave and resume this case.")
 
     uploads = st.file_uploader(
-        "Optional screenshot evidence for this response turn",
+        "本轮截图证据（可选） / Optional screenshot evidence",
         type=["png", "jpg", "jpeg", "webp"],
         accept_multiple_files=True,
         key=f"collector_evidence::{session['case_id']}::{idx}",
@@ -627,16 +646,16 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
 
     left, middle, right = st.columns([1, 2.4, 1])
     with left:
-        if idx > 0 and st.button("← Previous", use_container_width=True):
+        if idx > 0 and st.button("← 上一步 / Previous", use_container_width=True):
             session = previous_step(session)
             upsert_collection_session(session, paths.collection_sessions)
             st.rerun()
     with middle:
         is_last = idx == total - 1
-        label = "Save & Complete Case" if is_last else "Save & Copy Next"
+        label = "保存并完成 Case / Save & Complete" if is_last else "保存并进入下一轮 / Save & Next"
         save_clicked = st.button(label, type="primary", use_container_width=True)
     with right:
-        if st.button("Exit session", use_container_width=True):
+        if st.button("退出本次 Case / Exit", use_container_width=True):
             st.session_state.pop("collector_active_session", None)
             st.rerun()
 
@@ -690,7 +709,7 @@ def data_collection_page() -> None:
     if not project or not paths:
         st.warning("请先在 Test Projects 创建并选择项目。")
         return
-    st.header("Data Collection")
+    st.header("数据采集 / Data Collection")
     st.caption(f"Active Project: {project.get('project_name')}")
     st.caption(
         "Human-in-the-loop real-product collection. CompanionGuard controls prompts, case/turn alignment, queue state, "
@@ -712,7 +731,7 @@ def data_collection_page() -> None:
         return
 
     _render_resume_panel()
-    queue_tab, single_tab = st.tabs(["Collection Queue", "Single Case"])
+    queue_tab, single_tab = st.tabs(["批量测试方案 / Collection Queue", "单个 Case / Single Case"])
     with queue_tab:
         _render_queue_builder(criteria, config)
     with single_tab:

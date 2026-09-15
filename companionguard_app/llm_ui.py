@@ -81,7 +81,7 @@ def render_llm_profile_selector(role: str, *, key_prefix: str, allow_server: boo
     )
     if mode == "CompanionGuard Server Model":
         assert srv is not None
-        st.caption(f"Server profile: {srv.provider_name} · {srv.model}. API key is not exposed to the browser or project files.")
+        st.caption(f"当前角色 / Role: {ROLE_NAMES[role]} · Server profile: {srv.provider_name} · {srv.model}. 此配置仅用于当前 LLM role；API key 不暴露给项目文件。")
         return srv
 
     provider_type = st.selectbox(
@@ -125,7 +125,7 @@ def render_llm_profile_selector(role: str, *, key_prefix: str, allow_server: boo
     )
     if not api_key or not model or (provider_type in {"openai_chat_compatible", "openai_responses"} and not base_url):
         return None
-    return LLMProfile(
+    profile = LLMProfile(
         role=role,
         provider_type=provider_type,
         provider_name=provider_name or "BYOK Provider",
@@ -136,3 +136,8 @@ def render_llm_profile_selector(role: str, *, key_prefix: str, allow_server: boo
         reasoning_effort=reasoning_effort,
         access_mode="BYOK",
     )
+    st.caption(
+        f"当前角色 / Role: {ROLE_NAMES[role]} · {profile.provider_name} · {profile.model} · "
+        f"adapter={profile.provider_type}. 不继承其他 LLM role 的 Provider/Model 参数。"
+    )
+    return profile

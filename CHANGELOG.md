@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.8.0 — Smoke-test UX, granular Test Plans and execution safeguards
+
+- Added Chinese-first bilingual navigation and key workflow labels.
+- Added persistent workflow guidance with Previous/Next navigation and an explicit no-active-project exit state.
+- Added project deletion for smoke-test cleanup with typed Project ID confirmation; deletion is confined to `data/projects/<project_id>/`.
+- Reworked Test Plan composition so Core/HR-02 conditions are selected **per criterion** rather than through one global C0/C1/C2 filter.
+- Added scenario-level selection for MR/MC/PC/single-turn tests, enabling targeted cases such as `MR-02` or `MC-01-A` without selecting the whole criterion family.
+- Added Data Explorer for per-case transcript, raw JSON, evidence paths, Judge result and Human Adjudication inspection/download.
+- Added explicit clean-context execution banners: every new case starts in a new/reset external-product conversation; turns inside one case remain continuous.
+- Added prominent C0/C1/C2 Chinese/English condition banners, with C1 clearly marked as the Pressure condition.
+- Replaced paragraph-style Judge presentation with structured summary label, checkpoints, target behaviors, evidence, rationale and raw JSON.
+- Clarified `Override` in Human Review as a human label that supersedes a differing LLM auto-label while preserving an override reason.
+- Fixed the first-click Save issue caused by textarea `on_change`/blur reruns; screenshot upload remains optional.
+- Renamed the primary turn action from `Save & Copy Next` to `Save & Next`; browser auto-copy remains best-effort and the explicit Copy Prompt control is authoritative.
+- Changed integrated-report Judge–Human Reliability to FORMAL cases only, preventing SMOKE κ/agreement from appearing beside zero FORMAL cases.
+- Added role-specific LLM profile diagnostics without exposing API keys, making Judge/Evidence/Report profile separation visible in the UI.
+- Added execution documentation and new regression tests for granular MR/MC selection, per-criterion conditions, formal reliability isolation and independent C0/C1/C2 case IDs.
+- Current suite: 42 tests + 20 subtests pass.
+
 ## v0.7.0 — Provider-decoupled LLM roles and composable Test Plans
 
 - Replaced DeepSeek-specific application coupling with a shared LLM Provider layer.

@@ -166,6 +166,64 @@ def make_case_id(
     )
 
 
+def build_queue_items_from_selections(
+    *,
+    criteria: dict[str, dict[str, Any]],
+    selections: dict[str, dict[str, Any]],
+    product_slug: str,
+    phase: str,
+    run_numbers: list[int],
+) -> list[dict[str, Any]]:
+    """Expand a granular Test Plan into queue cases.
+
+    ``selections`` is keyed by criterion_id and may independently specify:
+    - ``conditions`` for Core/HR-02 criteria;
+    - ``scenarios`` for MR/MC/PC/single-turn criteria.
+
+    This keeps product identity independent from test coverage and allows a
+    user to choose MR-02 or MC-01-A without selecting the whole criterion.
+    """
+    items: list[dict[str, Any]] = []
+    position = 1
+    for criterion_id, spec in selections.items():
+        if criterion_id not in criteria:
+            continue
+        criterion = criteria[criterion_id]
+        available_scenarios = scenario_ids(criterion)
+        requested_scenarios = spec.get("scenarios") or available_scenarios
+        chosen_scenarios = [x for x in available_scenarios if x in set(requested_scenarios)]
+
+        available = available_conditions(criterion)
+        if available == [None]:
+            chosen_conditions: list[str | None] = [None]
+        else:
+            requested_conditions = spec.get("conditions") or [c for c in available if c]
+            chosen_conditions = [c for c in available if c in set(requested_conditions)]
+
+        for scenario_id in chosen_scenarios:
+            for condition in chosen_conditions:
+                for run_number in run_numbers:
+                    items.append({
+                        "position": position,
+                        "case_id": make_case_id(
+                            product_slug=product_slug,
+                            criterion_id=criterion_id,
+                            scenario_id=scenario_id,
+                            condition=condition,
+                            phase=phase,
+                            run_number=run_number,
+                        ),
+                        "criterion_id": criterion_id,
+                        "scenario_id": scenario_id,
+                        "condition": condition,
+                        "run_number": int(run_number),
+                        "status": "PENDING",
+                        "session_id": None,
+                    })
+                    position += 1
+    return items
+
+
 def build_queue_items(
     *,
     criteria: dict[str, dict[str, Any]],

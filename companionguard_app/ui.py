@@ -20,6 +20,7 @@ from .metrics import label_counts, module_finding_rates, overall_macro_finding_r
 from .platform_ui import active_project, active_paths
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .service import criteria_index, run_batch_cases, run_single_case
+from .ui_helpers import condition_label, render_judge_result
 from .storage import (
     build_final_results,
     load_adjudications,
@@ -40,27 +41,7 @@ def _criterion_label(item: tuple[str, dict[str, Any]]) -> str:
 
 
 def _judge_result_card(row: dict[str, Any]) -> None:
-    if row.get("status") != "ok":
-        st.error(row.get("error") or "Judge运行失败")
-        return
-    result = row.get("result") or {}
-    label = row.get("auto_label")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Auto Label", label)
-    c2.metric("Criterion", row.get("criterion_id", ""))
-    c3.metric("Judge Template", row.get("judge_template", ""))
-    tcodes = result.get("matched_target_behaviors") or []
-    if tcodes:
-        st.write("Matched T-code:", ", ".join(tcodes))
-    evidence = result.get("evidence") or []
-    if evidence:
-        st.write("Evidence")
-        for item in evidence:
-            st.code(item.get("quote", ""), language=None)
-    if result.get("rationale"):
-        st.write("Rationale:", result["rationale"])
-    with st.expander("完整Judge JSON"):
-        st.json(result)
+    render_judge_result(row, compact=False)
 
 
 def run_test_page() -> None:
@@ -69,7 +50,7 @@ def run_test_page() -> None:
     if not project or not paths:
         st.warning("请先在 Test Projects 创建并选择项目。")
         return
-    st.header("Run Test")
+    st.header("LLM 判定 / LLM Judge")
     st.caption(f"Active Project: {project.get('project_name')} ({project.get('project_id')})")
     st.caption("Benchmark Mode：选择冻结criterion，输入真实模型回复，通过可配置LLM Provider运行 criterion-bound Judge。")
     criteria = get_criteria()
@@ -234,7 +215,7 @@ def human_review_page() -> None:
     if not project or not paths:
         st.warning("请先在 Test Projects 创建并选择项目。")
         return
-    st.header("Human Review")
+    st.header("人工复核 / Human Review")
     st.caption(f"Active Project: {project.get('project_name')}")
     criteria = get_criteria()
     judge_rows = [r for r in load_judge_results(paths.judge_results) if r.get("status") == "ok"]
@@ -281,21 +262,8 @@ def human_review_page() -> None:
     result = row.get("result") or {}
 
     st.subheader(f"{row.get('criterion_id')} · {criterion.get('criterion_name_zh', '')}")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Auto Label", row.get("auto_label", ""))
-    m2.metric("Product", row.get("product") or "—")
-    m3.metric("Condition", row.get("condition") or "—")
-    m4.metric("Phase", (row.get("metadata") or {}).get("phase") or "—")
-
-    if result.get("matched_target_behaviors"):
-        st.write("Matched T-code:", ", ".join(result["matched_target_behaviors"]))
-    for item in result.get("evidence") or []:
-        st.code(item.get("quote", ""), language=None)
-    if result.get("safeguard_evidence"):
-        st.write("Safeguard evidence")
-        for item in result["safeguard_evidence"]:
-            st.code(item.get("quote", ""), language=None)
-    st.write("Judge rationale:", result.get("rationale", ""))
+    st.caption("先查看 LLM Judge 的结构化判定，再进行人工 Confirm / Override。")
+    render_judge_result(row, compact=True)
 
     prior = adjudicated.get(selected_id, {})
     auto = row.get("auto_label", "NO_FINDING")
@@ -304,15 +272,15 @@ def human_review_page() -> None:
 
     with st.form("adjudication_form"):
         human_label = st.selectbox(
-            "Human Label",
+            "人工标签 / Human Label",
             labels,
             index=labels.index(default_label) if default_label in labels else 0,
         )
         override_reason = ""
         if human_label != auto:
-            override_reason = st.selectbox("Override Reason", OVERRIDE_REASONS)
-        review_note = st.text_area("Review Note", value=prior.get("review_note", ""))
-        submitted = st.form_submit_button("Save Adjudication", type="primary")
+            override_reason = st.selectbox("Override 原因 / Override Reason", OVERRIDE_REASONS, help="Override = 人工判定与 LLM 自动标签不一致时，用人工标签覆盖自动标签，并记录原因。")
+        review_note = st.text_area("复核备注 / Review Note", value=prior.get("review_note", ""))
+        submitted = st.form_submit_button("保存人工复核 / Save Adjudication", type="primary")
 
     if submitted:
         save_adjudication(
@@ -345,7 +313,7 @@ def results_page() -> None:
     if not project or not paths:
         st.warning("请先在 Test Projects 创建并选择项目。")
         return
-    st.header("Dialogue Results")
+    st.header("对话测试结果 / Dialogue Results")
     st.caption(f"Active Project: {project.get('project_name')}")
     criteria = get_criteria()
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results)
@@ -400,7 +368,7 @@ def results_page() -> None:
 
     module_rates = module_finding_rates(filtered_rows)
     if module_rates:
-        st.subheader("Module Finding Rate")
+        st.subheader("模块风险发现率 / Module Finding Rate")
         chart_df = pd.DataFrame([
             {
                 "Module": MODULE_LABELS.get(module, module),
@@ -410,7 +378,7 @@ def results_page() -> None:
         ]).set_index("Module")
         st.bar_chart(chart_df)
 
-    st.subheader("Finding Matrix")
+    st.subheader("风险发现矩阵 / Finding Matrix")
     matrix_cols = [
         "product", "criterion_id", "scenario_id", "condition", "run_number", "phase",
         "criterion_name", "final_label", "matched_target_behaviors", "evidence", "override_reason",

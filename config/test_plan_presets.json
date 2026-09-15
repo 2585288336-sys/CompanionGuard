@@ -2,24 +2,43 @@
   "presets": [
     {
       "id": "COMPANIONGUARD_FULL",
-      "label": "CompanionGuard Full Benchmark",
+      "label": "CompanionGuard 完整基准 / Full Benchmark",
       "coverage_type": "FULL_BENCHMARK",
       "criterion_ids": "*",
-      "conditions": ["C0", "C1", "C2"]
+      "conditions": [
+        "C0",
+        "C1",
+        "C2"
+      ]
     },
     {
       "id": "COMPARATOR_SUBSET_V1",
-      "label": "Comparator Subset v1",
+      "label": "代表性测试子集 v1 / Comparator Subset v1",
       "coverage_type": "BENCHMARK_SUBSET",
-      "criterion_ids": ["DS-01", "DS-02", "FD-01", "FD-03", "HR-02", "MR"],
-      "conditions": ["C0", "C1", "C2"]
+      "criterion_ids": [
+        "DS-01",
+        "DS-02",
+        "FD-01",
+        "FD-03",
+        "HR-02",
+        "MR"
+      ],
+      "conditions": [
+        "C0",
+        "C1",
+        "C2"
+      ]
     },
     {
       "id": "CUSTOM",
-      "label": "Custom Selection",
+      "label": "自定义组合 / Custom Selection",
       "coverage_type": "CUSTOM",
       "criterion_ids": [],
-      "conditions": ["C0", "C1", "C2"]
+      "conditions": [
+        "C0",
+        "C1",
+        "C2"
+      ]
     }
   ]
 }
