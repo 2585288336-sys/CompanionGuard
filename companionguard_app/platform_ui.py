@@ -8,18 +8,19 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE
+from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE, adjudication_policy
 from .audits import load_json, load_jsonl, make_audit_row, save_audit_evidence, upsert_jsonl
 from .collector import load_collector_config
 from .projects import create_project, delete_project, get_project, list_projects, project_paths, safe_slug
 from .reliability import LABELS, reliability_metrics
 from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
-from .service import run_documentary_assist, run_report_writer
+from .service import criteria_index, run_documentary_assist, run_report_writer
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
 from .collector_storage import load_raw_cases
 from .metrics import case_validity_counts, valid_case_rows
-from .ui_helpers import condition_label, phase_label, render_case_validity, render_evidence_files, render_judge_result
+from .display_labels import criterion_label, module_label, scenario_label
+from .ui_helpers import condition_label, phase_label, render_case_conversation, render_case_validity, render_judge_result
 
 
 def active_project_id() -> str | None:
@@ -71,8 +72,8 @@ def projects_page() -> None:
     st.header("测试项目 / Test Projects")
     st.caption("一个 Test Project / 测试项目包含本次测试的产品、三层证据数据、Judge结果、人工复核和最终报告。")
     if st.session_state.pop("project_just_created", False):
-        st.success("项目创建完成。下一步建议进入『Layer 1 · 数据采集』，为每个产品建立 Test Plan；也可以先从 Layer 2/3 开始。")
-        if st.button("下一步：进入数据采集 / Go to Data Collection", type="primary", key="project_next_collection"):
+        st.success("项目创建完成。下一阶段建议进入『Layer 1 · 对话采集』，为每个产品建立测试方案；也可以先从 Layer 2/3 开始。")
+        if st.button("下一阶段：进入对话采集 / Go to Data Collection", type="primary", key="project_next_collection"):
             st.session_state["requested_nav"] = "data_collection"
             st.rerun()
     existing = list_projects()
@@ -183,10 +184,11 @@ def data_explorer_page() -> None:
     project = active_project()
     paths = active_paths()
     if not project or not paths:
-        st.warning("请先选择测试项目 / Select a Test Project first.")
+        st.warning("请先创建并选择测试项目。")
         return
     st.header("采集数据查看 / Data Explorer")
-    st.caption("查看 Data Collector 已生成的标准 case、逐轮原始回复、截图索引以及对应 Judge / Human Review 结果。这里用于检查与导出，不建议手工编辑 JSON。")
+    st.caption("查看已生成的标准案例、逐轮原始回复、截图预览，以及对应的 Judge / 人工复核结果。这里用于检查与导出，不建议手工编辑 JSON。")
+    criteria = criteria_index()
     cases = load_raw_cases(paths.raw_cases)
     if not cases:
         st.info("当前项目还没有 COMPLETE raw case。")
@@ -201,58 +203,57 @@ def data_explorer_page() -> None:
     table = []
     for case in cases:
         case_id = case.get("case_id")
+        criterion = criteria.get(case.get("criterion_id"), {})
         evidence_count = sum(len(step.get("evidence_files") or []) for step in (case.get("collection_trace") or []))
-        judge_status = "完成" if any(r.get("case_id") == case_id and r.get("status") == "ok" for r in judge_results) else "未完成"
+        judge_status = "完成" if case_id in latest_judges else "未完成"
         table.append({
-            "case_id": case_id,
-            "product": case.get("product"),
-            "criterion": case.get("criterion_id"),
-            "scenario": (case.get("metadata") or {}).get("scenario_id") or case.get("scenario_id"),
-            "condition": condition_label(case.get("condition")),
-            "phase": phase_label(case.get("phase") or (case.get("metadata") or {}).get("phase")),
-            "run": (case.get("metadata") or {}).get("run_number") or case.get("run_number"),
-            "screenshots": evidence_count,
-            "judge": judge_status,
-            "auto_case_validity": latest_judges.get(case_id, {}).get("auto_case_validity", "—"),
-            "final_case_validity": adjudications.get(case_id, {}).get("final_case_validity") or adjudications.get(case_id, {}).get("case_validity", "—"),
+            "案例编号": case_id,
+            "产品": case.get("product"),
+            "模块": module_label(criterion.get("module")),
+            "测试项目": criterion_label(case.get("criterion_id"), criterion),
+            "场景": scenario_label(criterion, (case.get("metadata") or {}).get("scenario_id") or case.get("scenario_id")),
+            "条件": condition_label(case.get("condition"), template=criterion.get("judge_template")),
+            "阶段": phase_label(case.get("phase") or (case.get("metadata") or {}).get("phase")),
+            "重复次数": (case.get("metadata") or {}).get("run_number") or case.get("run_number"),
+            "截图数量": evidence_count,
+            "Judge": judge_status,
+            "自动有效性": latest_judges.get(case_id, {}).get("auto_case_validity", "—"),
+            "最终有效性": adjudications.get(case_id, {}).get("final_case_validity") or adjudications.get(case_id, {}).get("case_validity", "—"),
         })
     st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
-    case_id = st.selectbox("选择 Case / Select case", [c.get("case_id") for c in cases])
+    case_id = st.selectbox("选择案例 / Select case", [c.get("case_id") for c in cases], key="data_explorer_case_selector")
     case = next(c for c in cases if c.get("case_id") == case_id)
+    criterion = criteria.get(case.get("criterion_id"), {})
 
-    transcript_tab, json_tab, judge_tab = st.tabs(["文字对话 / Transcript", "标准 JSON / Raw Case", "Judge & Human Review"])
+    transcript_tab, json_tab, judge_tab = st.tabs(["完整对话与截图", "标准 JSON / Raw Case", "Judge 与人工复核"])
     with transcript_tab:
-        st.subheader(f"{case.get('criterion_id')} · {condition_label(case.get('condition'))}")
-        trace = case.get("collection_trace") or []
-        if trace:
-            for step in trace:
-                st.markdown(f"**{step.get('prompt_turn')} · User Prompt**")
-                st.code(step.get("prompt", ""), language=None)
-                st.markdown(f"**{step.get('response_turn')} · Product Response**")
-                st.code(step.get("response", ""), language=None)
-                files = step.get("evidence_files") or []
-                if files:
-                    render_evidence_files(files, project_root=paths.root, key_prefix=f"data-explorer::{case_id}::{step.get('response_turn')}")
-                st.divider()
-        else:
-            for msg in case.get("conversation") or []:
-                st.markdown(f"**{msg.get('role')} · {msg.get('turn', '')}**")
-                st.code(msg.get("content", ""), language=None)
+        st.subheader(f"{module_label(criterion.get('module'))} · {criterion_label(case.get('criterion_id'), criterion)}")
+        st.caption(
+            f"场景：{scenario_label(criterion, (case.get('metadata') or {}).get('scenario_id') or case.get('scenario_id'))} · "
+            f"条件：{condition_label(case.get('condition'), template=criterion.get('judge_template'))} · "
+            f"阶段：{phase_label(case.get('phase') or (case.get('metadata') or {}).get('phase'))}"
+        )
+        render_case_conversation(
+            {**case, "judge_template": case.get("judge_template") or criterion.get("judge_template")},
+            project_root=paths.root,
+            key_prefix=f"data-explorer::{case_id}",
+            expanded=True,
+        )
     with json_tab:
         st.json(case)
-        st.download_button("下载当前 Case JSON", data=json.dumps(case, ensure_ascii=False, indent=2).encode("utf-8"), file_name=f"{case_id}.json", mime="application/json")
+        st.download_button("下载当前案例 JSON", data=json.dumps(case, ensure_ascii=False, indent=2).encode("utf-8"), file_name=f"{case_id}.json", mime="application/json")
         if paths.raw_cases.exists():
-            st.download_button("下载全部 raw_cases.jsonl", data=paths.raw_cases.read_bytes(), file_name=f"{project['project_id']}_raw_cases.jsonl", mime="application/json")
+            st.download_button("下载全部原始案例 JSONL", data=paths.raw_cases.read_bytes(), file_name=f"{project['project_id']}_raw_cases.jsonl", mime="application/json")
     with judge_tab:
         judge_rows = [r for r in load_judge_results(paths.judge_results) if r.get("case_id") == case_id and r.get("status") == "ok"]
         if judge_rows:
             render_judge_result(judge_rows[-1], compact=True)
-            render_case_validity(judge_rows[-1].get("auto_case_validity"), title="Auto Case Validity / 自动有效性筛查")
+            render_case_validity(judge_rows[-1].get("auto_case_validity"), title="自动有效性筛查 / Auto Validity Screening")
         else:
             st.info("该 case 尚未完成 LLM Judge。")
         if case_id in adjudications:
             st.markdown("#### 人工复核 / Human Adjudication")
-            render_case_validity(adjudications[case_id].get("final_case_validity") or adjudications[case_id].get("case_validity"), title="Final Case Validity / 最终有效性")
+            render_case_validity(adjudications[case_id].get("final_case_validity") or adjudications[case_id].get("case_validity"), title="最终案例有效性 / Final Case Validity")
             st.json(adjudications[case_id])
 
 
@@ -260,7 +261,7 @@ def layer2_page() -> None:
     project = active_project()
     paths = active_paths()
     if not project or not paths:
-        st.warning("请先在 Test Projects 创建并选择项目。")
+        st.warning("请先创建并选择测试项目。")
         return
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer2_checks.json")
     st.header("Layer 2｜产品安全机制检查 / Product Safeguard Checks")
@@ -270,7 +271,7 @@ def layer2_page() -> None:
         st.error("当前项目没有产品。")
         return
     product = st.selectbox("产品 / Product", products)
-    with st.expander("Standardized 9-step inspection path"):
+    with st.expander("标准化九步检查路径 / Standardized 9-step inspection path"):
         for item in config.get("standard_path", []):
             st.markdown(f"**Step {item['step']} · {item['name_zh']}** — " + "；".join(item.get("items", [])))
     app_version = st.text_input("App/Web 版本（可选） / Version")
@@ -292,20 +293,26 @@ def layer2_page() -> None:
             saved = [str(Path(x).relative_to(paths.root)) for x in saved_abs]
         row = make_audit_row(project_id=project["project_id"], product=product, check_code=check["code"], status=status, evidence_summary=evidence_summary, notes=notes, evidence_files=saved, metadata={"regulation": check.get("regulation"), "check_name_zh": check.get("name_zh"), "test_date": date.today().isoformat(), "app_version": app_version, "operating_system": operating_system})
         upsert_jsonl(paths.layer2_records, row, key_fields=("product", "check_code"))
-        st.success("Layer 2 record saved.")
+        st.success("Layer 2 检查已保存。")
         st.rerun()
 
     records = load_jsonl(paths.layer2_records)
     if records:
-        st.subheader("Product Safeguard Matrix")
-        st.dataframe(pd.DataFrame(records)[["product", "check_code", "status", "evidence_summary", "notes", "updated_at"]], use_container_width=True, hide_index=True)
+        st.subheader("产品安全机制检查矩阵 / Product Safeguard Matrix")
+        st.dataframe(
+            pd.DataFrame(records)[["product", "check_code", "status", "evidence_summary", "notes", "updated_at"]].rename(columns={
+                "product": "产品", "check_code": "检查项", "status": "观察状态", "evidence_summary": "证据摘要", "notes": "备注", "updated_at": "更新时间",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 def layer3_page() -> None:
     project = active_project()
     paths = active_paths()
     if not project or not paths:
-        st.warning("请先在 Test Projects 创建并选择项目。")
+        st.warning("请先创建并选择测试项目。")
         return
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer3_checks.json")
     st.header("Layer 3 Lite｜公开合规证据核查 / Public Compliance Evidence Audit")
@@ -314,11 +321,11 @@ def layer3_page() -> None:
         products = [p.get("label") or p.get("name") or p.get("id") for p in project.get("products", []) if str(p.get("role", "")).startswith("Primary anthropomorphic AI product")]
         if not products:
             products = _project_product_names(project)
-        st.caption("Benchmark Mode: Layer 3 Lite is intended for the three primary products; comparator/expanded products are excluded when primary profiles are present.")
+        st.caption("BENCHMARK 模式：Layer 3 Lite 默认面向三个主要产品；存在主要产品配置时，不纳入比较产品或扩展产品。")
     else:
         products = _project_product_names(project)
     product = st.selectbox("产品 / Product", products)
-    check = st.selectbox("Check", config["checks"], format_func=lambda x: f"{x['code']} · {x['name_zh']} · {x['regulation']}")
+    check = st.selectbox("核查项 / Check", config["checks"], format_func=lambda x: f"{x['code']} · {x['name_zh']} · {x['regulation']}")
     existing = {(r.get("product"), r.get("check_code")): r for r in load_jsonl(paths.layer3_records)}
     prior = existing.get((product, check["code"]), {})
 
@@ -338,7 +345,7 @@ def layer3_page() -> None:
                 st.error(str(e))
     assist = st.session_state.get(assist_key)
     if assist:
-        st.info(f"AI suggestion: {assist.get('suggested_status')}")
+        st.info(f"AI 初步建议 / AI suggestion：{assist.get('suggested_status')}")
         if assist.get("evidence_quote"):
             st.code(assist["evidence_quote"], language=None)
         st.caption(assist.get("rationale", ""))
@@ -357,20 +364,26 @@ def layer3_page() -> None:
             saved = [str(Path(x).relative_to(paths.root)) for x in saved_abs]
         row = make_audit_row(project_id=project["project_id"], product=product, check_code=check["code"], status=status, evidence_summary=evidence_summary, notes=notes, source=source, source_date=source_date, evidence_files=saved, metadata={"regulation": check.get("regulation"), "check_name_zh": check.get("name_zh"), "ai_assist": assist or None})
         upsert_jsonl(paths.layer3_records, row, key_fields=("product", "check_code"))
-        st.success("Layer 3 record saved; human status is authoritative.")
+        st.success("Layer 3 核查已保存；人工最终状态为权威记录。")
         st.rerun()
 
     records = load_jsonl(paths.layer3_records)
     if records:
-        st.subheader("Compliance Evidence Matrix")
-        st.dataframe(pd.DataFrame(records)[["product", "check_code", "status", "evidence_summary", "source", "updated_at"]], use_container_width=True, hide_index=True)
+        st.subheader("公开合规证据矩阵 / Compliance Evidence Matrix")
+        st.dataframe(
+            pd.DataFrame(records)[["product", "check_code", "status", "evidence_summary", "source", "updated_at"]].rename(columns={
+                "product": "产品", "check_code": "核查项", "status": "证据状态", "evidence_summary": "证据摘要", "source": "来源", "updated_at": "更新时间",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
     project = active_project()
     paths = active_paths()
     if not project or not paths:
-        st.warning("请先选择项目。")
+        st.warning("请先选择测试项目。")
         return
     st.header("Judge—人工一致性 / Judge–Human Reliability")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
@@ -383,22 +396,22 @@ def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
         st.caption("Benchmark Reliability 仅统计 phase == FORMAL；SMOKE/CALIBRATION 结果保留在项目数据中，但不进入正式一致性指标。")
     else:
         phases = sorted({r.get("phase", "") for r in rows if r.get("phase")})
-        phase = st.multiselect("Phase", phases, default=phases)
+        phase = st.multiselect("阶段 / Phase", phases, default=phases, format_func=phase_label)
         filtered_all = [r for r in rows if not phase or r.get("phase") in phase]
     filtered = valid_case_rows(filtered_all)
     validity = case_validity_counts(filtered_all)
     if validity["INVALID"] or validity["REVIEW"]:
-        st.info(f"Case Validity 筛选：VALID {validity['VALID']}；INVALID {validity['INVALID']}；REVIEW {validity['REVIEW']}。后两类不进入一致性指标。")
+        st.info(f"案例有效性筛选：VALID {validity['VALID']}；INVALID {validity['INVALID']}；REVIEW {validity['REVIEW']}。后两类不进入一致性指标。")
     result = reliability_metrics(filtered)
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Cases compared", result["n"])
-    c2.metric("Exact Agreement", "—" if result["exact_agreement"] is None else f"{result['exact_agreement']*100:.1f}%")
+    c1.metric("比较案例数 / Cases compared", result["n"])
+    c2.metric("完全一致率 / Exact Agreement", "—" if result["exact_agreement"] is None else f"{result['exact_agreement']*100:.1f}%")
     c3.metric("Cohen's κ", "—" if result["cohen_kappa"] is None else f"{result['cohen_kappa']:.3f}")
-    c4.metric("Finding Recall", "—" if result["finding_recall"] is None else f"{result['finding_recall']*100:.1f}%")
+    c4.metric("风险发现召回率 / Finding Recall", "—" if result["finding_recall"] is None else f"{result['finding_recall']*100:.1f}%")
     matrix = pd.DataFrame(result["matrix"]).T
     matrix.index.name = "LLM Judge"
     matrix.columns.name = "Human"
-    st.subheader("Confusion Matrix")
+    st.subheader("混淆矩阵 / Confusion Matrix")
     st.dataframe(matrix, use_container_width=True)
     st.caption(f"当前项目策略：{adjudication_policy(project)}。一致性指标只基于 Case Validity == VALID 且 adjudication_status == REVIEWED 的 case；抽样模式的未复核 case 不会被伪造为人工标签。")
 
@@ -407,7 +420,7 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
     project = active_project()
     paths = active_paths()
     if not project or not paths:
-        st.warning("请先选择项目。")
+        st.warning("请先选择测试项目。")
         return
     st.header("Layer 1｜对话测试报告 / Dialogue Report")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
@@ -417,11 +430,11 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
     paths.reports.mkdir(parents=True, exist_ok=True)
     deterministic_path = paths.reports / "dialogue_report_deterministic.md"
     deterministic_path.write_text(deterministic, encoding="utf-8")
-    st.download_button("Download deterministic dialogue report", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
-    with st.expander("Optional LLM-written dialogue report", expanded=False):
-        st.caption("Python computes the metrics; the report model only writes from the frozen structured context. External writing skills/prompts are intentionally not bundled yet.")
+    st.download_button("下载确定性对话测试报告", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
+    with st.expander("可选：LLM 撰写对话测试报告", expanded=False):
+        st.caption("指标由 Python 计算；报告模型只能根据冻结的结构化上下文生成文字。")
         profile = render_llm_profile_selector("dialogue_report", key_prefix="dialogue_report_writer")
-        if st.button("Generate LLM Dialogue Report", disabled=profile is None):
+        if st.button("生成 LLM 对话测试报告", disabled=profile is None):
             try:
                 context = build_dialogue_report_context(project=project, final_rows=rows)
                 text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
@@ -437,7 +450,7 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     project = active_project()
     paths = active_paths()
     if not project or not paths:
-        st.warning("请先选择项目。")
+        st.warning("请先选择测试项目。")
         return
     st.header("综合测试报告 / Integrated Report")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
@@ -447,11 +460,11 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     paths.reports.mkdir(parents=True, exist_ok=True)
     output = paths.reports / "integrated_report.md"
     output.write_text(report, encoding="utf-8")
-    st.download_button("Download integrated report (.md)", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
-    with st.expander("Optional LLM-written integrated report", expanded=False):
-        st.caption("The deterministic context is authoritative. This writer can later receive your separately researched report-writing prompt/skill without changing other LLM roles.")
+    st.download_button("下载综合测试报告（.md）", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
+    with st.expander("可选：LLM 撰写综合测试报告", expanded=False):
+        st.caption("确定性结构化上下文是权威来源；该写作模型不改变其他 LLM 角色。")
         profile = render_llm_profile_selector("integrated_report", key_prefix="integrated_report_writer")
-        if st.button("Generate LLM Integrated Report", disabled=profile is None):
+        if st.button("生成 LLM 综合测试报告", disabled=profile is None):
             try:
                 context = build_integrated_report_context(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
                 text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))

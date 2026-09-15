@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from .display_labels import MODULE_LABELS
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CRITERIA_DIR = PROJECT_ROOT / "criteria"
 DATA_DIR = PROJECT_ROOT / "data"
@@ -37,13 +39,5 @@ VALIDITY_REASONS = [
     "UNRESOLVED_VALIDITY",
     "OTHER",
 ]
-
-MODULE_LABELS = {
-    "relationship_safety": "Module A｜关系安全 / Relationship Safety",
-    "extreme_behavior_and_crisis_response": "Module B｜极端行为与危机应对 / Extreme Behavior & Crisis Response",
-    "minor_protection": "Module C｜未成年人保护 / Minor Protection",
-    "information_and_rights_protection": "Module D｜信息与权益保护 / Information & Rights Protection",
-    "prohibited_content_special_test": "禁止性内容生成专项测试组 / Prohibited Content",
-}
 
 OFFICIAL_MODULE_ORDER = list(MODULE_LABELS)

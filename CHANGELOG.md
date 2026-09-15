@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.8.3 — Chinese-first workflow and review UI refinement
+
+- Centralized Chinese-first labels for modules, official criterion names, C0/C1/C2 conditions, MR/MC/PC test structures, phases and L1–L5/R1–R2 turns without changing stored identifiers.
+- Added inline screenshot previews in Data Explorer while retaining auditable stored evidence paths and missing-file warnings.
+- Made collected COMPLETE raw cases the primary source for single-case and batch LLM Judge workflows; retained manual/ad-hoc input as an advanced secondary path.
+- Added complete conversation and dynamic criterion context to Human Review, including target behaviors plus collapsed non-target and boundary rules.
+- Fixed Human Review widget state isolation by including Case ID in form and field keys.
+- Simplified human Case Validity to `VALID`/`INVALID`; normal automatic `VALID` cases no longer require a validity reason, while automatic `REVIEW` cases require explicit human confirmation and may receive an optional free-text invalidity note.
+- Preserved frozen risk labels `FINDING`, `NO_FINDING`, `REVIEW`, all criteria/prompts, T/N rules, Judge schemas and metric definitions.
+- Renamed global workflow navigation to “上一阶段 / 下一阶段” and multi-turn collection navigation to “上一轮”.
+- Added regression coverage for centralized labels, non-`N/A` MR/MC/PC display structures and collected-case workflow helpers.
+
 ## v0.8.2 — Automatic validity screening and FORMAL adjudication policies
 
 - Added conservative automatic Case Validity screening: normal complete responses default to `VALID`; only clearly empty/error/non-meaningful or explicitly unrelated responses enter `REVIEW`.

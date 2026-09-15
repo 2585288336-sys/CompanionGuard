@@ -1,6 +1,6 @@
-# CompanionGuard v0.8.2
+# CompanionGuard v0.8.3
 
-CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.2 is the post-smoke-test adjudication release. It preserves the frozen CompanionGuard v4 dialogue benchmark while adding conservative automatic case-validity screening and pre-registered FORMAL human-adjudication policies.
+CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.3 is the post-smoke-test workflow and Chinese-first UI refinement release. It preserves the frozen CompanionGuard v4 dialogue benchmark, criterion prompts, Judge schema and metric definitions while making collection, evidence inspection, Judge selection and human review easier to execute correctly.
 
 ## Platform model
 
@@ -36,6 +36,17 @@ Runtime data is isolated under `data/projects/<project_id>/`. SMOKE/CALIBRATION/
 - **Save-first-click fix:** response draft persistence no longer uses a textarea blur callback that could consume the first Save click; screenshot evidence remains optional.
 - **Formal-report isolation:** integrated report reliability now uses FORMAL adjudicated cases only, so SMOKE agreement/κ cannot appear beside zero FORMAL cases.
 
+## v0.8.3 workflow and review UI
+
+- **Central terminology:** C0 is shown as `标准条件`, C1 as `压力条件`, and C2 as `多轮条件`; MR is a two-turn follow-up test, while MC/PC are single-turn special tests. The interface no longer presents these structures as `N/A`/“不适用”.
+- **Case context card:** Data Collector shows the module, official Chinese criterion name, product, condition, phase, repeat number, progress and technical Case ID together before the current prompt.
+- **Evidence inspection:** Data Explorer renders saved screenshot evidence inline under the corresponding product response, with the stored path kept in a collapsed technical section.
+- **Collected-case Judge:** the normal single-case and batch Judge paths load COMPLETE cases from the active project. Manual Conversation JSON and external JSONL remain available under the advanced tools section.
+- **Human Review context:** the review page shows the full collected conversation, dynamic target behaviors, collapsed non-target behaviors/boundary rules and the automatic Judge result before adjudication.
+- **Validity separation:** normal cases are screened as `VALID`; only an automatic anomaly screen produces `REVIEW`. Human Review asks only for `VALID` or `INVALID`, with an optional free-text note for invalid cases. This is separate from the frozen risk labels `FINDING`, `NO_FINDING`, `REVIEW`.
+- **State isolation:** review widgets are keyed by Case ID so changing cases cannot carry an earlier case’s validity decision into the next case.
+- **Workflow wording:** global navigation uses “上一阶段 / 下一阶段”; within a multi-turn collection case the control is “上一轮”.
+
 ## v0.8.1 post-smoke-test fixes
 
 - **Screenshot previews:** Data Explorer renders linked dialogue screenshots inline, with download controls and a clear missing-file warning; stored evidence paths remain auditable.
@@ -55,11 +66,11 @@ Runtime data is isolated under `data/projects/<project_id>/`. SMOKE/CALIBRATION/
 
 The benchmark is driven by `criteria/*.json`; application code does not hard-code criterion-specific decisions.
 
-- **C0｜集中式基线**: consolidated L1–L4 → A4, then canonical L5 → A5.
-- **C1｜集中式压力**: identical L1–L4 → A4, then frozen `pressure_variant.L5` → A5.
-- **C2｜顺序多轮**: L1 → A1 → L2 → A2 → L3 → A3 → L4 → A4 → L5 → A5.
-- **MR**: R1 → A_R1 → R2 → A_R2.
-- **MC / PC**: single-turn prompt → A1.
+- **C0｜标准条件**: consolidated L1–L4 → A4, then canonical L5 → A5.
+- **C1｜压力条件**: identical L1–L4 → A4, then frozen `pressure_variant.L5` → A5.
+- **C2｜多轮条件**: L1 → A1 → L2 → A2 → L3 → A3 → L4 → A4 → L5 → A5.
+- **MR｜两轮追问测试**: R1 → A_R1 → R2 → A_R2.
+- **MC / PC｜单轮专项测试**: single-turn prompt → A1.
 
 Four dialogue Judge templates remain unchanged: `core_l1_l5`, `hr02_crisis`, `mr_minor_relationship`, `single_turn_regulatory_content`.
 
@@ -175,6 +186,8 @@ Reliability reports:
 - 3×3 confusion matrix.
 
 Case validity has an automatic screen and a human final decision. Normal cases start at `auto_case_validity=VALID`; clearly unusable or explicitly unrelated cases start at `REVIEW`; only a human decision can set `final_case_validity=INVALID`. Validity never changes the frozen risk label and only `FORMAL` + `final_case_validity=VALID` records enter official risk metrics. INVALID and unresolved REVIEW records remain available for audit.
+
+In the Human Review form, Case Validity is intentionally a two-choice human decision: `VALID` or `INVALID`. A normal automatic `VALID` case is preselected; an automatic `REVIEW` case requires an explicit human choice. An invalidity note is optional free text rather than a required reason code. The risk-label decision remains a separate `FINDING` / `NO_FINDING` / `REVIEW` adjudication.
 
 FORMAL Benchmark projects support two frozen adjudication protocols:
 

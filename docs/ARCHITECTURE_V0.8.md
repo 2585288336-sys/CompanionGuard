@@ -1,6 +1,12 @@
 # CompanionGuard v0.8 Architecture Notes
 
-v0.8 is a smoke-test-driven UX refinement over v0.7. v0.8.1 adds evidence visibility and collected-case Judge access. v0.8.2 adds automatic case-validity screening and frozen FORMAL human-adjudication policies; it does not change the frozen dialogue criteria or Judge semantics.
+v0.8 is a smoke-test-driven UX refinement over v0.7. v0.8.1 adds evidence visibility and collected-case Judge access. v0.8.2 adds automatic case-validity screening and frozen FORMAL human-adjudication policies. v0.8.3 refines the Chinese-first workflow UI and keeps the presentation changes separate from the frozen dialogue criteria, Judge semantics and metric definitions.
+
+## v0.8.3 presentation boundary
+
+Modules, official criterion names, conditions, phases and turn names are centralized in a presentation-only label module. Raw case, Judge and metric identifiers remain unchanged. Data Explorer resolves and previews screenshot evidence while preserving its stored path as technical metadata. The normal Judge path reads COMPLETE raw cases from the active project; manual Conversation JSON and external JSONL remain advanced fallbacks.
+
+Human Review renders the complete collected conversation and the criterion’s target behaviors, non-target behaviors and boundary rules before the decision form. Review widgets are keyed by Case ID. A normal automatic validity screen is displayed as `VALID`; automatic `REVIEW` requires an explicit human `VALID`/`INVALID` choice. This validity choice remains separate from the frozen risk-label adjudication.
 
 ## v0.8.2 validity and adjudication boundary
 

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .audits import load_jsonl
+from .display_labels import module_label
 from .metrics import case_validity_counts, finding_rate, module_finding_rates, overall_macro_finding_rate, robustness_gap, valid_case_rows
 from .reliability import reliability_metrics
 
@@ -48,22 +49,22 @@ def build_integrated_report(
         "",
         "## Layer 1｜对话行为测试 / Dialogue Behavioral Testing",
         "",
-        f"- Adjudicated FORMAL cases: {len(reviewed_formal)}",
-        f"- Valid FORMAL cases included in analysis: {len(formal)}",
-        f"- Human Adjudication policy: {policy}",
-        f"- Analysis labels: REVIEWED {adjudication_status.get('REVIEWED', 0)}; UNREVIEWED {adjudication_status.get('UNREVIEWED', 0)}",
-        f"- Case Validity: VALID {validity['VALID']}; INVALID {validity['INVALID']}; REVIEW {validity['REVIEW']}",
-        f"- FORMAL cases excluded by Case Validity: {validity['INVALID'] + validity['REVIEW']} (INVALID {validity['INVALID']}, REVIEW {validity['REVIEW']})",
-        f"- Overall Macro Finding Rate: {_pct(overall_macro_finding_rate(formal))}",
-        f"- Pressure condition gap (C1−C0): {_pp(robustness_gap(formal, 'C1'))}",
-        f"- Multi-turn condition gap (C2−C0): {_pp(robustness_gap(formal, 'C2'))}",
+        f"- 已人工复核的 FORMAL 案例 / Adjudicated FORMAL cases: {len(reviewed_formal)}",
+        f"- 纳入分析的有效 FORMAL 案例 / Valid FORMAL cases included in analysis: {len(formal)}",
+        f"- 人工复核策略 / Human Adjudication policy: {policy}",
+        f"- 分析标签 / Analysis labels: REVIEWED {adjudication_status.get('REVIEWED', 0)}; UNREVIEWED {adjudication_status.get('UNREVIEWED', 0)}",
+        f"- 案例有效性 / Case Validity: VALID {validity['VALID']}; INVALID {validity['INVALID']}; REVIEW {validity['REVIEW']}",
+        f"- 因案例有效性排除的 FORMAL 案例 / FORMAL cases excluded by Case Validity: {validity['INVALID'] + validity['REVIEW']} (INVALID {validity['INVALID']}, REVIEW {validity['REVIEW']})",
+        f"- 总体宏平均风险发现率 / Overall Macro Finding Rate: {_pct(overall_macro_finding_rate(formal))}",
+        f"- 压力条件差值 / Pressure condition gap (C1−C0): {_pp(robustness_gap(formal, 'C1'))}",
+        f"- 多轮条件差值 / Multi-turn condition gap (C2−C0): {_pp(robustness_gap(formal, 'C2'))}",
         "",
         "### 模块风险发现率 / Module Finding Rates",
     ]
     rates = module_finding_rates(formal)
     if rates:
         for module, rate in sorted(rates.items()):
-            lines.append(f"- {module}: {_pct(rate)}")
+            lines.append(f"- {module_label(module)}: {_pct(rate)}")
     else:
         lines.append("- No complete FORMAL module results yet.")
 
@@ -75,11 +76,11 @@ def build_integrated_report(
     lines += [
         "",
         "### Judge—人工一致性 / Judge–Human Reliability",
-        f"- Cases compared: {rel['n']}",
-        f"- Exact Agreement: {_pct(rel['exact_agreement'])}",
+        f"- 比较案例数 / Cases compared: {rel['n']}",
+        f"- 完全一致率 / Exact Agreement: {_pct(rel['exact_agreement'])}",
         "- Cohen's κ: " + ("N/A" if rel["cohen_kappa"] is None else f"{rel['cohen_kappa']:.3f}"),
-        f"- Finding Precision: {_pct(rel['finding_precision'])}",
-        f"- Finding Recall: {_pct(rel['finding_recall'])}",
+        f"- 风险发现精确率 / Finding Precision: {_pct(rel['finding_precision'])}",
+        f"- 风险发现召回率 / Finding Recall: {_pct(rel['finding_recall'])}",
         "",
         "## Layer 2｜产品安全机制检查 / Product Safeguard Checks",
         "",
@@ -183,20 +184,20 @@ def build_dialogue_report(project: dict[str, Any], final_rows: list[dict[str, An
     lines = [
         f"# CompanionGuard Dialogue Report — {project.get('project_name', project.get('project_id'))}",
         "",
-        f"- FORMAL cases: {context['formal_case_count']}",
-        f"- Adjudicated FORMAL cases: {context['adjudicated_formal_case_count']}",
-        f"- Human Adjudication policy: {context['human_adjudication_policy']}",
-        f"- Analysis labels: REVIEWED {context['adjudication_status_counts']['REVIEWED']}; UNREVIEWED {context['adjudication_status_counts']['UNREVIEWED']}",
-        f"- Case Validity: VALID {context['formal_case_validity']['VALID']}; INVALID {context['formal_case_validity']['INVALID']}; REVIEW {context['formal_case_validity']['REVIEW']}",
-        f"- FORMAL cases excluded by Case Validity: {sum(context['formal_case_validity'][key] for key in ('INVALID', 'REVIEW'))} (INVALID {context['formal_case_validity']['INVALID']}, REVIEW {context['formal_case_validity']['REVIEW']})",
-        f"- Overall Macro Finding Rate: {_pct(context['overall_macro_finding_rate'])}",
-        f"- Pressure condition gap (C1−C0): {_pp(context['pressure_gap_c1_minus_c0'])}",
-        f"- Multi-turn condition gap (C2−C0): {_pp(context['multi_turn_gap_c2_minus_c0'])}",
+        f"- FORMAL 案例数 / FORMAL cases: {context['formal_case_count']}",
+        f"- 已人工复核的 FORMAL 案例 / Adjudicated FORMAL cases: {context['adjudicated_formal_case_count']}",
+        f"- 人工复核策略 / Human Adjudication policy: {context['human_adjudication_policy']}",
+        f"- 分析标签 / Analysis labels: REVIEWED {context['adjudication_status_counts']['REVIEWED']}; UNREVIEWED {context['adjudication_status_counts']['UNREVIEWED']}",
+        f"- 案例有效性 / Case Validity: VALID {context['formal_case_validity']['VALID']}; INVALID {context['formal_case_validity']['INVALID']}; REVIEW {context['formal_case_validity']['REVIEW']}",
+        f"- 因案例有效性排除的 FORMAL 案例 / FORMAL cases excluded by Case Validity: {sum(context['formal_case_validity'][key] for key in ('INVALID', 'REVIEW'))} (INVALID {context['formal_case_validity']['INVALID']}, REVIEW {context['formal_case_validity']['REVIEW']})",
+        f"- 总体宏平均风险发现率 / Overall Macro Finding Rate: {_pct(context['overall_macro_finding_rate'])}",
+        f"- 压力条件差值 / Pressure condition gap (C1−C0): {_pp(context['pressure_gap_c1_minus_c0'])}",
+        f"- 多轮条件差值 / Multi-turn condition gap (C2−C0): {_pp(context['multi_turn_gap_c2_minus_c0'])}",
         "",
         "## Module Finding Rates",
     ]
     for module, rate in sorted(context["module_finding_rates"].items()):
-        lines.append(f"- {module}: {_pct(rate)}")
+        lines.append(f"- {module_label(module)}: {_pct(rate)}")
     lines += ["", "## Product Coverage", "", "| Product | FORMAL cases | Finding rate | Coverage |", "|---|---:|---:|---|"]
     for product, row in context["products"].items():
         lines.append(f"| {_escape(product)} | {row['formal_cases']} | {_pct(row['finding_rate'])} | {_escape(', '.join(row['coverage_types']))} |")
