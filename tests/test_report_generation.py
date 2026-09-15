@@ -62,11 +62,13 @@ class ReportGenerationValidationTests(unittest.TestCase):
 
     def test_integrated_report_allows_boundary_disclaimers_and_ids(self):
         text = """## Layer 1｜对话行为测试
-## Layer 2｜产品安全机制检查
-## Layer 3｜公开合规证据核查
-## 跨层一致与不一致
-## 监管关注点
-## 局限性
+## 摘要
+## 评测范围
+        ## Layer 2｜产品安全机制检查
+        ## Layer 3｜公开合规证据核查
+        ## 跨层一致与不一致
+        ## 监管建议
+        ## 局限性
 案例 HR-02 和 L3-04 不代表未经支持的数字结论。
 NOT_FOUND 不等于未实施；NOT_PUBLICLY_VERIFIABLE 不等于不合规；DOCUMENTED 不等于实际执行到位；FINDING 不等于违法或不合规。
         NOT_FOUND 仅表示在已查材料中未找到，不等于未实施或不合规。
@@ -112,8 +114,8 @@ FINDING 不等于违法或不合规。
         with TemporaryDirectory() as td:
             with patch("companionguard_app.service.make_client", return_value=FakeClient()), patch("companionguard_app.service.LLM_USAGE_PATH", Path(td) / "usage.jsonl"):
                 self.assertEqual(run_report_writer(role="integrated_report", report_context={}, llm_profile=profile), "draft\n")
-        self.assertIn("CompanionGuard Chinese Reporting Style Guide v1.0", captured["prompt"])
-        self.assertIn("Integrated Report Writer System Prompt v1.0", captured["prompt"])
+        self.assertIn("CompanionGuard Chinese Regulatory Research Writing Skill v1.1", captured["prompt"])
+        self.assertIn("Integrated Report Writer System Prompt v1.1", captured["prompt"])
 
     def test_chat_json_adapter_accepts_surrounded_object(self):
         self.assertEqual(_parse_json_object("说明文字\n```json\n{\"overall_status\":\"PASS\"}\n```"), {"overall_status": "PASS"})

@@ -18,11 +18,13 @@ LEGAL_BOUNDARY_DISCLAIMERS = (
 )
 
 INTEGRATED_REQUIRED_SECTIONS = (
+    ("EXECUTIVE_SUMMARY", ("摘要", "执行摘要", "Executive Summary")),
+    ("SCOPE", ("评测范围", "证据范围", "评测框架")),
     ("LAYER_1_ANALYSIS", ("Layer 1", "对话行为测试")),
     ("LAYER_2_ANALYSIS", ("Layer 2", "产品安全机制检查")),
     ("LAYER_3_ANALYSIS", ("Layer 3", "公开合规证据核查")),
     ("CROSS_LAYER_SYNTHESIS", ("cross-layer", "跨层", "三层证据")),
-    ("REGULATORY_ATTENTION", ("监管关注点", "监管关注")),
+    ("REGULATORY_RECOMMENDATIONS", ("监管建议", "后续监管建议")),
     ("LIMITATIONS", ("Limitations", "局限性")),
 )
 
@@ -77,7 +79,18 @@ def _claim_text_without_boundary_disclaimers(report_text: str) -> str:
     return cleaned
 
 
-def validate_report_hard(*, report_text: str, context: dict[str, Any], report_type: str, manifest: dict[str, Any] | None = None) -> dict[str, Any]:
+def _has_prose_synthesis(report_text: str) -> bool:
+    prose_lines = []
+    for line in report_text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or stripped.startswith("|") or stripped.startswith("-") or stripped.startswith("*"):
+            continue
+        if len(stripped) >= 25 and any(ch in stripped for ch in "。；，"):
+            prose_lines.append(stripped)
+    return len(prose_lines) >= 2
+
+
+def validate_report_hard(*, report_text: str, context: dict[str, Any], report_type: str, manifest: dict[str, Any] | None = None, quality_version: str = "1.1") -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     context_errors = validate_context_shape(context)
     if report_type not in REPORT_TYPES:
@@ -90,7 +103,7 @@ def validate_report_hard(*, report_text: str, context: dict[str, Any], report_ty
         if manifest.get("report_type") != report_type:
             issues.append({"issue_type": "REPORT_TYPE_MISMATCH", "reason": "manifest/report type mismatch"})
 
-    if report_type == "integrated":
+    if report_type == "integrated" and quality_version == "1.1":
         for section_type, markers in INTEGRATED_REQUIRED_SECTIONS:
             if not any(marker in report_text for marker in markers):
                 issues.append({
@@ -98,6 +111,8 @@ def validate_report_hard(*, report_text: str, context: dict[str, Any], report_ty
                     "section": section_type,
                     "reason": "Integrated Report Writer output is missing a required analysis section",
                 })
+        if not _has_prose_synthesis(report_text):
+            issues.append({"issue_type": "INSUFFICIENT_PROSE_SYNTHESIS", "reason": "Integrated v1.1 report must contain substantive prose analysis beyond tables and bullets"})
 
     allowed = _allowed_numbers(context)
     numeric_text = re.sub(r"Layer\s+[123]|0[–-]100", "", report_text)

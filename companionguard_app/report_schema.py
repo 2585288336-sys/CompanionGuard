@@ -22,14 +22,14 @@ def validate_context_shape(context: dict[str, Any]) -> list[str]:
     return errors
 
 
-def report_manifest(*, report_type: str, project: dict[str, Any], validation_status: str, grounding_status: str = "NOT_RUN", polish_enabled: bool = False) -> dict[str, Any]:
+def report_manifest(*, report_type: str, project: dict[str, Any], validation_status: str, grounding_status: str = "NOT_RUN", polish_enabled: bool = False, writer_prompt_version: str = WRITER_PROMPT_VERSION) -> dict[str, Any]:
     return {
         "report_type": report_type,
         "project_id": project.get("project_id"),
         "context_schema_version": CONTEXT_SCHEMA_VERSION,
-        "writer_prompt_version": WRITER_PROMPT_VERSION,
-        "grounding_prompt_version": GROUNDING_PROMPT_VERSION,
-        "polish_prompt_version": POLISH_PROMPT_VERSION,
+        "writer_prompt_version": writer_prompt_version,
+        "grounding_prompt_version": "1.1" if writer_prompt_version == "1.1" else GROUNDING_PROMPT_VERSION,
+        "polish_prompt_version": "1.1" if writer_prompt_version == "1.1" else POLISH_PROMPT_VERSION,
         "validation_status": validation_status,
         "grounding_status": grounding_status,
         "academic_polish_enabled": bool(polish_enabled),

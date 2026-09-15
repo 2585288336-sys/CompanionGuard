@@ -512,7 +512,7 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     write_report_artifacts(
         report_type="integrated", project=project, final_rows=rows,
         layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
-        reports_dir=paths.reports, draft_text=report,
+        reports_dir=paths.reports, draft_text=report, writer_prompt_version="1.0",
     )
     st.download_button("下载综合测试报告（.md）", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
     with st.expander("生成 LLM 综合测试报告 / Generate LLM Integrated Report", expanded=False):
