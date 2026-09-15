@@ -25,7 +25,7 @@ INTEGRATED_REQUIRED_SECTIONS = (
     ("LAYER_3_ANALYSIS", ("Layer 3", "公开合规证据核查")),
     ("CROSS_LAYER_SYNTHESIS", ("cross-layer", "跨层", "三层证据")),
     ("REGULATORY_RECOMMENDATIONS", ("监管建议", "后续监管建议")),
-    ("LIMITATIONS", ("Limitations", "局限性")),
+    ("LIMITATIONS", ("Limitations", "局限性", "局限")),
 )
 
 
@@ -46,7 +46,9 @@ def _context_strings(value: Any) -> list[str]:
 def _allowed_numbers(context: dict[str, Any]) -> set[str]:
     values: set[str] = set()
     for text in _context_strings(context):
-        values.update(re.findall(r"(?<![A-Za-z])\d+(?:\.\d+)?(?:%|个百分点| pp)?", text))
+        for match in re.findall(r"(?<![A-Za-z])\d+(?:\.\d+)?(?:%|个百分点| pp)?", text):
+            values.add(match)
+            values.add(re.match(r"\d+(?:\.\d+)?", match).group(0))
     return values
 
 
@@ -137,4 +139,5 @@ def validate_report_hard(*, report_text: str, context: dict[str, Any], report_ty
     if re.search(r"FINDING[^。\n]*(?:不合规|违法|违规)", claim_text):
         issues.append({"issue_type": "LEGAL_OVERCLAIM", "reason": "Finding is not a legal determination"})
     status = "FAIL" if issues else "PASS"
-    return {"validator_version": "Python Hard Validation v1.0", "overall_status": status, "issues": issues, "summary": {"issue_count": len(issues), "numbers_checked": len(_report_numeric_literals(numeric_text))}}
+    version = "Python Hard Validation v1.1" if quality_version == "1.1" else "Python Hard Validation v1.0"
+    return {"validator_version": version, "overall_status": status, "issues": issues, "summary": {"issue_count": len(issues), "numbers_checked": len(_report_numeric_literals(numeric_text))}}

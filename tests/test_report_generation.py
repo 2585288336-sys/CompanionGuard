@@ -108,6 +108,7 @@ FINDING 不等于违法或不合规。
         class FakeClient:
             def generate_text(self, *, system_prompt, payload, max_output_tokens):
                 captured["prompt"] = system_prompt
+                captured["payload"] = payload
                 return "draft", None
 
         profile = LLMProfile(role="integrated_report", provider_type="openai_chat_compatible", provider_name="test", model="test", api_key="test")
@@ -116,6 +117,10 @@ FINDING 不等于违法或不合规。
                 self.assertEqual(run_report_writer(role="integrated_report", report_context={}, llm_profile=profile), "draft\n")
         self.assertIn("CompanionGuard Chinese Regulatory Research Writing Skill v1.1", captured["prompt"])
         self.assertIn("Integrated Report Writer System Prompt v1.1", captured["prompt"])
+        self.assertEqual(set(captured["payload"]["report_context"]), {
+            "report_contract", "coverage", "key_findings", "dialogue_analysis", "layer2_analysis",
+            "layer3_analysis", "cross_layer_topics", "representative_findings", "limitations", "verification_needed",
+        })
 
     def test_chat_json_adapter_accepts_surrounded_object(self):
         self.assertEqual(_parse_json_object("说明文字\n```json\n{\"overall_status\":\"PASS\"}\n```"), {"overall_status": "PASS"})

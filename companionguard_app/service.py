@@ -225,10 +225,12 @@ def run_grounding_validator(
 def run_academic_polish(
     *, report_text: str, report_context: dict[str, Any], llm_profile: LLMProfile,
     session_id: str | None = None, project_id: str | None = None,
+    prompt_version: str = "1.1",
 ) -> str:
     if llm_profile.role != "academic_polish":
         raise ValueError("academic polish requires the academic_polish role")
-    system_prompt = (PROMPTS_DIR / "reporting" / "academic_polish.md").read_text(encoding="utf-8")
+    prompt_path = PROMPTS_DIR / "reporting" / ("academic_polish_v1.1.md" if prompt_version == "1.1" else "academic_polish.md")
+    system_prompt = prompt_path.read_text(encoding="utf-8")
     _before_call(llm_profile, session_id=session_id)
     text, usage = make_client(llm_profile).generate_text(system_prompt=system_prompt, payload={"report_text": report_text, "report_context": report_context}, max_output_tokens=6000)
     _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage)
