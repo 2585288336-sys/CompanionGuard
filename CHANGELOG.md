@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.4 — Data portability safeguards
+
+- Added independent `data_schema_version`, `app_version` and `code_commit` metadata to newly created project manifests while keeping legacy manifests readable.
+- Added the read-only `scripts/verify_project_data.py` checker for project record counts, evidence-file counts, malformed JSONL/CSV records and missing/unsafe evidence references.
+- Accepted both project-relative and repository-relative evidence references so a complete project directory can be copied to a new checkout without absolute-path coupling.
+- Added regression tests for current and legacy project manifests, evidence resolution, missing evidence detection and loader compatibility.
+- Documented the rule that future schema migrations must operate on a copied analysis project and preserve the formal frozen source data unchanged.
+
 ## v0.8.3 — Chinese-first workflow and review UI refinement
 
 - Centralized Chinese-first labels for modules, official criterion names, C0/C1/C2 conditions, MR/MC/PC test structures, phases and L1–L5/R1–R2 turns without changing stored identifiers.

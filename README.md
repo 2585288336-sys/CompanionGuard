@@ -1,6 +1,6 @@
-# CompanionGuard v0.8.3
+# CompanionGuard v0.8.4
 
-CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.3 is the post-smoke-test workflow and Chinese-first UI refinement release. It preserves the frozen CompanionGuard v4 dialogue benchmark, criterion prompts, Judge schema and metric definitions while making collection, evidence inspection, Judge selection and human review easier to execute correctly.
+CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.4 keeps the post-smoke-test workflow and Chinese-first UI refinement release, and adds read-only project portability checks. It preserves the frozen CompanionGuard v4 dialogue benchmark, criterion prompts, Judge schema and metric definitions while making collection, evidence inspection, Judge selection, human review and later data migration safer.
 
 ## Platform model
 
@@ -269,6 +269,24 @@ data/projects/<project_id>/
 `human_adjudication.csv` and `final_results.csv` carry automatic/final validity, adjudication status, and analysis-label fields. `adjudication_sampling.json` records the frozen sampled case IDs, method, rate, strata, and random seed.
 
 Global server LLM usage metadata is stored under ignored runtime `data/` and contains no API keys.
+
+### Data portability and integrity checks
+
+New Test Projects record three portability fields in `project.json`:
+
+- `data_schema_version` — the data format version, independent of the application version;
+- `app_version` — the application version that created the project;
+- `code_commit` — the Git commit checked out when the project was created.
+
+Older project manifests remain readable. The metadata is additive, so a legacy project can be checked and migrated later without changing its original records.
+
+Evidence references are stored as project-relative or repository-relative paths. They must not depend on an absolute path containing a particular checkout directory. To check one project without modifying it:
+
+```bash
+python scripts/verify_project_data.py data/projects/<project_id>
+```
+
+The checker reports record counts, evidence-file counts, malformed JSONL/CSV records, missing or unsafe evidence references, and missing portability metadata. It is read-only and returns a non-zero status only when it finds an integrity error. Any future schema migration must run on a copied analysis project, with the original formal project retained unchanged.
 
 ## Project layout
 

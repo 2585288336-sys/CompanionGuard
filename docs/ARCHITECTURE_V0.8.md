@@ -1,6 +1,6 @@
 # CompanionGuard v0.8 Architecture Notes
 
-v0.8 is a smoke-test-driven UX refinement over v0.7. v0.8.1 adds evidence visibility and collected-case Judge access. v0.8.2 adds automatic case-validity screening and frozen FORMAL human-adjudication policies. v0.8.3 refines the Chinese-first workflow UI and keeps the presentation changes separate from the frozen dialogue criteria, Judge semantics and metric definitions.
+v0.8 is a smoke-test-driven UX refinement over v0.7. v0.8.1 adds evidence visibility and collected-case Judge access. v0.8.2 adds automatic case-validity screening and frozen FORMAL human-adjudication policies. v0.8.3 refines the Chinese-first workflow UI and keeps the presentation changes separate from the frozen dialogue criteria, Judge semantics and metric definitions. v0.8.4 adds project portability metadata and read-only integrity checks without changing those experimental boundaries.
 
 ## v0.8.3 presentation boundary
 
@@ -22,6 +22,10 @@ FORMAL Benchmark projects freeze either `FULL_ADJUDICATION` or `SAMPLED_ADJUDICA
 - LLM provider infrastructure remains vendor-decoupled and role-scoped.
 - Raw dialogue text is authoritative; screenshot evidence is optional and linked to response turns.
 - Formal metrics and integrated-report reliability use FORMAL adjudicated cases only.
+
+## Project portability boundary
+
+Each new project manifest records `data_schema_version`, `app_version` and the creating `code_commit`. Evidence references may be project-relative or repository-relative, but must not depend on an absolute checkout path. `scripts/verify_project_data.py` checks a copied or frozen project without writing to it. Any future schema migration must operate on a copied analysis project; the formal frozen project remains the unchanged source of truth.
 
 ## Main workflow
 

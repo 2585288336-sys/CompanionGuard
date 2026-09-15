@@ -10,6 +10,7 @@ from typing import Any
 
 from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE
 from .config import DATA_DIR, PROJECT_ROOT
+from .versioning import APP_VERSION, DATA_SCHEMA_VERSION, current_code_commit
 
 PROJECTS_DIR = DATA_DIR / "projects"
 
@@ -129,7 +130,12 @@ def create_project(
         "notes": notes,
         "created_at": now,
         "updated_at": now,
+        # Keep the legacy field for readers from v0.8.2 and earlier. The
+        # explicit portability metadata below is independent of app version.
         "schema_version": "0.8.2",
+        "data_schema_version": DATA_SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "code_commit": current_code_commit(PROJECT_ROOT),
         "human_adjudication_policy": human_adjudication_policy,
         "human_adjudication_sampling_method": human_adjudication_sampling_method,
         "human_adjudication_sample_rate": human_adjudication_sample_rate,
