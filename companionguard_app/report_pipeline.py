@@ -28,7 +28,7 @@ def targeted_repair(*, draft_text: str, grounding_result: dict[str, Any], repair
     return repair(draft_text, issues)
 
 
-def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_rows: list[dict[str, Any]], layer2_path: Path, layer3_path: Path, reports_dir: Path, draft_text: str | None = None, writer: Callable[[dict[str, Any]], str] | None = None, polish: Callable[[str], str] | None = None) -> dict[str, Any]:
+def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_rows: list[dict[str, Any]], layer2_path: Path, layer3_path: Path, reports_dir: Path, draft_text: str | None = None, writer: Callable[[dict[str, Any]], str] | None = None, grounding_validator: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None, polish: Callable[[str], str] | None = None) -> dict[str, Any]:
     reports_dir.mkdir(parents=True, exist_ok=True)
     context = build_report_context(report_type=report_type, project=project, final_rows=final_rows, layer2_path=layer2_path, layer3_path=layer3_path)
     context_path = reports_dir / "report_context.json"
@@ -37,7 +37,7 @@ def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_r
     draft_path = reports_dir / "draft_report.md"
     draft_path.write_text(draft, encoding="utf-8")
     hard = validate_report_hard(report_text=draft, context=context, report_type=report_type)
-    grounding = validate_grounding(draft_report=draft, context=context)
+    grounding = grounding_validator(draft, context) if grounding_validator else validate_grounding(draft_report=draft, context=context)
     grounding_path = reports_dir / "grounding_result.json"
     grounding_path.write_text(json.dumps(grounding, ensure_ascii=False, indent=2), encoding="utf-8")
     final_text = draft

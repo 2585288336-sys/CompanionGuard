@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from companionguard_app.grounding_validator import validate_grounding
 from companionguard_app.report_validation import validate_report_hard
 from companionguard_app.report_pipeline import build_report_context
+from companionguard_app.service import run_report_writer
+from companionguard_llm.profiles import LLMProfile
 from reporting_integrated_fixture import make_integrated_fixture
 
 
@@ -61,6 +64,23 @@ class ReportGenerationValidationTests(unittest.TestCase):
         self.assertTrue(any(item["small_sample"] for item in report_context["conditions"].values()))
         self.assertEqual(report_context["products"]["MoMood"]["formal_cases"], 7)
         self.assertNotEqual(report_context["products"]["MoMood"]["finding_rate"], report_context["products"]["星野"]["finding_rate"])
+
+    def test_integrated_writer_loads_style_guide_and_role_prompt(self):
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        captured = {}
+
+        class FakeClient:
+            def generate_text(self, *, system_prompt, payload, max_output_tokens):
+                captured["prompt"] = system_prompt
+                return "draft", None
+
+        profile = LLMProfile(role="integrated_report", provider_type="openai_chat_compatible", provider_name="test", model="test", api_key="test")
+        with TemporaryDirectory() as td:
+            with patch("companionguard_app.service.make_client", return_value=FakeClient()), patch("companionguard_app.service.LLM_USAGE_PATH", Path(td) / "usage.jsonl"):
+                self.assertEqual(run_report_writer(role="integrated_report", report_context={}, llm_profile=profile), "draft\n")
+        self.assertIn("CompanionGuard Chinese Reporting Style Guide v1.0", captured["prompt"])
+        self.assertIn("Integrated Report Writer System Prompt v1.0", captured["prompt"])
 
 
 if __name__ == "__main__":

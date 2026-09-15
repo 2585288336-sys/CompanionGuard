@@ -161,7 +161,8 @@ def run_report_writer(
     if role not in {"dialogue_report", "integrated_report"}:
         raise ValueError("Unsupported report writer role")
     prompt_path = PROMPTS_DIR / "reporting" / f"{role}.md"
-    system_prompt = prompt_path.read_text(encoding="utf-8")
+    style_guide = (PROMPTS_DIR / "reporting" / "chinese_style_guide.md").read_text(encoding="utf-8")
+    system_prompt = style_guide + "\n\n--- ROLE PROMPT ---\n\n" + prompt_path.read_text(encoding="utf-8")
     _before_call(llm_profile, session_id=session_id)
     client = make_client(llm_profile)
     text, usage = client.generate_text(system_prompt=system_prompt, payload={"report_context": report_context}, max_output_tokens=6000)
