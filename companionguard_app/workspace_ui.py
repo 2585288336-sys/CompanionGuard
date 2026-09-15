@@ -302,15 +302,20 @@ def integrated_report_page_v09() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
+    from .projects import is_read_only_project
+
+    read_only = is_read_only_project(project)
     st.header("综合报告 / Integrated Report")
     st.caption("当前报告随 Project 数据更新；下游报告产物保存在项目的 reports/ 目录，不改写原始采集数据。")
     criteria = criteria_index()
-    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=project.get("human_adjudication_policy", "FULL_ADJUDICATION"))
+    if not read_only:
+        build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=project.get("human_adjudication_policy", "FULL_ADJUDICATION"))
     rows = load_final_results(paths.final_results)
     deterministic = build_integrated_report(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
-    paths.reports.mkdir(parents=True, exist_ok=True)
     deterministic_path = paths.reports / "integrated_report_deterministic.md"
-    deterministic_path.write_text(deterministic, encoding="utf-8")
+    if not read_only:
+        paths.reports.mkdir(parents=True, exist_ok=True)
+        deterministic_path.write_text(deterministic, encoding="utf-8")
     final_path = paths.reports / "final_report.md"
     context_path = paths.reports / "report_context.json"
     st.markdown(f"<div class='cg-card'><p><strong>Project：</strong>{project.get('project_name', project.get('project_id'))}</p><p><strong>Data cutoff：</strong>{_date_cutoff(load_raw_cases(paths.raw_cases))} · <strong>纳入范围：</strong>FORMAL 阶段有效数据 · <strong>当前报告：</strong>{'已生成' if final_path.exists() else '尚未生成 LLM 版本'}</p></div>", unsafe_allow_html=True)
@@ -323,7 +328,10 @@ def integrated_report_page_v09() -> None:
         st.download_button("下载确定性分析摘要", data=deterministic.encode("utf-8"), file_name=f"{project.get('project_id')}_deterministic_summary.md", mime="text/markdown")
     with st.expander("报告产物与生成链", expanded=False):
         st.caption("FORMAL Project Data → Python deterministic analysis → report_context → Report Writer → Hard Validation → Evidence Grounding → Academic Polish（可选）")
-        st.write({"deterministic_summary": str(deterministic_path), "report_context": str(context_path), "final_report": str(final_path)})
+        st.write({"deterministic_summary": str(deterministic_path) if deterministic_path.exists() else "只读快照中不写入派生文件", "report_context": str(context_path) if context_path.exists() else "只读快照中不写入派生文件", "final_report": str(final_path) if final_path.exists() else "尚无已生成 LLM 报告"})
+    if read_only:
+        st.info("当前为只读公开演示快照。Server API / BYOK 模式仍保留在应用代码中，但不会对公开快照执行写入型 Judge 或报告生成。")
+        return
     st.markdown("### 生成 / 更新报告")
     st.caption("生成 v1.1 LLM 综合报告需要分别配置 Integrated Report Writer 与 Evidence Grounding Validator。Academic Polish 本页不自动启用。")
     writer_profile = render_llm_profile_selector("integrated_report", key_prefix="v09_integrated_report_writer")

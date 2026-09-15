@@ -11,7 +11,7 @@ import streamlit as st
 from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE, adjudication_policy
 from .audits import load_json, load_jsonl, make_audit_row, save_audit_evidence, upsert_jsonl
 from .collector import load_collector_config
-from .projects import create_project, delete_project, get_project, list_projects, project_paths, safe_slug
+from .projects import create_project, delete_project, get_project, is_read_only_project, list_projects, project_paths, safe_slug
 from .reliability import LABELS, reliability_metrics
 from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
 from .report_pipeline import write_report_artifacts
@@ -106,10 +106,11 @@ def projects_page() -> None:
             for p in existing
         ]), use_container_width=True, hide_index=True)
 
-    if existing:
+    deletable = [p for p in existing if not is_read_only_project(p)]
+    if deletable:
         with st.expander("删除测试项目 / Delete Project", expanded=False):
             st.warning("删除会永久移除该项目目录下的 raw cases、截图、Judge结果、人工复核、Layer 2/3 与报告；不会修改源码或 criteria。建议只用于删除 smoke test。")
-            delete_id = st.selectbox("选择项目 / Project", [p["project_id"] for p in existing], key="delete_project_select")
+            delete_id = st.selectbox("选择项目 / Project", [p["project_id"] for p in deletable], key="delete_project_select")
             confirm = st.text_input("输入 Project ID 以确认 / Type Project ID to confirm", key="delete_project_confirm")
             if st.button("永久删除项目 / Permanently delete", disabled=confirm != delete_id, key="delete_project_btn"):
                 try:

@@ -1,0 +1,743 @@
+[
+  {
+    "plan_id": "MoMood_FORMAL_20260915_q01",
+    "plan_name": "MoMood_FORMAL_20260915_q01",
+    "product_id": "MoMood",
+    "product": "MoMood",
+    "product_slug": "MoMood",
+    "preset_id": "COMPANIONGUARD_FULL",
+    "coverage_type": "FULL_BENCHMARK",
+    "selections": {
+      "DS-01": {
+        "scenarios": [
+          "DS-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "DS-02": {
+        "scenarios": [
+          "DS-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "FD-01": {
+        "scenarios": [
+          "FD-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "FD-02": {
+        "scenarios": [
+          "FD-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "FD-03": {
+        "scenarios": [
+          "FD-03"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "UE-01": {
+        "scenarios": [
+          "UE-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "UE-02": {
+        "scenarios": [
+          "UE-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "HR-01": {
+        "scenarios": [
+          "HR-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "HR-02": {
+        "scenarios": [
+          "HR-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "HR-03": {
+        "scenarios": [
+          "HR-03"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "MC": {
+        "scenarios": [
+          "MC-01-A",
+          "MC-01-B",
+          "MC-01-C",
+          "MC-02-A",
+          "MC-02-B",
+          "MC-02-C",
+          "MC-03-A",
+          "MC-03-B",
+          "MC-03-C"
+        ],
+        "conditions": []
+      },
+      "MR": {
+        "scenarios": [
+          "MR-01",
+          "MR-02",
+          "MR-03"
+        ],
+        "conditions": []
+      },
+      "IR-01A": {
+        "scenarios": [
+          "IR-01A"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "IR-01B": {
+        "scenarios": [
+          "IR-01B"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "IR-SS-PROBE": {
+        "scenarios": [
+          "IR-SS-PROBE"
+        ],
+        "conditions": []
+      },
+      "PC-01": {
+        "scenarios": [
+          "PC-01-A",
+          "PC-01-B",
+          "PC-01-C"
+        ],
+        "conditions": []
+      },
+      "PC-02": {
+        "scenarios": [
+          "PC-02-A",
+          "PC-02-B",
+          "PC-02-C"
+        ],
+        "conditions": []
+      },
+      "PC-03": {
+        "scenarios": [
+          "PC-03-A",
+          "PC-03-B",
+          "PC-03-C"
+        ],
+        "conditions": []
+      },
+      "PC-04": {
+        "scenarios": [
+          "PC-04-A",
+          "PC-04-B",
+          "PC-04-C"
+        ],
+        "conditions": []
+      },
+      "PC-05": {
+        "scenarios": [
+          "PC-05-A",
+          "PC-05-B",
+          "PC-05-C"
+        ],
+        "conditions": []
+      },
+      "PC-06": {
+        "scenarios": [
+          "PC-06-A",
+          "PC-06-B",
+          "PC-06-C"
+        ],
+        "conditions": []
+      },
+      "PC-07": {
+        "scenarios": [
+          "PC-07-A",
+          "PC-07-B",
+          "PC-07-C"
+        ],
+        "conditions": []
+      }
+    },
+    "criterion_ids": [
+      "DS-01",
+      "DS-02",
+      "FD-01",
+      "FD-02",
+      "FD-03",
+      "UE-01",
+      "UE-02",
+      "HR-01",
+      "HR-02",
+      "HR-03",
+      "MC",
+      "MR",
+      "IR-01A",
+      "IR-01B",
+      "IR-SS-PROBE",
+      "PC-01",
+      "PC-02",
+      "PC-03",
+      "PC-04",
+      "PC-05",
+      "PC-06",
+      "PC-07"
+    ],
+    "run_numbers": [
+      1
+    ],
+    "phase": "FORMAL",
+    "collection_date": "2026-09-15",
+    "notes": "",
+    "created_at": "2026-09-15T08:19:04.513828+00:00",
+    "updated_at": "2026-09-15T08:19:04.513828+00:00"
+  },
+  {
+    "plan_id": "Xingye_FORMAL_20260915_q01",
+    "plan_name": "Xingye_FORMAL_20260915_q01",
+    "product_id": "Xingye",
+    "product": "星野",
+    "product_slug": "Xingye",
+    "preset_id": "COMPANIONGUARD_FULL",
+    "coverage_type": "FULL_BENCHMARK",
+    "selections": {
+      "DS-01": {
+        "scenarios": [
+          "DS-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "DS-02": {
+        "scenarios": [
+          "DS-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "FD-01": {
+        "scenarios": [
+          "FD-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "FD-02": {
+        "scenarios": [
+          "FD-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "FD-03": {
+        "scenarios": [
+          "FD-03"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "UE-01": {
+        "scenarios": [
+          "UE-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "UE-02": {
+        "scenarios": [
+          "UE-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "HR-01": {
+        "scenarios": [
+          "HR-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "HR-02": {
+        "scenarios": [
+          "HR-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "HR-03": {
+        "scenarios": [
+          "HR-03"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "MC": {
+        "scenarios": [
+          "MC-01-A",
+          "MC-01-B",
+          "MC-01-C",
+          "MC-02-A",
+          "MC-02-B",
+          "MC-02-C",
+          "MC-03-A",
+          "MC-03-B",
+          "MC-03-C"
+        ],
+        "conditions": []
+      },
+      "MR": {
+        "scenarios": [
+          "MR-01",
+          "MR-02",
+          "MR-03"
+        ],
+        "conditions": []
+      },
+      "IR-01A": {
+        "scenarios": [
+          "IR-01A"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "IR-01B": {
+        "scenarios": [
+          "IR-01B"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "IR-SS-PROBE": {
+        "scenarios": [
+          "IR-SS-PROBE"
+        ],
+        "conditions": []
+      },
+      "PC-01": {
+        "scenarios": [
+          "PC-01-A",
+          "PC-01-B",
+          "PC-01-C"
+        ],
+        "conditions": []
+      },
+      "PC-02": {
+        "scenarios": [
+          "PC-02-A",
+          "PC-02-B",
+          "PC-02-C"
+        ],
+        "conditions": []
+      },
+      "PC-03": {
+        "scenarios": [
+          "PC-03-A",
+          "PC-03-B",
+          "PC-03-C"
+        ],
+        "conditions": []
+      },
+      "PC-04": {
+        "scenarios": [
+          "PC-04-A",
+          "PC-04-B",
+          "PC-04-C"
+        ],
+        "conditions": []
+      },
+      "PC-05": {
+        "scenarios": [
+          "PC-05-A",
+          "PC-05-B",
+          "PC-05-C"
+        ],
+        "conditions": []
+      },
+      "PC-06": {
+        "scenarios": [
+          "PC-06-A",
+          "PC-06-B",
+          "PC-06-C"
+        ],
+        "conditions": []
+      },
+      "PC-07": {
+        "scenarios": [
+          "PC-07-A",
+          "PC-07-B",
+          "PC-07-C"
+        ],
+        "conditions": []
+      }
+    },
+    "criterion_ids": [
+      "DS-01",
+      "DS-02",
+      "FD-01",
+      "FD-02",
+      "FD-03",
+      "UE-01",
+      "UE-02",
+      "HR-01",
+      "HR-02",
+      "HR-03",
+      "MC",
+      "MR",
+      "IR-01A",
+      "IR-01B",
+      "IR-SS-PROBE",
+      "PC-01",
+      "PC-02",
+      "PC-03",
+      "PC-04",
+      "PC-05",
+      "PC-06",
+      "PC-07"
+    ],
+    "run_numbers": [
+      1
+    ],
+    "phase": "FORMAL",
+    "collection_date": "2026-09-15",
+    "notes": "",
+    "created_at": "2026-09-15T08:19:21.697862+00:00",
+    "updated_at": "2026-09-15T08:19:21.697862+00:00"
+  },
+  {
+    "plan_id": "Doubao_FORMAL_20260915_q01",
+    "plan_name": "Doubao_FORMAL_20260915_q01",
+    "product_id": "Doubao",
+    "product": "豆包",
+    "product_slug": "Doubao",
+    "preset_id": "COMPANIONGUARD_FULL",
+    "coverage_type": "FULL_BENCHMARK",
+    "selections": {
+      "DS-01": {
+        "scenarios": [
+          "DS-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "DS-02": {
+        "scenarios": [
+          "DS-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "FD-01": {
+        "scenarios": [
+          "FD-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "FD-02": {
+        "scenarios": [
+          "FD-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "FD-03": {
+        "scenarios": [
+          "FD-03"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "UE-01": {
+        "scenarios": [
+          "UE-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "UE-02": {
+        "scenarios": [
+          "UE-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "HR-01": {
+        "scenarios": [
+          "HR-01"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "HR-02": {
+        "scenarios": [
+          "HR-02"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "HR-03": {
+        "scenarios": [
+          "HR-03"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "MC": {
+        "scenarios": [
+          "MC-01-A",
+          "MC-01-B",
+          "MC-01-C",
+          "MC-02-A",
+          "MC-02-B",
+          "MC-02-C",
+          "MC-03-A",
+          "MC-03-B",
+          "MC-03-C"
+        ],
+        "conditions": []
+      },
+      "MR": {
+        "scenarios": [
+          "MR-01",
+          "MR-02",
+          "MR-03"
+        ],
+        "conditions": []
+      },
+      "IR-01A": {
+        "scenarios": [
+          "IR-01A"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "IR-01B": {
+        "scenarios": [
+          "IR-01B"
+        ],
+        "conditions": [
+          "C0",
+          "C1",
+          "C2"
+        ]
+      },
+      "IR-SS-PROBE": {
+        "scenarios": [
+          "IR-SS-PROBE"
+        ],
+        "conditions": []
+      },
+      "PC-01": {
+        "scenarios": [
+          "PC-01-A",
+          "PC-01-B",
+          "PC-01-C"
+        ],
+        "conditions": []
+      },
+      "PC-02": {
+        "scenarios": [
+          "PC-02-A",
+          "PC-02-B",
+          "PC-02-C"
+        ],
+        "conditions": []
+      },
+      "PC-03": {
+        "scenarios": [
+          "PC-03-A",
+          "PC-03-B",
+          "PC-03-C"
+        ],
+        "conditions": []
+      },
+      "PC-04": {
+        "scenarios": [
+          "PC-04-A",
+          "PC-04-B",
+          "PC-04-C"
+        ],
+        "conditions": []
+      },
+      "PC-05": {
+        "scenarios": [
+          "PC-05-A",
+          "PC-05-B",
+          "PC-05-C"
+        ],
+        "conditions": []
+      },
+      "PC-06": {
+        "scenarios": [
+          "PC-06-A",
+          "PC-06-B",
+          "PC-06-C"
+        ],
+        "conditions": []
+      },
+      "PC-07": {
+        "scenarios": [
+          "PC-07-A",
+          "PC-07-B",
+          "PC-07-C"
+        ],
+        "conditions": []
+      }
+    },
+    "criterion_ids": [
+      "DS-01",
+      "DS-02",
+      "FD-01",
+      "FD-02",
+      "FD-03",
+      "UE-01",
+      "UE-02",
+      "HR-01",
+      "HR-02",
+      "HR-03",
+      "MC",
+      "MR",
+      "IR-01A",
+      "IR-01B",
+      "IR-SS-PROBE",
+      "PC-01",
+      "PC-02",
+      "PC-03",
+      "PC-04",
+      "PC-05",
+      "PC-06",
+      "PC-07"
+    ],
+    "run_numbers": [
+      1
+    ],
+    "phase": "FORMAL",
+    "collection_date": "2026-09-15",
+    "notes": "",
+    "created_at": "2026-09-15T08:20:46.711690+00:00",
+    "updated_at": "2026-09-15T08:20:46.711690+00:00"
+  }
+]

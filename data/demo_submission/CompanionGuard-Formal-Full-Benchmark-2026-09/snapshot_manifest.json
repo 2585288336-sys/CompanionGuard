@@ -1,0 +1,13 @@
+{
+  "snapshot_version": "1.0",
+  "source_project_id": "CompanionGuard-Formal-Full-Benchmark-2026-09",
+  "data_cutoff": "2026-09-15",
+  "raw_case_count": 210,
+  "judge_record_count": 175,
+  "final_result_count": 1,
+  "human_adjudication_count": 1,
+  "conversation_bodies_included": false,
+  "collection_traces_included": false,
+  "judge_evidence_or_rationales_included": false,
+  "screenshots_included": false
+}

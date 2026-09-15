@@ -15,8 +15,21 @@ def llm_session_id() -> str:
 
 
 def _secret(name: str) -> str:
+    nested_names = {
+        "DEEPSEEK_API_KEY": "deepseek_api_key",
+        "DEEPSEEK_MODEL": "deepseek_model",
+        "DEEPSEEK_REPORT_MODEL": "deepseek_report_model",
+        "DEEPSEEK_GROUNDING_MODEL": "deepseek_grounding_model",
+        "DEEPSEEK_BASE_URL": "deepseek_base_url",
+        "DEEPSEEK_REASONING_EFFORT": "deepseek_reasoning_effort",
+        "DEEPSEEK_TEMPERATURE": "deepseek_temperature",
+    }
     try:
         value = st.secrets.get(name, "")
+        if not value and name in nested_names:
+            llm_settings = st.secrets.get("llm", {})
+            if hasattr(llm_settings, "get"):
+                value = llm_settings.get(nested_names[name], "")
     except Exception:
         value = ""
     return str(value or "").strip()

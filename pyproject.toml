@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "companionguard"
-version = "0.8.6"
+version = "0.9.1"
 description = "Configurable regulatory evaluation MVP for anthropomorphic AI"
 requires-python = ">=3.10"
 dependencies = [

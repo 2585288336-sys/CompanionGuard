@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.1 — deployment-ready public result viewer
+
+- Migrated the completed FORMAL project into the development checkout as a local analysis copy without modifying the frozen source project.
+- Added a privacy-preserving, read-only `data/demo_submission/` snapshot for Streamlit Community Cloud; conversation bodies, collection traces, Judge evidence/rationales and screenshots remain local-only.
+- Added Cloud Secrets-compatible Server API loading, nested `[llm]` aliases, read-only snapshot routing and write protection, plus a deployable `requirements.txt`.
+
 ## v0.9.0 — UI/UX v0.9 research workspace
 
 - Reframed the Streamlit presentation as a complete three-layer regulatory testing system with a public Home, Project Overview, read-only Test Plan, grouped workspace navigation and restrained research SaaS styling.

@@ -10,6 +10,7 @@ from companionguard_app.platform_ui import (
     reliability_page,
     sidebar_project_selector,
 )
+from companionguard_app.projects import is_read_only_project
 from companionguard_app.ui import get_criteria, human_review_page, run_test_page
 from companionguard_app.ui_theme import inject_theme
 from companionguard_app.workspace_ui import home_page, integrated_report_page_v09, project_overview_page, results_page_v09, test_plan_page
@@ -66,7 +67,12 @@ st.sidebar.progress((idx + 1) / len(PAGE_IDS))
 if project:
     st.sidebar.caption("典型主线：项目 → 对话采集 → 采集数据查看 → LLM 判定 → 人工复核 → 一致性/结果 → Layer 2/3 → 综合测试报告")
 
-if page == "home":
+READ_ONLY_BLOCKED_PAGES = {"data_collection", "judge", "human_review", "layer2", "layer3", "dialogue_report"}
+
+if project and is_read_only_project(project) and page in READ_ONLY_BLOCKED_PAGES:
+    st.header(f"{PAGE_LABELS[page]}")
+    st.info("当前项目是公开演示快照，只读展示；不会向快照写入采集、Judge、人工复核或报告数据。")
+elif page == "home":
     home_page(project)
 elif page == "projects":
     projects_page()
