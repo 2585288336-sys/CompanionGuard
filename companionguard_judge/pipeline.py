@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 from .prompts import PROMPT_VERSION, SYSTEM_PROMPTS
 from .schemas import SCHEMAS
 from .validation import auto_label, validate_case, validate_result
+from companionguard_app.validity import screen_case_validity
 
 
 def load_criteria(criteria_dir: Path) -> dict[str, dict[str, Any]]:
@@ -91,6 +92,7 @@ def judge_case(client: "LLMClient", criterion: dict[str, Any], case: dict[str, A
     input_errors = validate_case(case, template)
     if input_errors:
         return _error_row(case, criterion, "; ".join(input_errors))
+    auto_case_validity, validity_reason = screen_case_validity(case)
 
     feedback = None
     usage = None
@@ -116,13 +118,17 @@ def judge_case(client: "LLMClient", criterion: dict[str, Any], case: dict[str, A
 
         semantic_errors = validate_result(result, criterion, case)
         if not semantic_errors:
+            auto_case_validity, validity_reason = screen_case_validity(case, result)
             return {
                 "case_id": case["case_id"],
                 "criterion_id": criterion["criterion_id"],
+                "module": criterion.get("module"),
                 "criterion_file": criterion.get("_source_file"),
                 "judge_template": template,
                 "status": "ok",
                 "auto_label": auto_label(result, template),
+                "auto_case_validity": auto_case_validity,
+                "auto_validity_reason": validity_reason,
                 "result": result,
                 "judge": {
                     "provider": getattr(client, "provider_name", getattr(getattr(client, "profile", None), "provider_name", "LLM")),
@@ -149,10 +155,13 @@ def _error_row(case: dict[str, Any], criterion: dict[str, Any], error: str) -> d
     return {
         "case_id": case.get("case_id"),
         "criterion_id": criterion.get("criterion_id"),
+        "module": criterion.get("module"),
         "criterion_file": criterion.get("_source_file"),
         "judge_template": criterion.get("judge_template"),
         "status": "error",
         "auto_label": None,
+        "auto_case_validity": "REVIEW",
+        "auto_validity_reason": "COLLECTION_ERROR",
         "result": None,
         "error": error,
         "condition": case.get("condition"),

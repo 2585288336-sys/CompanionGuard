@@ -12,13 +12,16 @@ def valid_case_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Rows produced before the validity field existed are treated as valid for
     direct API compatibility; project final-results rows always carry it.
     """
-    return [r for r in rows if r.get("case_validity", "VALID") == "VALID"]
+    return [
+        r for r in rows
+        if (r.get("final_case_validity") or r.get("case_validity", "VALID")) == "VALID"
+    ]
 
 
 def case_validity_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     counts = {"VALID": 0, "INVALID": 0, "REVIEW": 0}
     for row in rows:
-        value = row.get("case_validity", "VALID")
+        value = row.get("final_case_validity") or row.get("case_validity", "VALID")
         if value in counts:
             counts[value] += 1
     return counts
@@ -28,7 +31,7 @@ def finding_rate(rows: list[dict[str, Any]]) -> float | None:
     rows = valid_case_rows(rows)
     if not rows:
         return None
-    return sum(r.get("final_label") == "FINDING" for r in rows) / len(rows)
+    return sum((r.get("analysis_label") or r.get("final_label")) == "FINDING" for r in rows) / len(rows)
 
 
 def module_finding_rates(rows: list[dict[str, Any]]) -> dict[str, float]:
@@ -73,7 +76,7 @@ def label_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     rows = valid_case_rows(rows)
     counts = {"FINDING": 0, "NO_FINDING": 0, "REVIEW": 0}
     for row in rows:
-        label = row.get("final_label")
+        label = row.get("analysis_label") or row.get("final_label")
         if label in counts:
             counts[label] += 1
     return counts

@@ -1,10 +1,12 @@
 # CompanionGuard v0.8 Architecture Notes
 
-v0.8 is a smoke-test-driven UX refinement over v0.7. v0.8.1 adds evidence visibility, collected-case Judge access and an independent case-validity layer; it does not change the frozen dialogue criteria or Judge semantics.
+v0.8 is a smoke-test-driven UX refinement over v0.7. v0.8.1 adds evidence visibility and collected-case Judge access. v0.8.2 adds automatic case-validity screening and frozen FORMAL human-adjudication policies; it does not change the frozen dialogue criteria or Judge semantics.
 
-## v0.8.1 validity boundary
+## v0.8.2 validity and adjudication boundary
 
-Case validity is stored separately from the frozen dialogue risk labels. `VALID`, `INVALID`, and `REVIEW` describe whether a collected case is suitable for risk analysis; `FINDING`, `NO_FINDING`, and `REVIEW` continue to describe the criterion-bound risk judgment. Only `FORMAL` cases with `case_validity == VALID` enter dialogue metrics and Judge–Human reliability. INVALID and unresolved REVIEW cases remain in project final results and audit views.
+Case validity has two stages: `auto_case_validity` is a conservative screen, and `final_case_validity` is the human decision. A normal case starts as `VALID`; obvious unusable or explicitly unrelated output starts as `REVIEW`; the screen never assigns final `INVALID`. `VALID`, `INVALID`, and `REVIEW` describe case suitability, while `FINDING`, `NO_FINDING`, and `REVIEW` continue to describe the criterion-bound risk judgment. Only `FORMAL` cases with final validity `VALID` enter risk metrics; reliability additionally requires `adjudication_status == REVIEWED`.
+
+FORMAL Benchmark projects freeze either `FULL_ADJUDICATION` or `SAMPLED_ADJUDICATION` in the project manifest. Sampled projects persist their selected case IDs, method, strata, rate, and random seed in `adjudication_sampling.json`. Unreviewed sampled cases retain the LLM `auto_label` as `analysis_label`, leave `human_label` and `final_label` empty, and are never counted as human agreement observations.
 
 ## Core boundaries
 

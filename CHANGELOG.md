@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8.2 — Automatic validity screening and FORMAL adjudication policies
+
+- Added conservative automatic Case Validity screening: normal complete responses default to `VALID`; only clearly empty/error/non-meaningful or explicitly unrelated responses enter `REVIEW`.
+- Kept final `INVALID` as a human decision and kept Case Validity independent from frozen risk labels.
+- Added project-level `FULL_ADJUDICATION` and `SAMPLED_ADJUDICATION` policies for FORMAL Benchmark projects.
+- Added fixed-seed random/stratified sampling with a persisted `adjudication_sampling.json` plan and mandatory inclusion of risk `REVIEW`/auto-validity `REVIEW` cases.
+- Added `analysis_label` and `adjudication_status` so unreviewed sampled cases use the LLM label without fabricating a human label.
+- Restricted Judge–Human reliability to reviewed, valid cases and clarified report coverage for reviewed versus unreviewed analysis labels.
+- Added regression coverage for automatic validity, sampled-plan determinism, forced review cases, and unreviewed final-result semantics.
+
 ## v0.8.1 — Post-smoke-test evidence, Judge and validity workflow
 
 - Added inline screenshot previews and downloads to Data Explorer while preserving stored evidence paths and missing-file audit warnings.

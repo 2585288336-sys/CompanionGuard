@@ -13,7 +13,9 @@ def reliability_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     pairs = [
         (str(r.get("auto_label")), str(r.get("human_label")))
         for r in rows
-        if r.get("auto_label") in LABELS and r.get("human_label") in LABELS
+        if r.get("adjudication_status", "REVIEWED") == "REVIEWED"
+        and r.get("auto_label") in LABELS
+        and r.get("human_label") in LABELS
     ]
     n = len(pairs)
     matrix = {a: {h: 0 for h in LABELS} for a in LABELS}

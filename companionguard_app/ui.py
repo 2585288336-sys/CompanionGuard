@@ -14,6 +14,14 @@ from .cases import (
     flatten_single_turn_scenarios,
     parse_conversation_json,
 )
+from .adjudication import (
+    SAMPLED_ADJUDICATION,
+    adjudication_policy,
+    build_sampling_plan,
+    load_sampling_plan,
+    review_case_ids,
+    save_sampling_plan,
+)
 from .collector_storage import load_raw_cases
 from .config import CASE_VALIDITIES, MODULE_LABELS, OVERRIDE_REASONS, VALIDITY_REASONS
 from .metrics import case_validity_counts, label_counts, module_finding_rates, overall_macro_finding_rate, robustness_gap, valid_case_rows
@@ -294,13 +302,60 @@ def human_review_page() -> None:
         st.info("还没有可复核的Judge结果。先在 Run Test 运行至少一个case。")
         return
 
-    pending = [
-        r for r in judge_rows
-        if r.get("case_id") not in adjudicated
-        or not adjudicated.get(r.get("case_id"), {}).get("case_validity")
-    ]
-    if project.get("mode") == "BENCHMARK":
-        st.info("Benchmark Mode：按冻结协议执行 100% Human Adjudication；FORMAL case 不提供抽样替代。")
+    policy = adjudication_policy(project)
+    if project.get("mode") == "BENCHMARK" and policy == SAMPLED_ADJUDICATION:
+        st.info("Benchmark Mode：本项目使用预注册抽样人工复核。所有 FORMAL case 仍由 LLM Judge 全量判定；自动 risk label=REVIEW 或 auto validity=REVIEW 的 case 强制人工复核。")
+        sampling_plan = load_sampling_plan(paths.adjudication_sampling)
+        if sampling_plan is None:
+            preview_plan = build_sampling_plan(judge_rows=judge_rows, project=project)
+            st.warning("抽样方案尚未冻结。先检查候选数量，再冻结方案；冻结后固定 case ID、比例、分层维度和随机种子。")
+            st.write(
+                f"预计人工复核：{len(preview_plan['selected_case_ids'])} / "
+                f"{preview_plan['formal_judge_case_count']} 个 FORMAL case；"
+                f"其中强制复核 {len(preview_plan['forced_case_ids'])} 个。"
+            )
+            if preview_plan["selected_case_ids"]:
+                st.dataframe(
+                    [{"case_id": case_id, "forced": case_id in preview_plan["forced_case_ids"]} for case_id in preview_plan["selected_case_ids"]],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            if st.button(
+                "冻结抽样方案 / Freeze Sampling Plan",
+                type="primary",
+                disabled=preview_plan["formal_judge_case_count"] == 0,
+            ):
+                save_sampling_plan(preview_plan, paths.adjudication_sampling)
+                st.success("抽样方案已冻结。")
+                st.rerun()
+            if preview_plan["formal_judge_case_count"] == 0:
+                st.caption("当前还没有成功的 FORMAL Judge 结果；完成 FORMAL Judge 后再冻结抽样方案。")
+        else:
+            st.caption(
+                f"Sampling plan frozen · {sampling_plan.get('sampling_method')} · "
+                f"rate={sampling_plan.get('sample_rate')} · seed={sampling_plan.get('random_seed')} · "
+                f"selected={len(sampling_plan.get('selected_case_ids') or [])}"
+            )
+        review_ids = review_case_ids(judge_rows=judge_rows, project=project, sampling_plan=sampling_plan)
+        pending = [
+            r for r in judge_rows
+            if r.get("case_id") in review_ids
+            and (
+                r.get("case_id") not in adjudicated
+                or not adjudicated.get(r.get("case_id"), {}).get("final_case_validity")
+                and not adjudicated.get(r.get("case_id"), {}).get("case_validity")
+            )
+        ]
+        mode = st.radio("显示", ["待复核", "已纳入方案"], horizontal=True)
+        candidates = pending if mode == "待复核" else [r for r in judge_rows if r.get("case_id") in review_ids]
+    elif project.get("mode") == "BENCHMARK":
+        st.info("Benchmark Mode：本项目使用全量人工复核；每个 FORMAL case 都需要人工 risk label adjudication。Case validity 正常情况下自动为 VALID，只有异常筛查结果需要重点确认。")
+        pending = [
+            r for r in judge_rows
+            if r.get("case_id") not in adjudicated
+            or not adjudicated.get(r.get("case_id"), {}).get("final_case_validity")
+            and not adjudicated.get(r.get("case_id"), {}).get("case_validity")
+        ]
         mode = st.radio("显示", ["待复核", "全部"], horizontal=True)
         candidates = pending if mode == "待复核" else judge_rows
     else:
@@ -337,13 +392,16 @@ def human_review_page() -> None:
     st.subheader(f"{row.get('criterion_id')} · {criterion.get('criterion_name_zh', '')}")
     st.caption("先查看 LLM Judge 的结构化判定，再进行人工 Confirm / Override。")
     render_judge_result(row, compact=True)
-    render_case_validity(adjudicated.get(selected_id, {}).get("case_validity"))
-
+    auto_case_validity = row.get("auto_case_validity") or "VALID"
     prior = adjudicated.get(selected_id, {})
+    render_case_validity(auto_case_validity, title="Auto Case Validity / 自动有效性筛查")
+    if prior.get("final_case_validity") or prior.get("case_validity"):
+        render_case_validity(prior.get("final_case_validity") or prior.get("case_validity"), title="Final Case Validity / 最终有效性")
+
     auto = row.get("auto_label", "NO_FINDING")
     default_label = prior.get("human_label") or auto
     labels = ["FINDING", "NO_FINDING", "REVIEW"]
-    default_validity = prior.get("case_validity") or "REVIEW"
+    default_validity = prior.get("final_case_validity") or prior.get("case_validity") or auto_case_validity
 
     with st.form("adjudication_form"):
         human_label = st.selectbox(
@@ -375,11 +433,13 @@ def human_review_page() -> None:
             override_reason=override_reason,
             review_note=review_note,
             case_validity=case_validity,
+            auto_case_validity=auto_case_validity,
+            final_case_validity=case_validity,
             validity_reason=validity_reason,
             validity_note=validity_note,
             path=paths.adjudication,
         )
-        build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results)
+        build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=policy)
         st.success("已保存人工复核，并更新 data/final_results.csv。")
         st.rerun()
 
@@ -404,7 +464,7 @@ def results_page() -> None:
     st.header("对话测试结果 / Dialogue Results")
     st.caption(f"Active Project: {project.get('project_name')}")
     criteria = get_criteria()
-    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results)
+    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     if not rows:
         st.info("还没有final results。先完成至少一个Human Review。")
@@ -417,7 +477,7 @@ def results_page() -> None:
     formal = pd.DataFrame(valid_case_rows(formal_all.to_dict("records")))
     validity = case_validity_counts(formal_all.to_dict("records"))
     if formal.empty:
-        st.info("当前没有 phase == FORMAL 的已复核结果。SMOKE/CALIBRATION/旧版无phase记录不会进入正式指标。")
+        st.info("当前没有 phase == FORMAL 的有效分析结果。SMOKE/CALIBRATION/旧版无phase记录不会进入正式指标。")
         if not formal_all.empty:
             st.warning(f"FORMAL 记录存在，但没有 VALID case。INVALID: {validity['INVALID']}；REVIEW: {validity['REVIEW']}。")
         with st.expander("Excluded or non-formal adjudicated records"):
@@ -450,10 +510,12 @@ def results_page() -> None:
     multiturn = robustness_gap(filtered_rows, "C2")
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Adjudicated FORMAL Cases", len(filtered_rows))
+    reviewed_count = sum((row.get("adjudication_status") or "REVIEWED") == "REVIEWED" for row in filtered_rows)
+    c1.metric("FORMAL Cases in Analysis", len(filtered_rows))
     c2.metric("Findings", counts["FINDING"])
     c3.metric("总体宏平均风险发现率", _pct(macro))
     c4.metric("Review", counts["REVIEW"])
+    st.caption(f"Analysis labels: REVIEWED {reviewed_count}；UNREVIEWED {len(filtered_rows) - reviewed_count}。未人工复核 case 使用 analysis_label=auto_label，不填充 human_label。")
     st.caption("Overall Macro Finding Rate 仅在五个冻结模块都有FORMAL结果时显示。")
 
     r1, r2 = st.columns(2)
@@ -474,8 +536,8 @@ def results_page() -> None:
 
     st.subheader("风险发现矩阵 / Finding Matrix")
     matrix_cols = [
-        "product", "criterion_id", "scenario_id", "condition", "run_number", "phase", "case_validity",
-        "criterion_name", "final_label", "matched_target_behaviors", "evidence", "override_reason",
+        "product", "criterion_id", "scenario_id", "condition", "run_number", "phase", "final_case_validity",
+        "criterion_name", "analysis_label", "adjudication_status", "final_label", "matched_target_behaviors", "evidence", "override_reason",
     ]
     matrix_cols = [c for c in matrix_cols if c in filtered.columns]
     st.dataframe(filtered[matrix_cols], use_container_width=True, hide_index=True)

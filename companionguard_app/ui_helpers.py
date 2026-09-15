@@ -72,15 +72,15 @@ def render_evidence_files(
                 )
 
 
-def render_case_validity(case_validity: str | None) -> None:
+def render_case_validity(case_validity: str | None, *, title: str = "Case Validity / Case 有效性") -> None:
     value = case_validity or "REVIEW"
     zh, description = VALIDITY_LABEL_TEXT.get(value, (value, ""))
     if value == "VALID":
-        st.success(f"Case Validity / Case 有效性：`{value}` · {zh} — {description}")
+        st.success(f"{title}：`{value}` · {zh} — {description}")
     elif value == "INVALID":
-        st.warning(f"Case Validity / Case 有效性：`{value}` · {zh} — {description}")
+        st.warning(f"{title}：`{value}` · {zh} — {description}")
     else:
-        st.info(f"Case Validity / Case 有效性：`{value}` · {zh} — {description}")
+        st.info(f"{title}：`{value}` · {zh} — {description}")
 
 
 def render_condition_banner(condition: str | None) -> None:

@@ -1,6 +1,6 @@
-# CompanionGuard v0.8.1
+# CompanionGuard v0.8.2
 
-CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.1 is the post-smoke-test usability release. It preserves the frozen CompanionGuard v4 dialogue benchmark while adding screenshot previews, collected-case single Judge access and a separate case-validity layer.
+CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.2 is the post-smoke-test adjudication release. It preserves the frozen CompanionGuard v4 dialogue benchmark while adding conservative automatic case-validity screening and pre-registered FORMAL human-adjudication policies.
 
 ## Platform model
 
@@ -43,6 +43,13 @@ Runtime data is isolated under `data/projects/<project_id>/`. SMOKE/CALIBRATION/
 - **Separate Case Validity:** Human Review records `VALID`, `INVALID`, or `REVIEW` independently from the frozen `FINDING`, `NO_FINDING`, and `REVIEW` risk labels.
 - **Metric exclusion:** only `FORMAL` + `VALID` cases enter dialogue risk metrics and Judge–Human reliability. INVALID/REVIEW cases remain in final results and audit views.
 - **Smoke data cleanup:** the v0.8 smoke-test project data is disposable runtime data and is not part of the v0.8.1 code release.
+
+## v0.8.2 adjudication fixes
+
+- **Automatic case-validity screening:** normal, complete, meaningful model responses receive `auto_case_validity=VALID`. Empty responses, placeholders, obvious system errors, non-meaningful output, and explicit Judge notes that a response is unrelated receive `REVIEW` for human validity confirmation. The screen never assigns final `INVALID`.
+- **Validity is not risk review:** an ordinary case can show `Auto Case Validity = VALID` while still requiring the frozen risk-label Human Adjudication in `FULL_ADJUDICATION` mode. Risk `REVIEW` is not automatically treated as invalidity.
+- **FORMAL adjudication policies:** Benchmark projects choose `FULL_ADJUDICATION` or `SAMPLED_ADJUDICATION` at creation. Sampled projects freeze a fixed-seed `RANDOM_SAMPLE` or `STRATIFIED_SAMPLE` plan before reviewing; all FORMAL risk-label `REVIEW` and auto-validity `REVIEW` cases are forced into the human set.
+- **Clean analysis semantics:** reviewed cases carry `human_label`, `final_label`, and `adjudication_status=REVIEWED`; sampled but unreviewed cases carry no human label and use `analysis_label=auto_label`. Reliability uses reviewed cases only.
 
 ## Layer 1 · frozen dialogue structures
 
@@ -157,7 +164,7 @@ Usage logs contain role/provider/model/token metadata only, never secrets. Full 
 
 ## Human adjudication and reliability
 
-Benchmark FORMAL mode preserves the frozen requirement of **100% human adjudication**. Custom workflows may use sampling views without changing benchmark semantics.
+Benchmark FORMAL mode supports two project-frozen policies: `FULL_ADJUDICATION` and `SAMPLED_ADJUDICATION`. The former gives every FORMAL case a human risk-label decision; the latter uses a pre-registered sample plus mandatory review of risk/validity `REVIEW` cases. A project must not change its policy or sampling rule after formal evaluation begins.
 
 Reliability reports:
 
@@ -167,7 +174,12 @@ Reliability reports:
 - Finding Recall;
 - 3×3 confusion matrix.
 
-Case validity is a separate human review dimension. `VALID` means the collected case is suitable for risk analysis; `INVALID` covers off-topic, contaminated, incomplete or otherwise unusable cases; `REVIEW` means validity is unresolved. Validity never changes the frozen risk label and only `FORMAL` + `VALID` records enter official metrics. INVALID and REVIEW records remain available for audit.
+Case validity has an automatic screen and a human final decision. Normal cases start at `auto_case_validity=VALID`; clearly unusable or explicitly unrelated cases start at `REVIEW`; only a human decision can set `final_case_validity=INVALID`. Validity never changes the frozen risk label and only `FORMAL` + `final_case_validity=VALID` records enter official risk metrics. INVALID and unresolved REVIEW records remain available for audit.
+
+FORMAL Benchmark projects support two frozen adjudication protocols:
+
+- `FULL_ADJUDICATION`: every FORMAL case receives human risk-label adjudication; this remains the default for research-scale runs.
+- `SAMPLED_ADJUDICATION`: all FORMAL cases receive the LLM Judge label, while a pre-registered fixed-seed random or stratified sample receives human adjudication. All FORMAL risk-label REVIEW and auto-validity REVIEW cases are mandatory human cases. Unreviewed cases are never given a fabricated `human_label`.
 
 ## Dialogue reporting
 
@@ -233,6 +245,7 @@ data/projects/<project_id>/
 ├── collection_queues.jsonl
 ├── judge_results.jsonl
 ├── human_adjudication.csv
+├── adjudication_sampling.json
 ├── final_results.csv
 ├── layer2_product_safeguards.jsonl
 ├── layer3_public_evidence.jsonl
@@ -240,7 +253,7 @@ data/projects/<project_id>/
 └── reports/
 ```
 
-`human_adjudication.csv` and `final_results.csv` also carry `case_validity`, `validity_reason`, and `validity_note`. A missing validity value in a legacy adjudication is shown as `REVIEW` when materialized into final results.
+`human_adjudication.csv` and `final_results.csv` carry automatic/final validity, adjudication status, and analysis-label fields. `adjudication_sampling.json` records the frozen sampled case IDs, method, rate, strata, and random seed.
 
 Global server LLM usage metadata is stored under ignored runtime `data/` and contains no API keys.
 

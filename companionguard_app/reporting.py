@@ -31,6 +31,9 @@ def build_integrated_report(
     formal_all = [r for r in final_rows if r.get("phase") == "FORMAL"]
     formal = valid_case_rows(formal_all)
     validity = case_validity_counts(formal_all)
+    reviewed_formal = [r for r in formal if (r.get("adjudication_status") or "REVIEWED") == "REVIEWED"]
+    adjudication_status = Counter(str(r.get("adjudication_status") or "REVIEWED") for r in formal_all)
+    policy = project.get("human_adjudication_policy", "FULL_ADJUDICATION")
     rel = reliability_metrics(formal)
     l2 = load_jsonl(layer2_path)
     l3 = load_jsonl(layer3_path)
@@ -45,7 +48,10 @@ def build_integrated_report(
         "",
         "## Layer 1｜对话行为测试 / Dialogue Behavioral Testing",
         "",
-        f"- Adjudicated FORMAL cases: {len(formal)}",
+        f"- Adjudicated FORMAL cases: {len(reviewed_formal)}",
+        f"- Valid FORMAL cases included in analysis: {len(formal)}",
+        f"- Human Adjudication policy: {policy}",
+        f"- Analysis labels: REVIEWED {adjudication_status.get('REVIEWED', 0)}; UNREVIEWED {adjudication_status.get('UNREVIEWED', 0)}",
         f"- Case Validity: VALID {validity['VALID']}; INVALID {validity['INVALID']}; REVIEW {validity['REVIEW']}",
         f"- FORMAL cases excluded by Case Validity: {validity['INVALID'] + validity['REVIEW']} (INVALID {validity['INVALID']}, REVIEW {validity['REVIEW']})",
         f"- Overall Macro Finding Rate: {_pct(overall_macro_finding_rate(formal))}",
@@ -113,6 +119,8 @@ def build_dialogue_report_context(*, project: dict[str, Any], final_rows: list[d
     formal_all = [r for r in final_rows if r.get("phase") == "FORMAL"]
     formal = valid_case_rows(formal_all)
     rel = reliability_metrics(formal)
+    reviewed_formal = [r for r in formal if (r.get("adjudication_status") or "REVIEWED") == "REVIEWED"]
+    adjudication_status = Counter(str(r.get("adjudication_status") or "REVIEWED") for r in formal_all)
     product_names = [p.get("label") or p.get("name") or p.get("id", "") for p in project.get("products", [])]
     products: dict[str, Any] = {}
     for product in product_names:
@@ -130,7 +138,13 @@ def build_dialogue_report_context(*, project: dict[str, Any], final_rows: list[d
             "mode": project.get("mode"),
         },
         "formal_case_count": len(formal),
+        "adjudicated_formal_case_count": len(reviewed_formal),
         "formal_case_validity": case_validity_counts(formal_all),
+        "human_adjudication_policy": project.get("human_adjudication_policy", "FULL_ADJUDICATION"),
+        "adjudication_status_counts": {
+            "REVIEWED": adjudication_status.get("REVIEWED", 0),
+            "UNREVIEWED": adjudication_status.get("UNREVIEWED", 0),
+        },
         "overall_macro_finding_rate": overall_macro_finding_rate(formal),
         "pressure_gap_c1_minus_c0": robustness_gap(formal, "C1"),
         "multi_turn_gap_c2_minus_c0": robustness_gap(formal, "C2"),
@@ -170,6 +184,9 @@ def build_dialogue_report(project: dict[str, Any], final_rows: list[dict[str, An
         f"# CompanionGuard Dialogue Report — {project.get('project_name', project.get('project_id'))}",
         "",
         f"- FORMAL cases: {context['formal_case_count']}",
+        f"- Adjudicated FORMAL cases: {context['adjudicated_formal_case_count']}",
+        f"- Human Adjudication policy: {context['human_adjudication_policy']}",
+        f"- Analysis labels: REVIEWED {context['adjudication_status_counts']['REVIEWED']}; UNREVIEWED {context['adjudication_status_counts']['UNREVIEWED']}",
         f"- Case Validity: VALID {context['formal_case_validity']['VALID']}; INVALID {context['formal_case_validity']['INVALID']}; REVIEW {context['formal_case_validity']['REVIEW']}",
         f"- FORMAL cases excluded by Case Validity: {sum(context['formal_case_validity'][key] for key in ('INVALID', 'REVIEW'))} (INVALID {context['formal_case_validity']['INVALID']}, REVIEW {context['formal_case_validity']['REVIEW']})",
         f"- Overall Macro Finding Rate: {_pct(context['overall_macro_finding_rate'])}",

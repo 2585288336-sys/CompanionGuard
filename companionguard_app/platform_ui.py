@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE
 from .audits import load_json, load_jsonl, make_audit_row, save_audit_evidence, upsert_jsonl
 from .collector import load_collector_config
 from .projects import create_project, delete_project, get_project, list_projects, project_paths, safe_slug
@@ -82,6 +83,7 @@ def projects_page() -> None:
                 "project_id": p.get("project_id"),
                 "name": p.get("project_name"),
                 "mode": p.get("mode"),
+                "human_adjudication_policy": p.get("human_adjudication_policy", FULL_ADJUDICATION),
                 "products": ", ".join(x.get("label") or x.get("name") or x.get("id", "") for x in p.get("products", [])),
                 "created_at": p.get("created_at"),
             }
@@ -109,6 +111,39 @@ def projects_page() -> None:
     pid = st.text_input("项目 ID / Project ID", value=default_id, help="人类可读、用于数据目录；创建后不建议修改。")
     mode = st.selectbox("模式 / Mode", ["BENCHMARK", "CUSTOM"], help="BENCHMARK使用CompanionGuard冻结规则；CUSTOM为未来扩展模式。")
 
+    adjudication_policy = FULL_ADJUDICATION
+    sampling_method = STRATIFIED_SAMPLE
+    sample_rate = 0.25
+    random_seed = 20260915
+    strata = ["product", "criterion_id", "condition"]
+    if mode == "BENCHMARK":
+        adjudication_policy = st.radio(
+            "FORMAL 人工复核策略 / FORMAL Human Adjudication Policy",
+            [FULL_ADJUDICATION, SAMPLED_ADJUDICATION],
+            format_func=lambda value: {
+                FULL_ADJUDICATION: "全量人工复核 / Full adjudication",
+                SAMPLED_ADJUDICATION: "预注册抽样人工复核 / Pre-registered sampled adjudication",
+            }[value],
+            help="项目创建后策略写入 manifest；正式评测开始后不应临时改变。",
+        )
+        if adjudication_policy == SAMPLED_ADJUDICATION:
+            sampling_method = st.selectbox(
+                "抽样方法 / Sampling method",
+                [STRATIFIED_SAMPLE, RANDOM_SAMPLE],
+                format_func=lambda value: {
+                    STRATIFIED_SAMPLE: "分层抽样 / Stratified sample",
+                    RANDOM_SAMPLE: "随机抽样 / Random sample",
+                }[value],
+            )
+            sample_rate = float(st.number_input("最低抽样比例 / Minimum sampling rate", min_value=0.01, max_value=1.0, value=0.25, step=0.05))
+            random_seed = int(st.number_input("随机种子 / Random seed", min_value=0, max_value=2147483647, value=20260915, step=1))
+            strata = st.multiselect(
+                "分层维度 / Stratification fields",
+                ["product", "module", "criterion_id", "condition"],
+                default=["product", "criterion_id", "condition"],
+                help="分层抽样至少建议保留 Product、Criterion、Condition；配置写入项目 manifest。",
+            ) or ["product", "criterion_id", "condition"]
+
     configured = _configured_products()
     selected_ids = st.multiselect(
         "预配置产品 / Configured products",
@@ -124,7 +159,14 @@ def projects_page() -> None:
             if value:
                 products.append({"id": safe_slug(value), "label": value, "slug": safe_slug(value), "role": "User-defined product"})
         try:
-            project = create_project(name=name, project_id=pid or default_id, products=products, mode=mode, notes=notes)
+            project = create_project(
+                name=name, project_id=pid or default_id, products=products, mode=mode, notes=notes,
+                human_adjudication_policy=adjudication_policy,
+                human_adjudication_sampling_method=sampling_method,
+                human_adjudication_sample_rate=sample_rate,
+                human_adjudication_random_seed=random_seed,
+                human_adjudication_strata=strata,
+            )
             st.session_state["active_project_id"] = project["project_id"]
             st.session_state["project_just_created"] = True
             st.success(f"已创建 / Created: {project['project_name']}")
@@ -152,6 +194,10 @@ def data_explorer_page() -> None:
 
     adjudications = {r.get("case_id"): r for r in load_adjudications(paths.adjudication)}
     judge_results = load_judge_results(paths.judge_results)
+    latest_judges = {}
+    for result in judge_results:
+        if result.get("status") == "ok" and result.get("case_id"):
+            latest_judges[result["case_id"]] = result
     table = []
     for case in cases:
         case_id = case.get("case_id")
@@ -167,7 +213,8 @@ def data_explorer_page() -> None:
             "run": (case.get("metadata") or {}).get("run_number") or case.get("run_number"),
             "screenshots": evidence_count,
             "judge": judge_status,
-            "case_validity": adjudications.get(case_id, {}).get("case_validity", "REVIEW"),
+            "auto_case_validity": latest_judges.get(case_id, {}).get("auto_case_validity", "—"),
+            "final_case_validity": adjudications.get(case_id, {}).get("final_case_validity") or adjudications.get(case_id, {}).get("case_validity", "—"),
         })
     st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
     case_id = st.selectbox("选择 Case / Select case", [c.get("case_id") for c in cases])
@@ -200,11 +247,12 @@ def data_explorer_page() -> None:
         judge_rows = [r for r in load_judge_results(paths.judge_results) if r.get("case_id") == case_id and r.get("status") == "ok"]
         if judge_rows:
             render_judge_result(judge_rows[-1], compact=True)
+            render_case_validity(judge_rows[-1].get("auto_case_validity"), title="Auto Case Validity / 自动有效性筛查")
         else:
             st.info("该 case 尚未完成 LLM Judge。")
         if case_id in adjudications:
             st.markdown("#### 人工复核 / Human Adjudication")
-            render_case_validity(adjudications[case_id].get("case_validity"))
+            render_case_validity(adjudications[case_id].get("final_case_validity") or adjudications[case_id].get("case_validity"), title="Final Case Validity / 最终有效性")
             st.json(adjudications[case_id])
 
 
@@ -325,14 +373,18 @@ def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
         st.warning("请先选择项目。")
         return
     st.header("Judge—人工一致性 / Judge–Human Reliability")
-    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results)
+    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     if not rows:
         st.info("还没有同时完成 LLM Judge 与人工复核的结果。")
         return
-    phases = sorted({r.get("phase", "") for r in rows if r.get("phase")})
-    phase = st.multiselect("Phase", phases, default=phases)
-    filtered_all = [r for r in rows if not phase or r.get("phase") in phase]
+    if project.get("mode") == "BENCHMARK":
+        filtered_all = [r for r in rows if r.get("phase") == "FORMAL"]
+        st.caption("Benchmark Reliability 仅统计 phase == FORMAL；SMOKE/CALIBRATION 结果保留在项目数据中，但不进入正式一致性指标。")
+    else:
+        phases = sorted({r.get("phase", "") for r in rows if r.get("phase")})
+        phase = st.multiselect("Phase", phases, default=phases)
+        filtered_all = [r for r in rows if not phase or r.get("phase") in phase]
     filtered = valid_case_rows(filtered_all)
     validity = case_validity_counts(filtered_all)
     if validity["INVALID"] or validity["REVIEW"]:
@@ -348,7 +400,7 @@ def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
     matrix.columns.name = "Human"
     st.subheader("Confusion Matrix")
     st.dataframe(matrix, use_container_width=True)
-    st.caption("Benchmark FORMAL 模式按冻结协议采用100%人工复核。抽样复核仅作为Custom Eval未来能力，不改变Benchmark协议。")
+    st.caption(f"当前项目策略：{adjudication_policy(project)}。一致性指标只基于 Case Validity == VALID 且 adjudication_status == REVIEWED 的 case；抽样模式的未复核 case 不会被伪造为人工标签。")
 
 
 def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
@@ -358,7 +410,7 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
         st.warning("请先选择项目。")
         return
     st.header("Layer 1｜对话测试报告 / Dialogue Report")
-    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results)
+    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     deterministic = build_dialogue_report(project, rows)
     st.markdown(deterministic)
@@ -388,7 +440,7 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
         st.warning("请先选择项目。")
         return
     st.header("综合测试报告 / Integrated Report")
-    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results)
+    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     report = build_integrated_report(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
     st.markdown(report)

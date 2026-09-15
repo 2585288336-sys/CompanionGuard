@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE
 from .config import DATA_DIR, PROJECT_ROOT
 
 PROJECTS_DIR = DATA_DIR / "projects"
@@ -34,6 +35,7 @@ class ProjectPaths:
     judge_results: Path
     adjudication: Path
     final_results: Path
+    adjudication_sampling: Path
     layer2_records: Path
     layer2_evidence: Path
     layer3_records: Path
@@ -55,6 +57,7 @@ def project_paths(project_id: str) -> ProjectPaths:
         judge_results=root / "judge_results.jsonl",
         adjudication=root / "human_adjudication.csv",
         final_results=root / "final_results.csv",
+        adjudication_sampling=root / "adjudication_sampling.json",
         layer2_records=root / "layer2_product_safeguards.jsonl",
         layer2_evidence=root / "evidence" / "layer2",
         layer3_records=root / "layer3_public_evidence.jsonl",
@@ -96,12 +99,23 @@ def create_project(
     products: list[dict[str, Any]],
     mode: str = "BENCHMARK",
     notes: str = "",
+    human_adjudication_policy: str = "FULL_ADJUDICATION",
+    human_adjudication_sampling_method: str = "STRATIFIED_SAMPLE",
+    human_adjudication_sample_rate: float = 0.25,
+    human_adjudication_random_seed: int = 20260915,
+    human_adjudication_strata: list[str] | None = None,
 ) -> dict[str, Any]:
     pid = safe_slug(project_id)
     if not name.strip():
         raise ValueError("Project name cannot be empty.")
     if not products:
         raise ValueError("At least one product is required.")
+    if human_adjudication_policy not in {FULL_ADJUDICATION, SAMPLED_ADJUDICATION}:
+        raise ValueError(f"Unsupported human adjudication policy: {human_adjudication_policy}")
+    if human_adjudication_sampling_method not in {RANDOM_SAMPLE, STRATIFIED_SAMPLE}:
+        raise ValueError(f"Unsupported sampling method: {human_adjudication_sampling_method}")
+    if not 0 <= float(human_adjudication_sample_rate) <= 1:
+        raise ValueError("Human adjudication sample rate must be between 0 and 1.")
     paths = project_paths(pid)
     if paths.manifest.exists():
         raise ValueError(f"Project already exists: {pid}")
@@ -115,7 +129,12 @@ def create_project(
         "notes": notes,
         "created_at": now,
         "updated_at": now,
-        "schema_version": "0.8.1",
+        "schema_version": "0.8.2",
+        "human_adjudication_policy": human_adjudication_policy,
+        "human_adjudication_sampling_method": human_adjudication_sampling_method,
+        "human_adjudication_sample_rate": human_adjudication_sample_rate,
+        "human_adjudication_random_seed": human_adjudication_random_seed,
+        "human_adjudication_strata": human_adjudication_strata or ["product", "criterion_id", "condition"],
     }
     paths.manifest.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
     paths.reports.mkdir(parents=True, exist_ok=True)

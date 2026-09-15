@@ -53,3 +53,12 @@ C2 的 L5 是 canonical L5，不是 Pressure L5。C2 的核心变化是 L1–L4 
 ## 5. SMOKE / CALIBRATION / FORMAL
 
 SMOKE 与 CALIBRATION 可以与 FORMAL 保存在同一项目目录中，但必须通过 `phase` 区分。正式结果与正式综合报告只使用 `phase == FORMAL`。为了最清晰的数据治理，推荐把 UI smoke test 单独建立成一个 Test Project。
+
+## 6. FORMAL human-adjudication policy and case validity
+
+At project creation, a Benchmark project freezes one of two FORMAL policies:
+
+- `FULL_ADJUDICATION`: every FORMAL case receives human risk-label adjudication.
+- `SAMPLED_ADJUDICATION`: all FORMAL cases receive the LLM Judge label; a fixed-seed random or stratified sample is frozen in `adjudication_sampling.json` for human adjudication. Cases with risk `auto_label == REVIEW` or `auto_case_validity == REVIEW` are always included.
+
+The sampling plan must be frozen before relying on sampled reliability results. Unreviewed cases keep `human_label` and `final_label` empty and use `analysis_label == auto_label`; they are not used in Judge–Human reliability. Case validity is separate from the risk label: normal complete responses start at `auto_case_validity == VALID`, obvious empty/error/non-meaningful or explicitly unrelated responses start at `REVIEW`, and only human review may set `final_case_validity == INVALID`.

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .adjudication import FULL_ADJUDICATION, SAMPLED_ADJUDICATION
 from .config import ADJUDICATION_PATH, CASE_VALIDITIES, DATA_DIR, FINAL_RESULTS_PATH, JUDGE_RESULTS_PATH
 
 ADJUDICATION_FIELDS = [
@@ -17,6 +18,8 @@ ADJUDICATION_FIELDS = [
     "review_note",
     "reviewed_at",
     "case_validity",
+    "auto_case_validity",
+    "final_case_validity",
     "validity_reason",
     "validity_note",
     "validity_reviewed_at",
@@ -70,16 +73,21 @@ def save_adjudication(
     override_reason: str = "",
     review_note: str = "",
     case_validity: str = "VALID",
+    auto_case_validity: str = "VALID",
+    final_case_validity: str | None = None,
     validity_reason: str = "",
     validity_note: str = "",
     path: Path = ADJUDICATION_PATH,
 ) -> None:
     ensure_data_dir()
-    if case_validity not in CASE_VALIDITIES:
-        raise ValueError(f"Unsupported case validity: {case_validity}")
+    final_case_validity = final_case_validity or case_validity
+    if auto_case_validity not in CASE_VALIDITIES:
+        raise ValueError(f"Unsupported auto case validity: {auto_case_validity}")
+    if final_case_validity not in CASE_VALIDITIES:
+        raise ValueError(f"Unsupported final case validity: {final_case_validity}")
     if human_label == auto_label:
         override_reason = ""
-    if case_validity == "VALID":
+    if final_case_validity == "VALID":
         validity_reason = ""
 
     now = datetime.now(timezone.utc).isoformat()
@@ -91,7 +99,9 @@ def save_adjudication(
         "override_reason": override_reason,
         "review_note": review_note,
         "reviewed_at": now,
-        "case_validity": case_validity,
+        "case_validity": final_case_validity,
+        "auto_case_validity": auto_case_validity,
+        "final_case_validity": final_case_validity,
         "validity_reason": validity_reason,
         "validity_note": validity_note,
         "validity_reviewed_at": now,
@@ -132,6 +142,7 @@ def build_final_results(
     judge_path: Path = JUDGE_RESULTS_PATH,
     adjudication_path: Path = ADJUDICATION_PATH,
     output_path: Path = FINAL_RESULTS_PATH,
+    policy: str = FULL_ADJUDICATION,
 ) -> list[dict[str, Any]]:
     ensure_data_dir()
     adjudications = {r["case_id"]: r for r in load_adjudications(adjudication_path)}
@@ -141,11 +152,28 @@ def build_final_results(
         if row.get("status") != "ok":
             continue
         adj = adjudications.get(row.get("case_id"))
-        if not adj:
+        if not adj and policy != SAMPLED_ADJUDICATION:
             continue
         criterion = criteria.get(row.get("criterion_id"), {})
         result = row.get("result") or {}
         metadata = row.get("metadata") or {}
+        auto_case_validity = row.get("auto_case_validity") or metadata.get("auto_case_validity") or "VALID"
+        if adj:
+            adjudication_status = "REVIEWED"
+            human_label = adj.get("human_label", "")
+            final_label = adj.get("final_label", "")
+            final_case_validity = adj.get("final_case_validity") or adj.get("case_validity") or auto_case_validity
+            validity_reason = adj.get("validity_reason", "")
+            validity_note = adj.get("validity_note", "")
+            validity_reviewed_at = adj.get("validity_reviewed_at", "")
+        else:
+            adjudication_status = "UNREVIEWED"
+            human_label = ""
+            final_label = ""
+            final_case_validity = auto_case_validity
+            validity_reason = row.get("auto_validity_reason", "")
+            validity_note = ""
+            validity_reviewed_at = ""
         final_rows.append({
             "case_id": row.get("case_id", ""),
             "criterion_id": row.get("criterion_id", ""),
@@ -159,27 +187,32 @@ def build_final_results(
             "collection_date": metadata.get("collection_date", ""),
             "coverage_type": metadata.get("coverage_type", ""),
             "auto_label": row.get("auto_label") or "",
-            "human_label": adj.get("human_label", ""),
-            "final_label": adj.get("final_label", ""),
-            "override_reason": adj.get("override_reason", ""),
-            "review_note": adj.get("review_note", ""),
-            "case_validity": adj.get("case_validity") or "REVIEW",
-            "validity_reason": adj.get("validity_reason", ""),
-            "validity_note": adj.get("validity_note", ""),
-            "validity_reviewed_at": adj.get("validity_reviewed_at", ""),
+            "human_label": human_label,
+            "final_label": final_label,
+            "analysis_label": final_label or row.get("auto_label") or "",
+            "adjudication_status": adjudication_status,
+            "adjudication_policy": policy,
+            "override_reason": adj.get("override_reason", "") if adj else "",
+            "review_note": adj.get("review_note", "") if adj else "",
+            "case_validity": final_case_validity,
+            "auto_case_validity": auto_case_validity,
+            "final_case_validity": final_case_validity,
+            "validity_reason": validity_reason,
+            "validity_note": validity_note,
+            "validity_reviewed_at": validity_reviewed_at,
             "matched_target_behaviors": _extract_tcodes(result),
             "evidence": _extract_evidence(result),
             "rationale": result.get("rationale", ""),
             "judge_provider": (row.get("judge") or {}).get("provider", ""),
             "judge_model": (row.get("judge") or {}).get("model", ""),
             "judge_template": row.get("judge_template", ""),
-            "reviewed_at": adj.get("reviewed_at", ""),
+            "reviewed_at": adj.get("reviewed_at", "") if adj else "",
         })
 
     fieldnames = [
         "case_id", "criterion_id", "criterion_name", "module", "product", "scenario_id",
-        "condition", "phase", "run_number", "collection_date", "coverage_type", "auto_label", "human_label", "final_label", "override_reason", "review_note",
-        "case_validity", "validity_reason", "validity_note", "validity_reviewed_at",
+        "condition", "phase", "run_number", "collection_date", "coverage_type", "auto_label", "human_label", "final_label", "analysis_label", "adjudication_status", "adjudication_policy", "override_reason", "review_note",
+        "case_validity", "auto_case_validity", "final_case_validity", "validity_reason", "validity_note", "validity_reviewed_at",
         "matched_target_behaviors", "evidence", "rationale", "judge_provider", "judge_model",
         "judge_template", "reviewed_at",
     ]
