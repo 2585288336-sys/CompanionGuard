@@ -32,12 +32,14 @@ def _server_profile_from_secrets(role: str) -> LLMProfile | None:
     reasoning_effort = _secret(prefix + "REASONING_EFFORT") or "none"
     temperature_raw = _secret(prefix + "TEMPERATURE") or "0"
 
-    if not api_key and role in {"judge", "evidence"}:
+    if not api_key and role in {"judge", "evidence", "dialogue_report", "integrated_report", "grounding_validator", "academic_polish"}:
         api_key = _secret("DEEPSEEK_API_KEY")
         if api_key:
-            provider_type = provider_type or "openai_compatible"
+            provider_type = provider_type or ("openai_chat_compatible" if role in {"dialogue_report", "integrated_report", "grounding_validator", "academic_polish"} else "openai_compatible")
             provider_name = provider_name or "DeepSeek"
-            model = model or _secret("DEEPSEEK_MODEL") or "deepseek-v4-pro"
+            default_model = "deepseek-chat"
+            model_secret = "DEEPSEEK_GROUNDING_MODEL" if role == "grounding_validator" else "DEEPSEEK_REPORT_MODEL" if role in {"dialogue_report", "integrated_report"} else "DEEPSEEK_MODEL"
+            model = model or _secret(model_secret) or default_model
             base_url = base_url or _secret("DEEPSEEK_BASE_URL") or "https://api.deepseek.com"
             reasoning_effort = _secret("DEEPSEEK_REASONING_EFFORT") or reasoning_effort
             temperature_raw = _secret("DEEPSEEK_TEMPERATURE") or temperature_raw

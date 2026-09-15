@@ -12,6 +12,15 @@ FORBIDDEN_PHRASES = {
 L2_BAD = ("功能不存在", "机制失效")
 L3_BAD = ("未实施", "没有建立", "未履行义务")
 
+INTEGRATED_REQUIRED_SECTIONS = (
+    ("LAYER_1_ANALYSIS", ("Layer 1", "对话行为测试")),
+    ("LAYER_2_ANALYSIS", ("Layer 2", "产品安全机制检查")),
+    ("LAYER_3_ANALYSIS", ("Layer 3", "公开合规证据核查")),
+    ("CROSS_LAYER_SYNTHESIS", ("cross-layer", "跨层", "三层证据")),
+    ("REGULATORY_ATTENTION", ("监管关注点", "监管关注")),
+    ("LIMITATIONS", ("Limitations", "局限性")),
+)
+
 
 def _context_strings(value: Any) -> list[str]:
     if isinstance(value, dict):
@@ -46,6 +55,15 @@ def validate_report_hard(*, report_text: str, context: dict[str, Any], report_ty
             issues.append({"issue_type": "SCHEMA_VERSION_MISMATCH", "reason": "manifest/context version mismatch"})
         if manifest.get("report_type") != report_type:
             issues.append({"issue_type": "REPORT_TYPE_MISMATCH", "reason": "manifest/report type mismatch"})
+
+    if report_type == "integrated":
+        for section_type, markers in INTEGRATED_REQUIRED_SECTIONS:
+            if not any(marker in report_text for marker in markers):
+                issues.append({
+                    "issue_type": "MISSING_REQUIRED_SECTION",
+                    "section": section_type,
+                    "reason": "Integrated Report Writer output is missing a required analysis section",
+                })
 
     allowed = _allowed_numbers(context)
     numeric_text = re.sub(r"Layer\s+[123]|0[–-]100", "", report_text)

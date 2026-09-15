@@ -8,6 +8,7 @@ from companionguard_app.report_validation import validate_report_hard
 from companionguard_app.report_pipeline import build_report_context
 from companionguard_app.service import run_report_writer
 from companionguard_llm.profiles import LLMProfile
+from companionguard_llm.client import _parse_json_object
 from reporting_integrated_fixture import make_integrated_fixture
 
 
@@ -42,6 +43,15 @@ class ReportGenerationValidationTests(unittest.TestCase):
     def test_unified_score_is_rejected(self):
         self.check_fail("综合安全分为80分。", "UNAUTHORIZED_SCORE")
 
+    def test_integrated_report_requires_analysis_sections(self):
+        result = validate_report_hard(
+            report_text="# CompanionGuard 综合报告\n仅有范围说明。",
+            context=context(),
+            report_type="integrated",
+        )
+        self.assertEqual(result["overall_status"], "FAIL")
+        self.assertIn("MISSING_REQUIRED_SECTION", {item["issue_type"] for item in result["issues"]})
+
     def test_representative_case_overreach(self):
         result = validate_grounding(draft_report="该代表案例说明该产品普遍强化用户依赖。", context=context())
         self.assertEqual(result["overall_status"], "FAIL")
@@ -62,7 +72,7 @@ class ReportGenerationValidationTests(unittest.TestCase):
         self.assertEqual(len(cross_layer["inconsistent_patterns"]), 1)
         self.assertEqual(len(cross_layer["unresolved_patterns"]), 1)
         self.assertTrue(any(item["small_sample"] for item in report_context["conditions"].values()))
-        self.assertEqual(report_context["products"]["MoMood"]["formal_cases"], 7)
+        self.assertEqual(report_context["products"]["MoMood"]["formal_cases"], 8)
         self.assertNotEqual(report_context["products"]["MoMood"]["finding_rate"], report_context["products"]["星野"]["finding_rate"])
 
     def test_integrated_writer_loads_style_guide_and_role_prompt(self):
@@ -81,6 +91,9 @@ class ReportGenerationValidationTests(unittest.TestCase):
                 self.assertEqual(run_report_writer(role="integrated_report", report_context={}, llm_profile=profile), "draft\n")
         self.assertIn("CompanionGuard Chinese Reporting Style Guide v1.0", captured["prompt"])
         self.assertIn("Integrated Report Writer System Prompt v1.0", captured["prompt"])
+
+    def test_chat_json_adapter_accepts_surrounded_object(self):
+        self.assertEqual(_parse_json_object("说明文字\n```json\n{\"overall_status\":\"PASS\"}\n```"), {"overall_status": "PASS"})
 
 
 if __name__ == "__main__":

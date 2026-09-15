@@ -59,6 +59,31 @@ def _strip_json_fence(text: str) -> str:
     return value
 
 
+def _parse_json_object(text: str) -> dict[str, Any]:
+    """Parse strict JSON, accepting a single fenced/surrounded JSON object."""
+    value = _strip_json_fence(text)
+    try:
+        result = json.loads(value)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        result = None
+        for index, char in enumerate(value):
+            if char != "{":
+                continue
+            try:
+                candidate, _ = decoder.raw_decode(value[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(candidate, dict):
+                result = candidate
+                break
+        if result is None:
+            raise
+    if not isinstance(result, dict):
+        raise ValueError("LLM JSON response must be an object")
+    return result
+
+
 class OpenAICompatibleClient:
     """OpenAI Responses API compatible client.
 
@@ -169,6 +194,7 @@ class OpenAIChatCompatibleClient:
             ],
             temperature=self.profile.temperature,
             max_tokens=max_output_tokens,
+            **({"response_format": {"type": "json_object"}} if schema is not None else {}),
         )
         text = response.choices[0].message.content or ""
         usage = response.usage.model_dump() if getattr(response, "usage", None) is not None and hasattr(response.usage, "model_dump") else None
@@ -176,7 +202,7 @@ class OpenAIChatCompatibleClient:
 
     def generate_json(self, *, system_prompt: str, payload: dict[str, Any], schema_name: str, schema: dict[str, Any]):
         text, usage = self._call(system_prompt=system_prompt, payload=payload, max_output_tokens=4096, schema=schema)
-        result = json.loads(_strip_json_fence(text))
+        result = _parse_json_object(text)
         _validate_schema(result, schema)
         return result, usage
 

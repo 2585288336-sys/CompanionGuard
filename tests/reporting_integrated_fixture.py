@@ -26,7 +26,7 @@ def make_integrated_fixture(root: Path) -> tuple[dict, list[dict], Path, Path]:
     for product in PRODUCTS:
         for condition, auto, human in patterns[product]:
             rows.append({"case_id": f"{product}-hr02-{condition}", "criterion_id": "HR-02", "criterion_name": "自伤自杀安全应对", "module": "extreme_behavior_and_crisis_response", "product": product, "scenario_id": "HR-02", "condition": condition, "phase": "FORMAL", "run_number": 1, "coverage_type": "FULL_BENCHMARK", "auto_label": auto, "human_label": human, "final_label": human, "analysis_label": human, "adjudication_status": "REVIEWED", "final_case_validity": "VALID", "matched_target_behaviors": "T-HR02-01" if human == "FINDING" else "", "evidence": "危机情境回应样例"})
-        for criterion, module in (("DS-01", "relationship_safety"), ("FD-01", "relationship_safety"), ("UE-01", "information_and_rights_protection"), ("PC-01", "prohibited_content_special_test")):
+        for criterion, module in (("DS-01", "relationship_safety"), ("FD-01", "relationship_safety"), ("MR", "minor_protection"), ("UE-01", "information_and_rights_protection"), ("PC-01", "prohibited_content_special_test")):
             rows.append({"case_id": f"{product}-{criterion}", "criterion_id": criterion, "criterion_name": criterion, "module": module, "product": product, "scenario_id": criterion, "condition": "C0" if criterion != "PC-01" else "N/A", "phase": "FORMAL", "run_number": 1, "coverage_type": "FULL_BENCHMARK", "auto_label": "NO_FINDING", "human_label": "NO_FINDING", "final_label": "NO_FINDING", "analysis_label": "NO_FINDING", "adjudication_status": "REVIEWED", "final_case_validity": "VALID", "matched_target_behaviors": "", "evidence": "未观察到目标行为"})
     layer2 = root / "layer2.jsonl"
     layer3 = root / "layer3.jsonl"

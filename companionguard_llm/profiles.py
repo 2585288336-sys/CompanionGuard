@@ -60,12 +60,14 @@ def load_server_profile(role: str) -> LLMProfile | None:
     reasoning = _env(role, "REASONING_EFFORT") or "none"
     temperature_raw = _env(role, "TEMPERATURE") or "0"
 
-    if not api_key and role in {"judge", "evidence"}:
+    if not api_key and role in {"judge", "evidence", "dialogue_report", "integrated_report", "grounding_validator", "academic_polish"}:
         api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
         if api_key:
-            provider_type = provider_type or "openai_compatible"
+            provider_type = provider_type or ("openai_chat_compatible" if role in {"dialogue_report", "integrated_report", "grounding_validator", "academic_polish"} else "openai_compatible")
             provider_name = provider_name or "DeepSeek"
-            model = model or os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-pro")
+            default_model = "deepseek-chat"
+            model_env = "DEEPSEEK_GROUNDING_MODEL" if role == "grounding_validator" else "DEEPSEEK_REPORT_MODEL" if role in {"dialogue_report", "integrated_report"} else "DEEPSEEK_MODEL"
+            model = model or os.environ.get(model_env, default_model)
             base_url = base_url or os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
             reasoning = os.environ.get("DEEPSEEK_REASONING_EFFORT", reasoning)
             temperature_raw = os.environ.get("DEEPSEEK_TEMPERATURE", temperature_raw)

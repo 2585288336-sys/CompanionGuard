@@ -15,7 +15,7 @@ from .projects import create_project, delete_project, get_project, list_projects
 from .reliability import LABELS, reliability_metrics
 from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
 from .report_pipeline import write_report_artifacts
-from .service import criteria_index, run_documentary_assist, run_report_writer
+from .service import criteria_index, run_documentary_assist, run_grounding_validator, run_report_writer
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
 from .collector_storage import load_raw_cases
@@ -501,7 +501,7 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    st.header("综合测试报告 / Integrated Report")
+    st.header("确定性分析摘要 / Deterministic Analysis Summary")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     report = build_integrated_report(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
@@ -515,17 +515,20 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
         reports_dir=paths.reports, draft_text=report,
     )
     st.download_button("下载综合测试报告（.md）", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
-    with st.expander("可选：LLM 撰写综合测试报告", expanded=False):
-        st.caption("确定性结构化上下文是权威来源；该写作模型不改变其他 LLM 角色。")
+    with st.expander("生成 LLM 综合测试报告 / Generate LLM Integrated Report", expanded=False):
+        st.caption("确定性分析摘要只是 Python 结果汇总；正式 LLM 综合报告必须同时经过 Evidence Grounding Validator LLM。")
         profile = render_llm_profile_selector("integrated_report", key_prefix="integrated_report_writer")
-        if st.button("生成 LLM 综合测试报告", disabled=profile is None):
+        grounding_profile = render_llm_profile_selector("grounding_validator", key_prefix="integrated_report_grounding")
+        if st.button("生成并验证 LLM 综合测试报告", disabled=profile is None or grounding_profile is None):
             try:
                 context = build_integrated_report_context(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
                 text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
+                grounding = run_grounding_validator(draft_report=text, report_context=context, llm_profile=grounding_profile, session_id=llm_session_id(), project_id=project.get("project_id"))
                 result = write_report_artifacts(
                     report_type="integrated", project=project, final_rows=rows,
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
                     reports_dir=paths.reports, draft_text=text,
+                    grounding_validator=lambda draft, report_context: grounding,
                 )
                 if result["manifest"]["validation_status"] != "PASS":
                     st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")

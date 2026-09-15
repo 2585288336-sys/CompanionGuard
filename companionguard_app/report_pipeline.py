@@ -40,6 +40,15 @@ def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_r
     grounding = grounding_validator(draft, context) if grounding_validator else validate_grounding(draft_report=draft, context=context)
     grounding_path = reports_dir / "grounding_result.json"
     grounding_path.write_text(json.dumps(grounding, ensure_ascii=False, indent=2), encoding="utf-8")
+    targeted_repair_record = {
+        "attempted": False,
+        "status": "NOT_TRIGGERED",
+        "reason": "No targeted repair was requested in this run.",
+        "source_grounding_status": grounding.get("overall_status", "UNKNOWN"),
+        "issue_count": len(grounding.get("issues") or []),
+    }
+    targeted_repair_path = reports_dir / "targeted_repair.json"
+    targeted_repair_path.write_text(json.dumps(targeted_repair_record, ensure_ascii=False, indent=2), encoding="utf-8")
     final_text = draft
     if hard["overall_status"] == "PASS" and grounding["overall_status"] == "PASS" and polish:
         final_text = polish(draft)
@@ -56,4 +65,4 @@ def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_r
         validation_status = "FAIL"
     manifest = report_manifest(report_type=report_type, project=project, validation_status=validation_status, grounding_status=grounding["overall_status"], polish_enabled=bool(polish))
     (reports_dir / "report_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"context": context, "hard_validation": hard, "grounding": grounding, "manifest": manifest, "paths": {"context": context_path, "draft": draft_path, "grounding": grounding_path, "final": final_path}}
+    return {"context": context, "hard_validation": hard, "grounding": grounding, "targeted_repair": targeted_repair_record, "manifest": manifest, "paths": {"context": context_path, "draft": draft_path, "grounding": grounding_path, "targeted_repair": targeted_repair_path, "final": final_path}}
