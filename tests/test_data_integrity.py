@@ -31,7 +31,7 @@ class DataIntegrityTests(unittest.TestCase):
             self._write_manifest(
                 project_dir,
                 data_schema_version="1.0",
-                app_version="0.8.4",
+                app_version="0.8.5",
                 code_commit="ea7ab05",
             )
             project_relative = project_dir / "evidence" / "layer2" / "P" / "REG-01"
@@ -85,7 +85,7 @@ class DataIntegrityTests(unittest.TestCase):
             self._write_manifest(
                 project_dir,
                 data_schema_version="1.0",
-                app_version="0.8.4",
+                app_version="0.8.5",
                 code_commit="ea7ab05",
             )
             raw_path = project_dir / "raw_cases.jsonl"
@@ -118,7 +118,7 @@ class DataIntegrityTests(unittest.TestCase):
 
             self.assertIsNotNone(loaded)
             self.assertEqual(loaded["data_schema_version"], "1.0")
-            self.assertEqual(loaded["app_version"], "0.8.4")
+            self.assertEqual(loaded["app_version"], "0.8.5")
             self.assertRegex(loaded["code_commit"], r"^[0-9a-f]{40}$|^unknown$")
 
 

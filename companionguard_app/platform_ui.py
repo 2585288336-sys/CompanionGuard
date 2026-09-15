@@ -40,7 +40,20 @@ def active_paths():
 
 def _configured_products() -> list[dict[str, Any]]:
     config = load_collector_config()
-    return [p for p in config.get("products", []) if not p.get("custom_product")]
+    return [
+        p for p in config.get("products", [])
+        if not p.get("custom_product") and not p.get("legacy_only")
+    ]
+
+
+def _default_benchmark_product_ids(products: list[dict[str, Any]]) -> list[str]:
+    config = load_collector_config()
+    configured_ids = {p.get("id") for p in products}
+    return [
+        product_id
+        for product_id in config.get("formal_primary_product_ids", [])
+        if product_id in configured_ids
+    ]
 
 
 def sidebar_project_selector() -> dict[str, Any] | None:
@@ -146,11 +159,24 @@ def projects_page() -> None:
             ) or ["product", "criterion_id", "condition"]
 
     configured = _configured_products()
+    default_product_ids = _default_benchmark_product_ids(configured) if mode == "BENCHMARK" else []
     selected_ids = st.multiselect(
         "预配置产品 / Configured products",
         [p["id"] for p in configured],
+        default=default_product_ids,
         format_func=lambda x: next(p.get("label", x) for p in configured if p["id"] == x),
     )
+    if mode == "BENCHMARK":
+        default_labels = [
+            p.get("label") or p.get("id", "")
+            for p in configured
+            if p.get("id") in default_product_ids
+        ]
+        st.caption(
+            "FORMAL Full Benchmark 默认主产品："
+            + "、".join(default_labels)
+            + "。产品身份与 Test Plan 覆盖范围保持解耦。"
+        )
     custom_text = st.text_area("自定义产品（每行一个） / Additional custom products", placeholder="Character.AI\nNomi")
     notes = st.text_area("项目备注（可选） / Project notes")
     if st.button("创建测试项目 / Create Test Project", type="primary"):
@@ -178,6 +204,20 @@ def projects_page() -> None:
 
 def _project_product_names(project: dict[str, Any]) -> list[str]:
     return [p.get("label") or p.get("name") or p.get("id") for p in project.get("products", []) if (p.get("label") or p.get("name") or p.get("id"))]
+
+
+def layer3_product_names(project: dict[str, Any]) -> list[str]:
+    """Return the product scope shown by the current Layer 3 policy."""
+    products = _project_product_names(project)
+    if project.get("mode") != "BENCHMARK":
+        return products
+    primary = [
+        p.get("label") or p.get("name") or p.get("id")
+        for p in project.get("products", [])
+        if str(p.get("role", "")).startswith("Primary anthropomorphic AI product")
+        and (p.get("label") or p.get("name") or p.get("id"))
+    ]
+    return primary or products
 
 
 def data_explorer_page() -> None:
@@ -317,13 +357,9 @@ def layer3_page() -> None:
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer3_checks.json")
     st.header("Layer 3 Lite｜公开合规证据核查 / Public Compliance Evidence Audit")
     st.caption("只核查公开正式材料能否为关键后台治理义务提供证据；不做Layer 3合规率。LLM仅辅助提取/初判，人工状态为最终记录。")
+    products = layer3_product_names(project)
     if project.get("mode") == "BENCHMARK":
-        products = [p.get("label") or p.get("name") or p.get("id") for p in project.get("products", []) if str(p.get("role", "")).startswith("Primary anthropomorphic AI product")]
-        if not products:
-            products = _project_product_names(project)
-        st.caption("BENCHMARK 模式：Layer 3 Lite 默认面向三个主要产品；存在主要产品配置时，不纳入比较产品或扩展产品。")
-    else:
-        products = _project_product_names(project)
+        st.caption("BENCHMARK 模式：Layer 3 Lite 默认显示项目中标记为正式主产品的产品；比较产品和扩展产品不自动纳入。")
     product = st.selectbox("产品 / Product", products)
     check = st.selectbox("核查项 / Check", config["checks"], format_func=lambda x: f"{x['code']} · {x['name_zh']} · {x['regulation']}")
     existing = {(r.get("product"), r.get("check_code")): r for r in load_jsonl(paths.layer3_records)}

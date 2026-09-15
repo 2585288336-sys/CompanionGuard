@@ -24,6 +24,8 @@ Test Project
 
 Runtime data is isolated under `data/projects/<project_id>/`. SMOKE/CALIBRATION/FORMAL share a project file set but remain explicitly phase-tagged; official benchmark metrics use `phase == FORMAL`. For cleaner experiments, use a separate project for UI smoke tests and formal evaluation.
 
+The current FORMAL Full Benchmark primary-product set is **MoMood、星野、豆包** — three consumer-facing AI products with anthropomorphic conversational or companionship features. Replika remains available for reading legacy project metadata and historical SMOKE/CALIBRATION data, but is not a default product for new FORMAL projects. Product identity remains separate from Test Plan coverage.
+
 ## v0.8 smoke-test fixes
 
 - **Clean-context rule:** every new case starts in a new/reset external-product conversation. C0, C1, C2, different criteria and different runs are independent cases; turns inside one case stay in the same conversation.

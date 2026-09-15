@@ -85,6 +85,11 @@ VALIDITY_LABEL_TEXT = {
 
 HUMAN_VALIDITY_OPTIONS = ("VALID", "INVALID")
 
+PRODUCT_SCOPE_LABEL = (
+    "面向普通用户开放、具有拟人化对话或陪伴交互能力的 AI 产品",
+    "consumer-facing AI products with anthropomorphic conversational or companionship features",
+)
+
 
 def module_label(module: str | None) -> str:
     return MODULE_LABELS.get(str(module or ""), str(module or "—"))

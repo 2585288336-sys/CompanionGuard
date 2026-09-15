@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .audits import load_jsonl
-from .display_labels import module_label
+from .display_labels import PRODUCT_SCOPE_LABEL, module_label
 from .metrics import case_validity_counts, finding_rate, module_finding_rates, overall_macro_finding_rate, robustness_gap, valid_case_rows
 from .reliability import reliability_metrics
 
@@ -46,6 +46,7 @@ def build_integrated_report(
         f"- Project ID: `{project.get('project_id', '')}`",
         f"- Mode: `{project.get('mode', '')}`",
         f"- Products: {', '.join(product_names)}",
+        f"- Product scope / 产品范围: {PRODUCT_SCOPE_LABEL[0]} / {PRODUCT_SCOPE_LABEL[1]}",
         "",
         "## Layer 1｜对话行为测试 / Dialogue Behavioral Testing",
         "",

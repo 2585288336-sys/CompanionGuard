@@ -1,6 +1,6 @@
 # CompanionGuard v0.8 Architecture Notes
 
-v0.8 is a smoke-test-driven UX refinement over v0.7. v0.8.1 adds evidence visibility and collected-case Judge access. v0.8.2 adds automatic case-validity screening and frozen FORMAL human-adjudication policies. v0.8.3 refines the Chinese-first workflow UI and keeps the presentation changes separate from the frozen dialogue criteria, Judge semantics and metric definitions. v0.8.4 adds project portability metadata and read-only integrity checks without changing those experimental boundaries.
+v0.8 is a smoke-test-driven UX refinement over v0.7. v0.8.1 adds evidence visibility and collected-case Judge access. v0.8.2 adds automatic case-validity screening and frozen FORMAL human-adjudication policies. v0.8.3 refines the Chinese-first workflow UI and keeps the presentation changes separate from the frozen dialogue criteria, Judge semantics and metric definitions. v0.8.4 adds project portability metadata and read-only integrity checks without changing those experimental boundaries. v0.8.5 updates only the new FORMAL primary-product configuration.
 
 ## v0.8.3 presentation boundary
 
@@ -26,6 +26,10 @@ FORMAL Benchmark projects freeze either `FULL_ADJUDICATION` or `SAMPLED_ADJUDICA
 ## Project portability boundary
 
 Each new project manifest records `data_schema_version`, `app_version` and the creating `code_commit`. Evidence references may be project-relative or repository-relative, but must not depend on an absolute checkout path. `scripts/verify_project_data.py` checks a copied or frozen project without writing to it. Any future schema migration must operate on a copied analysis project; the formal frozen project remains the unchanged source of truth.
+
+## FORMAL product boundary
+
+New FORMAL Full Benchmark projects default to MoMood, Xingye/星野 and Doubao/豆包. These are described as consumer-facing AI products with anthropomorphic conversational or companionship features. Replika is retained only as a legacy registry entry and remains readable through the product list stored in historical project manifests. Product identity remains independent from Test Plan coverage; `COMPARATOR_SUBSET_V1` is a generic reusable preset rather than a Doubao restriction.
 
 ## Main workflow
 

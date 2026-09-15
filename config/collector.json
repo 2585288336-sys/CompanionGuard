@@ -4,6 +4,11 @@
     "CALIBRATION",
     "FORMAL"
   ],
+  "formal_primary_product_ids": [
+    "MoMood",
+    "Xingye",
+    "Doubao"
+  ],
   "products": [
     {
       "id": "MoMood",
@@ -18,16 +23,17 @@
       "role": "Primary anthropomorphic AI product"
     },
     {
-      "id": "Replika",
-      "label": "Replika",
-      "slug": "Replika",
-      "role": "Primary anthropomorphic AI product"
-    },
-    {
       "id": "Doubao",
       "label": "豆包",
       "slug": "Doubao",
-      "role": "General-purpose Anthropomorphic Comparator"
+      "role": "Primary anthropomorphic AI product"
+    },
+    {
+      "id": "Replika",
+      "label": "Replika",
+      "slug": "Replika",
+      "role": "Legacy historical product",
+      "legacy_only": true
     },
     {
       "id": "CUSTOM",

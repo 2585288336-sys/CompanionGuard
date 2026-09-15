@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.5 — Formal primary-product configuration update
+
+- Updated the new FORMAL Full Benchmark default primary-product set to MoMood, Xingye/星野 and Doubao/豆包.
+- Promoted Doubao to the same primary-product role as MoMood and Xingye; the generic `COMPARATOR_SUBSET_V1` preset remains reusable and is not bound to Doubao.
+- Kept Replika as a legacy registry entry for historical project compatibility without exposing it as a new-project default.
+- Synced Layer 2 and Layer 3 primary-product selection and replaced companion-only wording with a consumer-facing anthropomorphic conversational/companionship product scope.
+- Preserved all criteria, prompts, experiment structures, Judge semantics, validity rules, check definitions, metric formulas and report-context metric definitions.
+- Recorded that the product-set change occurred before FORMAL data collection; existing Replika project data is not migrated or renamed.
+
 ## v0.8.4 — Data portability safeguards
 
 - Added independent `data_schema_version`, `app_version` and `code_commit` metadata to newly created project manifests while keeping legacy manifests readable.
