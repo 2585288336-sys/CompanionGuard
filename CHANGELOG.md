@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.7.0 — Provider-decoupled LLM roles and composable Test Plans
+
+- Replaced DeepSeek-specific application coupling with a shared LLM Provider layer.
+- Added OpenAI-style Chat Completions, OpenAI Responses-compatible and Anthropic Messages adapters with local JSON-schema validation where required.
+- Defined four independent LLM roles: Dialogue Judge, Dialogue Report Writer, Layer 3 Evidence Assistant and Integrated Report Writer. Each role may use a different provider/model or share one.
+- Kept BYOK keys session-only and added role-scoped server profiles; legacy DeepSeek environment variables remain a migration fallback for Judge/Evidence.
+- Added lightweight server-funded LLM kill switch, per-day and per-session call ceilings, plus secret-free usage metadata logging.
+- Removed product-level criterion allowlists. Product identity and test coverage are now independent.
+- Added persistent Test Plans with `FULL_BENCHMARK`, `BENCHMARK_SUBSET` and `CUSTOM` coverage types.
+- Moved the prior comparator subset into `config/test_plan_presets.json` as an editable/reusable preset rather than a Doubao-specific restriction.
+- Propagated Test Plan coverage metadata into raw/final/report context so subset results cannot silently masquerade as full-benchmark results.
+- Added deterministic Dialogue Report context/report and optional LLM Dialogue Report Writer.
+- Added optional LLM Integrated Report Writer; Python remains authoritative for all metric calculations.
+- Added `SearchProvider` extension interface for future Layer 3 retrieval while keeping autonomous web search disabled in the MVP.
+- Added v0.7 architecture and decoupling tests. Current suite: 37 tests + 20 subtests pass.
+
 ## v0.6.0 — Project-scoped three-layer testing platform
 
 - Added `Test Projects` as the top-level evaluation batch abstraction with multiple configured/custom products.

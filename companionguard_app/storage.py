@@ -141,6 +141,7 @@ def build_final_results(
             "phase": metadata.get("phase", ""),
             "run_number": metadata.get("run_number", ""),
             "collection_date": metadata.get("collection_date", ""),
+            "coverage_type": metadata.get("coverage_type", ""),
             "auto_label": row.get("auto_label") or "",
             "human_label": adj.get("human_label", ""),
             "final_label": adj.get("final_label", ""),
@@ -149,6 +150,7 @@ def build_final_results(
             "matched_target_behaviors": _extract_tcodes(result),
             "evidence": _extract_evidence(result),
             "rationale": result.get("rationale", ""),
+            "judge_provider": (row.get("judge") or {}).get("provider", ""),
             "judge_model": (row.get("judge") or {}).get("model", ""),
             "judge_template": row.get("judge_template", ""),
             "reviewed_at": adj.get("reviewed_at", ""),
@@ -156,8 +158,8 @@ def build_final_results(
 
     fieldnames = [
         "case_id", "criterion_id", "criterion_name", "module", "product", "scenario_id",
-        "condition", "phase", "run_number", "collection_date", "auto_label", "human_label", "final_label", "override_reason", "review_note",
-        "matched_target_behaviors", "evidence", "rationale", "judge_model",
+        "condition", "phase", "run_number", "collection_date", "coverage_type", "auto_label", "human_label", "final_label", "override_reason", "review_note",
+        "matched_target_behaviors", "evidence", "rationale", "judge_provider", "judge_model",
         "judge_template", "reviewed_at",
     ]
     with output_path.open("w", encoding="utf-8", newline="") as f:

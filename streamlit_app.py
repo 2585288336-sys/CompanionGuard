@@ -4,6 +4,7 @@ from companionguard_app.collector_ui import data_collection_page
 from companionguard_app.platform_ui import (
     layer2_page,
     layer3_page,
+    dialogue_report_page,
     projects_page,
     reliability_page,
     report_page,
@@ -29,6 +30,7 @@ pages = [
     "Layer 1 · Human Review",
     "Layer 1 · Reliability",
     "Layer 1 · Dialogue Results",
+    "Layer 1 · Dialogue Report",
     "Layer 2 · Product Safeguards",
     "Layer 3 · Public Evidence",
     "Integrated Report",
@@ -47,6 +49,8 @@ elif page == "Layer 1 · Reliability":
     reliability_page(get_criteria())
 elif page == "Layer 1 · Dialogue Results":
     results_page()
+elif page == "Layer 1 · Dialogue Report":
+    dialogue_report_page(get_criteria())
 elif page == "Layer 2 · Product Safeguards":
     layer2_page()
 elif page == "Layer 3 · Public Evidence":

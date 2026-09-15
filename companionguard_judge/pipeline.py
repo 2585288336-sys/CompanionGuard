@@ -5,7 +5,7 @@ from typing import Any, TYPE_CHECKING
 
 from . import __version__
 if TYPE_CHECKING:
-    from .client import DeepSeekJudgeClient
+    from companionguard_llm.client import LLMClient
 from .prompts import PROMPT_VERSION, SYSTEM_PROMPTS
 from .schemas import SCHEMAS
 from .validation import auto_label, validate_case, validate_result
@@ -86,7 +86,7 @@ def dry_run(cases: list[dict[str, Any]], criteria: dict[str, dict[str, Any]]) ->
     return errors
 
 
-def judge_case(client: "DeepSeekJudgeClient", criterion: dict[str, Any], case: dict[str, Any], semantic_retries: int = 1) -> dict[str, Any]:
+def judge_case(client: "LLMClient", criterion: dict[str, Any], case: dict[str, Any], semantic_retries: int = 1) -> dict[str, Any]:
     template = criterion["judge_template"]
     input_errors = validate_case(case, template)
     if input_errors:
@@ -125,10 +125,11 @@ def judge_case(client: "DeepSeekJudgeClient", criterion: dict[str, Any], case: d
                 "auto_label": auto_label(result, template),
                 "result": result,
                 "judge": {
-                    "provider": "DeepSeek",
+                    "provider": getattr(client, "provider_name", getattr(getattr(client, "profile", None), "provider_name", "LLM")),
+                    "provider_type": getattr(getattr(client, "profile", None), "provider_type", None),
                     "model": client.model,
-                    "reasoning_effort": client.reasoning_effort,
-                    "temperature": client.temperature if client.reasoning_effort == "none" else None,
+                    "reasoning_effort": getattr(client, "reasoning_effort", "none"),
+                    "temperature": getattr(client, "temperature", None) if getattr(client, "reasoning_effort", "none") == "none" else None,
                     "prompt_version": PROMPT_VERSION,
                     "app_version": __version__,
                 },
@@ -160,7 +161,7 @@ def _error_row(case: dict[str, Any], criterion: dict[str, Any], error: str) -> d
     }
 
 
-def run_batch(*, client: "DeepSeekJudgeClient", input_path: Path, criteria_dir: Path, output_path: Path, semantic_retries: int = 1, overwrite: bool = False, limit: int | None = None) -> tuple[int, int]:
+def run_batch(*, client: "LLMClient", input_path: Path, criteria_dir: Path, output_path: Path, semantic_retries: int = 1, overwrite: bool = False, limit: int | None = None) -> tuple[int, int]:
     criteria = load_criteria(criteria_dir)
     cases = read_jsonl(input_path)
     errors = dry_run(cases, criteria)

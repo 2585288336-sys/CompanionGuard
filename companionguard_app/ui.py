@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import random
 from typing import Any
 
@@ -19,6 +18,7 @@ from .collector_storage import load_raw_cases
 from .config import MODULE_LABELS, OVERRIDE_REASONS
 from .metrics import label_counts, module_finding_rates, overall_macro_finding_rate, robustness_gap
 from .platform_ui import active_project, active_paths
+from .llm_ui import llm_session_id, render_llm_profile_selector
 from .service import criteria_index, run_batch_cases, run_single_case
 from .storage import (
     build_final_results,
@@ -32,21 +32,6 @@ from .storage import (
 @st.cache_data(show_spinner=False)
 def get_criteria() -> dict[str, dict[str, Any]]:
     return criteria_index()
-
-
-def _api_key_input() -> str:
-    server_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    try:
-        secret_key = st.secrets.get("DEEPSEEK_API_KEY", "")
-    except Exception:
-        secret_key = ""
-    server_key = server_key or secret_key
-    options = ["Demo / server Judge", "BYOK"] if server_key else ["BYOK"]
-    mode = st.radio("Judge access", options, horizontal=True, help="Demo使用服务器侧Key；BYOK Key仅保存在当前Streamlit session，不写入项目数据。")
-    if mode == "Demo / server Judge":
-        st.caption("Using the server-side DeepSeek Judge. The API key is not exposed to the browser or saved in project files.")
-        return server_key
-    return st.text_input("DeepSeek API Key", type="password", help="仅用于当前会话调用API，不写入JSONL、CSV、日志或Git。")
 
 
 def _criterion_label(item: tuple[str, dict[str, Any]]) -> str:
@@ -86,9 +71,9 @@ def run_test_page() -> None:
         return
     st.header("Run Test")
     st.caption(f"Active Project: {project.get('project_name')} ({project.get('project_id')})")
-    st.caption("Benchmark Mode：选择冻结criterion，输入真实模型回复，调用DeepSeek Judge。")
+    st.caption("Benchmark Mode：选择冻结criterion，输入真实模型回复，通过可配置LLM Provider运行 criterion-bound Judge。")
     criteria = get_criteria()
-    api_key = _api_key_input()
+    llm_profile = render_llm_profile_selector("judge", key_prefix="run_test_judge")
 
     single_tab, batch_tab = st.tabs(["单条测试", "批量JSONL"])
 
@@ -143,8 +128,8 @@ def run_test_page() -> None:
         case_id = st.text_input("Case ID", value=default_case_id)
 
         if st.button("Run Judge", type="primary"):
-            if not api_key:
-                st.error("请先提供DeepSeek API Key。")
+            if not llm_profile:
+                st.error("请先配置 Dialogue Judge LLM。")
             elif not product.strip():
                 st.error("请填写Product / Model。")
             else:
@@ -159,13 +144,15 @@ def run_test_page() -> None:
                         category=category,
                         metadata={"source": "streamlit_single"},
                     )
-                    with st.spinner("Running DeepSeek Judge..."):
+                    with st.spinner("Running criterion-bound LLM Judge..."):
                         row = run_single_case(
                             case=case,
                             criteria=criteria,
-                            api_key=api_key,
+                            llm_profile=llm_profile,
                             persist=True,
                             judge_path=paths.judge_results,
+                            session_id=llm_session_id(),
+                            project_id=project.get("project_id"),
                         )
                     st.session_state["last_judge_result"] = row
                 except Exception as e:
@@ -215,8 +202,8 @@ def run_test_page() -> None:
                     hide_index=True,
                 )
                 if st.button("Run Batch", type="primary"):
-                    if not api_key:
-                        st.error("请先提供DeepSeek API Key。")
+                    if not llm_profile:
+                        st.error("请先配置 Dialogue Judge LLM。")
                     else:
                         progress_bar = st.progress(0.0)
                         status_box = st.empty()
@@ -229,9 +216,11 @@ def run_test_page() -> None:
                             results = run_batch_cases(
                                 cases=cases,
                                 criteria=criteria,
-                                api_key=api_key,
+                                llm_profile=llm_profile,
                                 progress=progress,
                                 judge_path=paths.judge_results,
+                                session_id=llm_session_id(),
+                                project_id=project.get("project_id"),
                             )
                         ok = sum(r.get("status") == "ok" for r in results)
                         st.success(f"完成：{ok}/{len(results)} 成功。结果已写入 data/judge_results.jsonl")

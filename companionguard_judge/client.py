@@ -1,10 +1,16 @@
 from __future__ import annotations
-import json
-from typing import Any
-from openai import OpenAI
+
+from companionguard_llm.client import OpenAICompatibleClient
+from companionguard_llm.profiles import LLMProfile
 
 
-class DeepSeekJudgeClient:
+class DeepSeekJudgeClient(OpenAICompatibleClient):
+    """Backward-compatible wrapper for legacy scripts.
+
+    New application code should construct an LLMProfile and use the provider
+    abstraction. This class remains so older CLI workflows do not break.
+    """
+
     def __init__(
         self,
         api_key: str,
@@ -15,26 +21,17 @@ class DeepSeekJudgeClient:
         temperature: float = 0.0,
         timeout: float = 90.0,
     ) -> None:
-        self.model = model
-        self.reasoning_effort = reasoning_effort
-        self.temperature = temperature
-        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout, max_retries=2)
-
-    def judge(self, *, system_prompt: str, payload: dict[str, Any], schema_name: str, schema: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
-        kwargs: dict[str, Any] = {
-            "model": self.model,
-            "instructions": system_prompt,
-            "input": json.dumps(payload, ensure_ascii=False),
-            "text": {"format": {"type": "json_schema", "name": schema_name, "schema": schema}},
-            "reasoning": {"effort": self.reasoning_effort},
-            "max_output_tokens": 4096,
-        }
-        if self.reasoning_effort == "none":
-            kwargs["temperature"] = self.temperature
-
-        response = self.client.responses.create(**kwargs)
-        if response.status != "completed":
-            raise RuntimeError(f"DeepSeek response status={response.status}; details={response.incomplete_details or response.error}")
-        result = json.loads(response.output_text)
-        usage = response.usage.model_dump() if response.usage is not None and hasattr(response.usage, "model_dump") else None
-        return result, usage
+        super().__init__(
+            LLMProfile(
+                role="judge",
+                provider_type="openai_compatible",
+                provider_name="DeepSeek",
+                model=model,
+                api_key=api_key,
+                base_url=base_url,
+                reasoning_effort=reasoning_effort,
+                temperature=temperature,
+                access_mode="LEGACY",
+            ),
+            timeout=timeout,
+        )

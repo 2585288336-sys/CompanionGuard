@@ -4,17 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "companionguard"
-version = "0.6.0"
+version = "0.7.0"
 description = "Configurable regulatory evaluation MVP for anthropomorphic AI"
 requires-python = ">=3.10"
 dependencies = [
   "openai>=3.13.0,<4",
   "streamlit>=1.40,<2",
-  "pandas>=2.0,<3"
+  "pandas>=2.0,<3",
+  "jsonschema>=4.20,<5"
 ]
 
 [project.scripts]
 companionguard-judge = "companionguard_judge.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["companionguard_judge*", "companionguard_app*"]
+include = ["companionguard_judge*", "companionguard_app*", "companionguard_llm*"]

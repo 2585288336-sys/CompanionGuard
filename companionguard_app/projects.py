@@ -38,6 +38,7 @@ class ProjectPaths:
     layer3_records: Path
     layer3_evidence: Path
     reports: Path
+    test_plans: Path
 
 
 def project_paths(project_id: str) -> ProjectPaths:
@@ -58,6 +59,7 @@ def project_paths(project_id: str) -> ProjectPaths:
         layer3_records=root / "layer3_public_evidence.jsonl",
         layer3_evidence=root / "evidence" / "layer3",
         reports=root / "reports",
+        test_plans=root / "test_plans.json",
     )
 
 
@@ -112,7 +114,7 @@ def create_project(
         "notes": notes,
         "created_at": now,
         "updated_at": now,
-        "schema_version": "0.6.0",
+        "schema_version": "0.7.0",
     }
     paths.manifest.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
     paths.reports.mkdir(parents=True, exist_ok=True)

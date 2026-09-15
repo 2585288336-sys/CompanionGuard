@@ -103,3 +103,82 @@ def build_integrated_report(
         "CompanionGuard reports traceable testing evidence and risk findings. It does not convert the three evidence layers into a single 0–100 safety/compliance score and does not make a formal legal compliance determination.",
     ]
     return "\n".join(lines) + "\n"
+
+
+def build_dialogue_report_context(*, project: dict[str, Any], final_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    formal = [r for r in final_rows if r.get("phase") == "FORMAL"]
+    rel = reliability_metrics(formal)
+    product_names = [p.get("label") or p.get("name") or p.get("id", "") for p in project.get("products", [])]
+    products: dict[str, Any] = {}
+    for product in product_names:
+        rows = [r for r in formal if r.get("product") == product]
+        coverage_types = sorted({str(r.get("coverage_type") or r.get("metadata", {}).get("coverage_type") or "UNKNOWN") for r in rows})
+        products[product] = {
+            "formal_cases": len(rows),
+            "finding_rate": finding_rate(rows),
+            "coverage_types": coverage_types,
+        }
+    return {
+        "project": {
+            "project_id": project.get("project_id"),
+            "project_name": project.get("project_name"),
+            "mode": project.get("mode"),
+        },
+        "formal_case_count": len(formal),
+        "overall_macro_finding_rate": overall_macro_finding_rate(formal),
+        "pressure_gap_c1_minus_c0": robustness_gap(formal, "C1"),
+        "multi_turn_gap_c2_minus_c0": robustness_gap(formal, "C2"),
+        "module_finding_rates": module_finding_rates(formal),
+        "products": products,
+        "reliability": rel,
+        "interpretation_boundary": {
+            "no_single_safety_score": True,
+            "no_formal_legal_compliance_determination": True,
+            "subset_warning": "BENCHMARK_SUBSET/CUSTOM coverage must not be presented as directly equivalent to a full benchmark aggregate.",
+        },
+    }
+
+
+def build_integrated_report_context(
+    *,
+    project: dict[str, Any],
+    final_rows: list[dict[str, Any]],
+    layer2_path: Path,
+    layer3_path: Path,
+) -> dict[str, Any]:
+    return {
+        "dialogue": build_dialogue_report_context(project=project, final_rows=final_rows),
+        "layer2_product_safeguards": load_jsonl(layer2_path),
+        "layer3_public_compliance_evidence": load_jsonl(layer3_path),
+        "evidence_boundary": {
+            "dialogue_evidence_cannot_substitute_product_evidence": True,
+            "product_evidence_cannot_substitute_documentary_evidence": True,
+            "documentary_evidence_does_not_prove_unobserved_runtime_behavior": True,
+        },
+    }
+
+
+def build_dialogue_report(project: dict[str, Any], final_rows: list[dict[str, Any]]) -> str:
+    context = build_dialogue_report_context(project=project, final_rows=final_rows)
+    lines = [
+        f"# CompanionGuard Dialogue Report — {project.get('project_name', project.get('project_id'))}",
+        "",
+        f"- FORMAL cases: {context['formal_case_count']}",
+        f"- Overall Macro Finding Rate: {_pct(context['overall_macro_finding_rate'])}",
+        f"- Pressure condition gap (C1−C0): {_pp(context['pressure_gap_c1_minus_c0'])}",
+        f"- Multi-turn condition gap (C2−C0): {_pp(context['multi_turn_gap_c2_minus_c0'])}",
+        "",
+        "## Module Finding Rates",
+    ]
+    for module, rate in sorted(context["module_finding_rates"].items()):
+        lines.append(f"- {module}: {_pct(rate)}")
+    lines += ["", "## Product Coverage", "", "| Product | FORMAL cases | Finding rate | Coverage |", "|---|---:|---:|---|"]
+    for product, row in context["products"].items():
+        lines.append(f"| {_escape(product)} | {row['formal_cases']} | {_pct(row['finding_rate'])} | {_escape(', '.join(row['coverage_types']))} |")
+    lines += [
+        "",
+        "## Interpretation Boundary",
+        "",
+        "Benchmark-subset/custom results are targeted evaluations and must not be presented as directly equivalent to full-benchmark aggregates. CompanionGuard does not output a single 0–100 safety score or a formal legal compliance determination.",
+    ]
+    return "\n".join(lines) + "\n"

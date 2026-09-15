@@ -12,8 +12,9 @@ from .audits import load_json, load_jsonl, make_audit_row, save_audit_evidence, 
 from .collector import load_collector_config
 from .projects import create_project, get_project, list_projects, project_paths, safe_slug
 from .reliability import LABELS, reliability_metrics
-from .reporting import build_integrated_report
-from .service import run_documentary_assist
+from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
+from .service import run_documentary_assist, run_report_writer
+from .llm_ui import llm_session_id, render_llm_profile_selector
 from .storage import build_final_results, load_final_results
 
 
@@ -152,20 +153,6 @@ def layer2_page() -> None:
         st.dataframe(pd.DataFrame(records)[["product", "check_code", "status", "evidence_summary", "notes", "updated_at"]], use_container_width=True, hide_index=True)
 
 
-def _api_key_input() -> str:
-    import os
-    existing = os.environ.get("DEEPSEEK_API_KEY", "")
-    if existing:
-        return existing
-    try:
-        secret_key = st.secrets.get("DEEPSEEK_API_KEY", "")
-    except Exception:
-        secret_key = ""
-    if secret_key:
-        return secret_key
-    return st.text_input("DeepSeek API Key (optional for AI assist)", type="password", help="仅当前session使用，不写入项目数据。")
-
-
 def layer3_page() -> None:
     project = active_project()
     paths = active_paths()
@@ -190,15 +177,15 @@ def layer3_page() -> None:
     source = st.text_input("Source / URL / document name", value=prior.get("source", ""))
     source_date = st.text_input("Source version/date (optional)", value=prior.get("source_date", ""))
     source_text = st.text_area("Relevant source text / excerpt", height=220, help="可粘贴公开政策相关段落；AI assist只基于这里的文本，不自动浏览网页。")
-    api_key = _api_key_input()
+    llm_profile = render_llm_profile_selector("evidence", key_prefix=f"layer3_evidence::{product}::{check['code']}")
     assist_key = f"layer3_assist::{product}::{check['code']}"
     if st.button("AI Evidence Assist", disabled=not bool(source_text.strip())):
-        if not api_key:
-            st.error("请提供DeepSeek API Key，或使用服务器Demo Key。")
+        if not llm_profile:
+            st.error("请配置 Layer 3 Evidence Assistant LLM。")
         else:
             try:
                 with st.spinner("Extracting public evidence..."):
-                    st.session_state[assist_key] = run_documentary_assist(check=check, source_text=source_text, api_key=api_key)
+                    st.session_state[assist_key] = run_documentary_assist(check=check, source_text=source_text, llm_profile=llm_profile, session_id=llm_session_id(), project_id=project.get("project_id"))
             except Exception as e:
                 st.error(str(e))
     assist = st.session_state.get(assist_key)
@@ -260,6 +247,36 @@ def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
     st.caption("Benchmark FORMAL 模式按冻结协议采用100%人工复核。抽样复核仅作为Custom Eval未来能力，不改变Benchmark协议。")
 
 
+def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
+    project = active_project()
+    paths = active_paths()
+    if not project or not paths:
+        st.warning("请先选择项目。")
+        return
+    st.header("Layer 1 · Dialogue Report")
+    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results)
+    rows = load_final_results(paths.final_results)
+    deterministic = build_dialogue_report(project, rows)
+    st.markdown(deterministic)
+    paths.reports.mkdir(parents=True, exist_ok=True)
+    deterministic_path = paths.reports / "dialogue_report_deterministic.md"
+    deterministic_path.write_text(deterministic, encoding="utf-8")
+    st.download_button("Download deterministic dialogue report", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
+    with st.expander("Optional LLM-written dialogue report", expanded=False):
+        st.caption("Python computes the metrics; the report model only writes from the frozen structured context. External writing skills/prompts are intentionally not bundled yet.")
+        profile = render_llm_profile_selector("dialogue_report", key_prefix="dialogue_report_writer")
+        if st.button("Generate LLM Dialogue Report", disabled=profile is None):
+            try:
+                context = build_dialogue_report_context(project=project, final_rows=rows)
+                text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
+                (paths.reports / "dialogue_report_llm.md").write_text(text, encoding="utf-8")
+                st.session_state["dialogue_report_llm_text"] = text
+            except Exception as e:
+                st.error(str(e))
+        if st.session_state.get("dialogue_report_llm_text"):
+            st.markdown(st.session_state["dialogue_report_llm_text"])
+
+
 def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     project = active_project()
     paths = active_paths()
@@ -275,3 +292,16 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     output = paths.reports / "integrated_report.md"
     output.write_text(report, encoding="utf-8")
     st.download_button("Download integrated report (.md)", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
+    with st.expander("Optional LLM-written integrated report", expanded=False):
+        st.caption("The deterministic context is authoritative. This writer can later receive your separately researched report-writing prompt/skill without changing other LLM roles.")
+        profile = render_llm_profile_selector("integrated_report", key_prefix="integrated_report_writer")
+        if st.button("Generate LLM Integrated Report", disabled=profile is None):
+            try:
+                context = build_integrated_report_context(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
+                text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
+                (paths.reports / "integrated_report_llm.md").write_text(text, encoding="utf-8")
+                st.session_state["integrated_report_llm_text"] = text
+            except Exception as e:
+                st.error(str(e))
+        if st.session_state.get("integrated_report_llm_text"):
+            st.markdown(st.session_state["integrated_report_llm_text"])

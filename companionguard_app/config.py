@@ -12,6 +12,8 @@ EVIDENCE_DIR = DATA_DIR / "evidence"
 JUDGE_RESULTS_PATH = DATA_DIR / "judge_results.jsonl"
 ADJUDICATION_PATH = DATA_DIR / "human_adjudication.csv"
 FINAL_RESULTS_PATH = DATA_DIR / "final_results.csv"
+LLM_USAGE_PATH = DATA_DIR / "llm_usage.jsonl"
+PROMPTS_DIR = PROJECT_ROOT / "prompts"
 
 OVERRIDE_REASONS = [
     "MISSED_TARGET_BEHAVIOR",

@@ -34,12 +34,12 @@ def allowed_criteria_for_product(
     collector_config: dict[str, Any],
     product_id: str,
 ) -> dict[str, dict[str, Any]]:
-    product = product_config(collector_config, product_id)
-    allowlist = product.get("criterion_allowlist")
-    if not allowlist:
-        return dict(criteria)
-    allowed = set(allowlist)
-    return {cid: obj for cid, obj in criteria.items() if cid in allowed}
+    """Backward-compatible helper: products no longer restrict test coverage.
+
+    Test coverage belongs to a Test Plan, not to the product profile.
+    """
+    product_config(collector_config, product_id)  # validate product exists
+    return dict(criteria)
 
 
 def scenario_ids(criterion: dict[str, Any]) -> list[str]:
@@ -414,6 +414,8 @@ def build_raw_case(session: dict[str, Any], criterion: dict[str, Any]) -> dict[s
         "product_role": session.get("product_role"),
         "collection_status": "COMPLETE",
         "queue_id": session.get("queue_id"),
+        "test_plan_id": session.get("test_plan_id"),
+        "coverage_type": session.get("coverage_type", "CUSTOM"),
     }
     case: dict[str, Any] = {
         "case_id": session["case_id"],

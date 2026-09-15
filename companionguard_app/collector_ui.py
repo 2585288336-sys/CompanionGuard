@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from datetime import date
 from typing import Any
@@ -44,6 +43,8 @@ from .collector_storage import (
     upsert_collection_session,
 )
 from .service import criteria_index, run_single_case
+from .llm_ui import llm_session_id, render_llm_profile_selector
+from .testplans import upsert_test_plan
 from .platform_ui import active_project, active_paths
 from .storage import completed_case_ids
 
@@ -128,11 +129,6 @@ def _render_product_selector(config: dict[str, Any], *, prefix: str) -> tuple[st
         st.caption(pconfig["role"])
     if pconfig.get("notice"):
         st.info(pconfig["notice"])
-    if pconfig.get("criterion_allowlist"):
-        st.caption(
-            f"This product profile restricts collection to {len(pconfig['criterion_allowlist'])} configured criteria. "
-            "The restriction comes from config/collector.json, not UI code."
-        )
     return product_id, product_name, product_slug, pconfig
 
 
@@ -255,23 +251,39 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
     paths = active_paths()
     if not paths:
         return
-    st.subheader("Collection Queue")
-    st.caption("Build a reusable queue from configured products/criteria. Queue logic does not hard-code model names or criterion IDs.")
+    st.subheader("Collection Queue / Test Plan")
+    st.caption("Product and test coverage are independent. Choose any product, then compose a full benchmark, benchmark subset, or custom test plan.")
     product_id, product_name, product_slug, pconfig = _render_product_selector(config, prefix="collector_queue")
-    available = allowed_criteria_for_product(criteria, config, product_id)
+
+    preset_path = __import__("pathlib").Path(__file__).resolve().parents[1] / "config" / "test_plan_presets.json"
+    presets = json.loads(preset_path.read_text(encoding="utf-8"))["presets"]
+    preset = st.selectbox("Test Plan preset", presets, format_func=lambda x: x["label"], key="collector_queue_preset")
+    available = dict(criteria)
     criterion_ids = sorted(available)
+    if preset.get("criterion_ids") == "*":
+        default_ids = criterion_ids
+    else:
+        default_ids = [cid for cid in preset.get("criterion_ids", []) if cid in available]
     selected_ids = st.multiselect(
         "Criteria to collect",
         criterion_ids,
+        default=default_ids,
         format_func=lambda cid: f"{cid} · {available[cid].get('criterion_name_zh', '')}",
-        key="collector_queue_criteria",
+        key=f"collector_queue_criteria::{preset['id']}",
     )
     condition_filter = st.multiselect(
         "Core conditions to include",
         ["C0", "C1", "C2"],
-        default=["C0", "C1", "C2"],
+        default=preset.get("conditions", ["C0", "C1", "C2"]),
         help="Only applies to Core/HR-02. MR/MC/PC keep their frozen structures. Missing C1 prompts are skipped rather than invented.",
-        key="collector_queue_conditions",
+        key=f"collector_queue_conditions::{preset['id']}",
+    )
+    coverage_type = st.selectbox(
+        "Coverage type",
+        ["FULL_BENCHMARK", "BENCHMARK_SUBSET", "CUSTOM"],
+        index=["FULL_BENCHMARK", "BENCHMARK_SUBSET", "CUSTOM"].index(preset.get("coverage_type", "CUSTOM")),
+        help="Subset/custom results are valid targeted evaluations but must not be presented as a full-benchmark aggregate.",
+        key=f"collector_queue_coverage::{preset['id']}",
     )
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -281,8 +293,8 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
     with c3:
         run_count = int(st.number_input("Number of runs", min_value=1, max_value=10, value=1, step=1, key="collector_queue_run_count"))
     collection_date = st.date_input("Collection date", value=date.today(), key="collector_queue_date").isoformat()
-    queue_name = st.text_input("Queue name (optional)", key="collector_queue_name")
-    notes = st.text_area("Queue notes (optional)", height=70, key="collector_queue_notes")
+    queue_name = st.text_input("Test Plan / Queue name (optional)", key="collector_queue_name")
+    notes = st.text_area("Plan notes (optional)", height=70, key="collector_queue_notes")
 
     run_numbers = list(range(start_run, start_run + run_count))
     preview_items: list[dict[str, Any]] = []
@@ -299,12 +311,30 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
         for item in preview_items:
             key = item.get("condition") or "N/A"
             by_condition[key] = by_condition.get(key, 0) + 1
-        st.caption(f"Queue preview: {len(preview_items)} cases · " + " · ".join(f"{k}: {v}" for k, v in sorted(by_condition.items())))
-        with st.expander("Preview queue cases"):
+        st.caption(f"Plan preview: {len(preview_items)} cases · " + " · ".join(f"{k}: {v}" for k, v in sorted(by_condition.items())))
+        if coverage_type != "FULL_BENCHMARK":
+            st.info("This is a targeted benchmark subset/custom evaluation. Its aggregate result must not be presented as directly equivalent to a full benchmark run.")
+        with st.expander("Preview plan cases"):
             st.dataframe(preview_items, use_container_width=True, hide_index=True)
 
-    if st.button("Create Queue", type="primary", disabled=not bool(preview_items), key="collector_queue_create"):
+    if st.button("Save Test Plan & Create Queue", type="primary", disabled=not bool(preview_items), key="collector_queue_create"):
         queue_id = make_queue_id(product_slug=product_slug, phase=phase, collection_date=collection_date, path=paths.collection_queues)
+        plan = {
+            "plan_id": queue_id,
+            "plan_name": queue_name or queue_id,
+            "product_id": product_id,
+            "product": product_name,
+            "product_slug": product_slug,
+            "preset_id": preset["id"],
+            "coverage_type": coverage_type,
+            "criterion_ids": selected_ids,
+            "conditions": condition_filter,
+            "run_numbers": run_numbers,
+            "phase": phase,
+            "collection_date": collection_date,
+            "notes": notes,
+        }
+        upsert_test_plan(paths.test_plans, plan)
         queue = create_collection_queue(
             queue_id=queue_id,
             queue_name=queue_name,
@@ -318,6 +348,8 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
             notes=notes,
         )
         queue["project_id"] = active_project().get("project_id") if active_project() else None
+        queue["test_plan_id"] = queue_id
+        queue["coverage_type"] = coverage_type
         upsert_collection_queue(queue, paths.collection_queues)
         queue = reconcile_collection_queue(queue, raw_path=paths.raw_cases, sessions_path=paths.collection_sessions)
         upsert_collection_queue(queue, paths.collection_queues)
@@ -358,6 +390,8 @@ def _start_queue_case(queue: dict[str, Any], item: dict[str, Any], criteria: dic
         queue_id=queue["queue_id"],
     )
     session["project_id"] = queue.get("project_id")
+    session["test_plan_id"] = queue.get("test_plan_id")
+    session["coverage_type"] = queue.get("coverage_type", "CUSTOM")
     upsert_collection_session(session, paths.collection_sessions)
     update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="IN_PROGRESS", session_id=session["session_id"], path=paths.collection_queues)
     st.session_state["collector_active_session"] = session["session_id"]
@@ -437,22 +471,9 @@ def _persist_response_draft(session_id: str, step_index: int, response_key: str)
         return
 
 
-def _collector_api_key_input(case_id: str) -> str:
-    server_key = os.environ.get("DEEPSEEK_API_KEY", "")
-    try:
-        secret_key = st.secrets.get("DEEPSEEK_API_KEY", "")
-    except Exception:
-        secret_key = ""
-    server_key = server_key or secret_key
-    options = ["Demo / server Judge", "BYOK"] if server_key else ["BYOK"]
-    mode = st.radio("Judge access", options, horizontal=True, key=f"collector_judge_mode::{case_id}")
-    if mode == "Demo / server Judge":
-        return server_key
-    return st.text_input(
-        "DeepSeek API Key (session-only)",
-        type="password",
-        key=f"collector_judge_key::{case_id}",
-        help="Only needed for Send This Case to Judge. The key is not written to JSONL/CSV/logs.",
+def _collector_judge_profile(case_id: str):
+    return render_llm_profile_selector(
+        "judge", key_prefix=f"collector_judge::{case_id}"
     )
 
 
@@ -492,10 +513,10 @@ def _render_completed_session(criteria: dict[str, dict[str, Any]], session: dict
         if case_id in completed_case_ids(paths.judge_results):
             st.info("This case already has a successful Judge result in data/judge_results.jsonl.")
         else:
-            api_key = _collector_api_key_input(case_id)
+            llm_profile = _collector_judge_profile(case_id)
             if st.button("Send This Case to Judge", type="primary", key=f"collector_send_judge::{case_id}"):
-                if not api_key:
-                    st.error("Provide a DeepSeek API Key first, or judge later from Run Test.")
+                if not llm_profile:
+                    st.error("Configure a Dialogue Judge LLM first, or judge later from Run Test.")
                 else:
                     raw_case = get_raw_case(case_id, paths.raw_cases)
                     if raw_case is None:
@@ -503,7 +524,7 @@ def _render_completed_session(criteria: dict[str, dict[str, Any]], session: dict
                     else:
                         try:
                             with st.spinner("Running criterion-bound Judge..."):
-                                row = run_single_case(case=raw_case, criteria=criteria, api_key=api_key, persist=True, judge_path=paths.judge_results)
+                                row = run_single_case(case=raw_case, criteria=criteria, llm_profile=llm_profile, persist=True, judge_path=paths.judge_results, session_id=llm_session_id(), project_id=(active_project() or {}).get("project_id"))
                             _render_judge_result(row)
                         except Exception as exc:
                             st.error(str(exc))

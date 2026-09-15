@@ -1,30 +1,210 @@
-# CompanionGuard v0.6.0
+# CompanionGuard v0.7.0
 
-CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.6.0 upgrades the earlier single-workspace MVP into a project-scoped three-layer testing system while preserving the frozen CompanionGuard v4 dialogue benchmark and Judge logic.
+CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.7.0 preserves the frozen CompanionGuard v4 dialogue benchmark while separating product identity, test coverage and LLM provider choice into independent configuration layers.
 
 ## Platform model
 
-Each **Test Project / 测试项目** is an isolated evaluation batch with its own products, dialogue cases, screenshots, Judge results, human adjudication, Layer 2 observations, Layer 3 documentary evidence, reliability analysis and reports.
+Each **Test Project / 测试项目** is an isolated evaluation batch:
 
 ```text
 Test Project
 ├── Products
 ├── Layer 1 · Dialogue Behavioral Testing
+│   ├── Test Plan / Collection Queue
 │   ├── Data Collection
 │   ├── LLM Judge
 │   ├── Human Adjudication
 │   ├── Judge–Human Reliability
-│   └── Dialogue Results
+│   ├── Dialogue Results
+│   └── Dialogue Report
 ├── Layer 2 · Product Safeguard Checks
 ├── Layer 3 Lite · Public Compliance Evidence Audit
 └── Integrated Report
 ```
 
-Runtime records are isolated under:
+Runtime data is isolated under `data/projects/<project_id>/`. SMOKE/CALIBRATION/FORMAL share a project file set but remain explicitly phase-tagged; official benchmark metrics use `phase == FORMAL`. For cleaner experiments, use a separate project for UI smoke tests and formal evaluation.
+
+## Layer 1 · frozen dialogue structures
+
+The benchmark is driven by `criteria/*.json`; application code does not hard-code criterion-specific decisions.
+
+- **C0｜集中式基线**: consolidated L1–L4 → A4, then canonical L5 → A5.
+- **C1｜集中式压力**: identical L1–L4 → A4, then frozen `pressure_variant.L5` → A5.
+- **C2｜顺序多轮**: L1 → A1 → L2 → A2 → L3 → A3 → L4 → A4 → L5 → A5.
+- **MR**: R1 → A_R1 → R2 → A_R2.
+- **MC / PC**: single-turn prompt → A1.
+
+Four dialogue Judge templates remain unchanged: `core_l1_l5`, `hr02_crisis`, `mr_minor_relationship`, `single_turn_regulatory_content`.
+
+### Product selection and Test Plans
+
+A **Product** is only the object being tested. It no longer determines which criteria may run.
+
+A **Test Plan** independently specifies:
+
+- product;
+- criteria;
+- C0/C1/C2 selection where applicable;
+- run numbers;
+- phase;
+- coverage type.
+
+Coverage types:
+
+- `FULL_BENCHMARK`
+- `BENCHMARK_SUBSET`
+- `CUSTOM`
+
+A benchmark subset is a valid targeted evaluation, but its aggregate result must not be presented as directly equivalent to a full CompanionGuard benchmark run.
+
+`config/test_plan_presets.json` includes:
+
+- `COMPANIONGUARD_FULL`;
+- `COMPARATOR_SUBSET_V1` (the earlier comparator subset, now reusable for any product);
+- `CUSTOM`.
+
+Presets are starting points, not product restrictions.
+
+### Data Collector
+
+The researcher never edits JSON manually. The Collector controls case/turn alignment, fixed prompts, queue state, draft recovery, screenshot linkage and Judge-ready raw case creation. The researcher only sends prompts in the real external product and pastes verbatim replies back into CompanionGuard.
+
+Text copy is the primary response source. Screenshot evidence is optional and linked to the exact response turn. OCR is intentionally excluded from the MVP.
+
+## Four LLM roles, one provider infrastructure
+
+CompanionGuard now has **four independent LLM roles**:
+
+1. **Dialogue Judge** — criterion-bound classification of product dialogue.
+2. **Dialogue Report Writer** — prose report from deterministic Layer 1 report context.
+3. **Layer 3 Evidence Assistant** — extracts/suggests public documentary evidence status from supplied source text.
+4. **Integrated Report Writer** — prose report from deterministic cross-layer report context.
+
+They share one LLM provider abstraction, but they do **not** have to use the same provider or model. For example:
+
+```text
+Judge                  → DeepSeek
+Dialogue Report Writer → Claude
+Evidence Assistant     → Qwen
+Integrated Report      → another configured model
+```
+
+or all four may use one model.
+
+Supported adapter types in v0.7:
+
+- OpenAI-style Chat Completions (broad compatibility);
+- OpenAI Responses-compatible APIs;
+- Anthropic Messages API.
+
+Adding another vendor should require only a new adapter implementing the common JSON/text generation interface. Judge, Evidence and Report business logic must not branch on vendor names.
+
+### Judge is not an Agent and does not require a harness
+
+```text
+raw case
+→ criterion JSON
+→ fixed Judge template/schema
+→ configured Judge LLM
+→ JSON-schema validation
+→ CompanionGuard semantic validation
+→ judge_results.jsonl
+```
+
+Python owns routing, rules, schema/semantic validation, retry boundaries and persistence. The LLM performs semantic classification. No autonomous planning/tool-selection loop is used.
+
+Inspect/EvalScope/lm-evaluation-harness are therefore optional future integrations, not dependencies of the current Judge.
+
+### Server model and BYOK
+
+Every LLM role can use:
+
+- **CompanionGuard Server Model** — server-side role profile; the browser never receives the API key.
+- **BYOK** — user selects a supported provider adapter, base URL/model and provides a session-only key.
+
+BYOK keys are never written to project JSONL/CSV, `project.json`, usage logs or Git.
+
+Server-funded LLM calls have a lightweight operator guard:
+
+```text
+COMPANIONGUARD_SERVER_LLM_ENABLED
+COMPANIONGUARD_SERVER_LLM_DAILY_CALL_LIMIT
+COMPANIONGUARD_SERVER_LLM_SESSION_CALL_LIMIT
+```
+
+Usage logs contain role/provider/model/token metadata only, never secrets. Full user accounts/RBAC/billing remain intentionally deferred until a true multi-user public deployment.
+
+## Human adjudication and reliability
+
+Benchmark FORMAL mode preserves the frozen requirement of **100% human adjudication**. Custom workflows may use sampling views without changing benchmark semantics.
+
+Reliability reports:
+
+- Judge–Human Exact Agreement;
+- Cohen's κ over `FINDING / NO_FINDING / REVIEW`;
+- Finding Precision;
+- Finding Recall;
+- 3×3 confusion matrix.
+
+## Dialogue reporting
+
+Python computes all metrics and builds an authoritative structured report context. The optional Dialogue Report Writer only turns that context into prose.
+
+v0.7 intentionally ships only a minimal grounded reporting prompt. External high-quality writing/report skills are **not** bundled yet; they can later replace `prompts/reporting/dialogue_report.md` without modifying the Judge.
+
+## Layer 2 · Product Safeguard Checks
+
+Layer 2 evaluates observable product mechanisms, not dialogue. It uses the frozen 22 checks in `config/layer2_checks.json` and four product-evidence states:
+
+- `OBSERVED`
+- `NOT_OBSERVED`
+- `NOT_TRIGGERED`
+- `NOT_VERIFIABLE`
+
+The standardized nine-step product inspection path and screenshot evidence remain supported. Layer 2 does not output a compliance score.
+
+## Layer 3 Lite · Public Compliance Evidence Audit
+
+Layer 3 Lite uses six checks (`L3-01`–`L3-06`) and four documentary states:
+
+- `DOCUMENTED`
+- `PARTIALLY_DOCUMENTED`
+- `NOT_FOUND`
+- `NOT_PUBLICLY_VERIFIABLE`
+
+Current MVP flow:
+
+```text
+human-supplied official source text
+→ Evidence Assistant LLM
+→ evidence/status suggestion
+→ human final documentary status
+```
+
+The Evidence Assistant is not a dialogue Judge and human review remains authoritative.
+
+v0.7 adds a `SearchProvider` extension interface for future official-source retrieval, but the default search provider is explicitly disabled. Layer 3 therefore does **not** silently become a free-form web agent. A future search adapter should retrieve candidate official sources, then pass the retrieved source text through the existing Evidence Assistant + human review pipeline.
+
+## Integrated reporting
+
+The deterministic integrated report combines Layer 1 FORMAL results, reliability, Layer 2 observations and Layer 3 documentary evidence. The optional Integrated Report Writer receives only this structured context and writes prose.
+
+It must not:
+
+- recalculate metrics;
+- invent evidence;
+- collapse the three evidence layers;
+- create a 0–100 safety/compliance score;
+- make a formal legal compliance determination.
+
+The external writing skill/template research requested by the project owner is intentionally deferred; `prompts/reporting/integrated_report.md` is a minimal safe placeholder that can later be replaced independently.
+
+## Data layout
 
 ```text
 data/projects/<project_id>/
 ├── project.json
+├── test_plans.json
 ├── raw_cases.jsonl
 ├── collection_sessions.jsonl
 ├── collection_queues.jsonl
@@ -34,194 +214,29 @@ data/projects/<project_id>/
 ├── layer2_product_safeguards.jsonl
 ├── layer3_public_evidence.jsonl
 ├── evidence/
-│   ├── dialogue/
-│   ├── layer2/
-│   └── layer3/
 └── reports/
 ```
 
-`data/projects/` is runtime experimental data and is ignored by Git.
-
-## Layer 1 · Dialogue Behavioral Testing
-
-The frozen dialogue benchmark remains configuration-driven through `criteria/*.json`. The application does not hard-code criterion-specific decisions.
-
-Four Judge templates remain unchanged:
-
-- `core_l1_l5`
-- `hr02_crisis`
-- `mr_minor_relationship`
-- `single_turn_regulatory_content`
-
-Collection structures remain frozen:
-
-- **C0｜集中式基线**: consolidated L1–L4 → A4, then canonical L5 → A5.
-- **C1｜集中式压力**: same L1–L4 → A4, then frozen `pressure_variant.L5` → A5.
-- **C2｜顺序多轮**: L1 → A1 → L2 → A2 → L3 → A3 → L4 → A4 → L5 → A5.
-- **MR**: R1 → A_R1 → R2 → A_R2.
-- **MC / PC**: single-turn prompt → A1.
-
-Criteria prompt-set version remains `criteria/VERSION = 0.3.1`.
-
-### Data Collector
-
-The researcher never edits JSON manually. The Collector:
-
-1. knows the active Test Project and product;
-2. loads the fixed prompt from criterion configuration;
-3. shows the current case / condition / run / turn prominently;
-4. lets the researcher copy the prompt to a real external product;
-5. accepts the verbatim model response;
-6. optionally accepts turn-level screenshot evidence;
-7. stores and resumes in-progress drafts;
-8. advances with `Save & Copy Next`;
-9. supports a persistent Collection Queue and one-click `Next Case`;
-10. automatically builds a Judge-compatible raw case when complete.
-
-Text copy is the primary evidence path. OCR is intentionally not part of the MVP.
-
-### LLM Judge: what the Python Judge Engine actually is
-
-The Judge Engine is **not an agent** and does **not require an evaluation harness**. It is a deterministic Python orchestration pipeline:
-
-```text
-raw case
-  ↓
-load criterion JSON
-  ↓
-read judge_template
-  ↓
-select one of 4 fixed Judge system prompts + JSON schemas
-  ↓
-construct criterion-bound payload
-  ↓
-DeepSeek API call
-  ↓
-JSON-schema validation
-  ↓
-business / semantic validation
-  ↓
-judge_results.jsonl
-```
-
-The large model performs the semantic classification. Python controls routing, rule loading, validation, retries and persistence. This is intentionally simpler and more auditable than an agent architecture.
-
-A harness such as Inspect/EvalScope could later be used as an external execution framework, but it is unnecessary for the current CompanionGuard workflow because the project already has its own case format, criterion router, Judge schemas, validation and batch runner.
-
-### Demo and BYOK access
-
-When deployed as a Streamlit web service:
-
-- **Demo / server Judge**: `DEEPSEEK_API_KEY` is stored server-side in environment variables or Streamlit secrets. A web user clicks Judge, but never receives the key.
-- **BYOK**: the user enters their own key for the current Streamlit session. It is not written to JSONL, CSV, logs or Git.
-
-The current v0.6 interface is a web UI, not a public REST API. No FastAPI/auth service has been added. If programmatic third-party API access becomes necessary later, it should be a separate deployment step rather than changing the frozen Judge semantics.
-
-### Human Adjudication
-
-Benchmark Mode preserves the frozen v4 requirement of **100% human adjudication**. Custom Mode may expose full review, random sampling or criterion-stratified sampling views.
-
-Human review records:
-
-- auto label;
-- human label;
-- final label;
-- override reason;
-- review note.
-
-Official benchmark analysis uses `final_label`.
-
-### Reliability
-
-The dedicated Reliability page computes:
-
-- Judge–Human Exact Agreement;
-- Cohen's κ over `FINDING / NO_FINDING / REVIEW`;
-- Finding Precision;
-- Finding Recall;
-- 3×3 confusion matrix.
-
-## Layer 2 · Product Safeguard Checks
-
-Layer 2 evaluates **observable product mechanisms**, not model dialogue. It uses 22 frozen checks in `config/layer2_checks.json` and the four evidence states:
-
-- `OBSERVED`
-- `NOT_OBSERVED`
-- `NOT_TRIGGERED`
-- `NOT_VERIFIABLE`
-
-The page includes the standardized nine-step product inspection path and records product/version/platform metadata, status, evidence summary, notes and screenshot evidence.
-
-The 22 checks are:
-
-`REG-01`, `REG-02`, `MIN-01`–`MIN-06`, `ELD-01`–`ELD-03`, `CRI-01`, `CRI-02`, `AID-01`, `DEP-01`, `TIME-01`, `EXIT-01`, `EXIT-02`, `DATA-01`, `DATA-02`, `REDRESS-01`, `REDRESS-02`.
-
-Layer 2 does not generate a 0–100 compliance score.
-
-## Layer 3 Lite · Public Compliance Evidence Audit
-
-Layer 3 Lite evaluates **public documentary evidence** for six representative requirements in `config/layer3_checks.json`:
-
-- `L3-01` third-party provision of interaction data and conditions;
-- `L3-02` sensitive interaction data used for model training and separate consent;
-- `L3-03` under-14 personal information / guardian consent rules;
-- `L3-04` public crisis / self-harm response policy;
-- `L3-05` appeal / complaint / reporting process and feedback explanation;
-- `L3-06` public algorithm filing status.
-
-Documentary states are:
-
-- `DOCUMENTED`
-- `PARTIALLY_DOCUMENTED`
-- `NOT_FOUND`
-- `NOT_PUBLICLY_VERIFIABLE`
-
-The page supports manual evidence entry plus optional DeepSeek **evidence extraction assist**. That assist is not one of the four dialogue Judge templates and does not make the final determination. Human documentary status is authoritative.
-
-Benchmark Mode intends Layer 3 Lite for the three primary products rather than the broader Layer 2 sample.
-
-Layer 3 does not calculate a compliance rate.
-
-## Integrated Report
-
-The report module deterministically combines:
-
-- Layer 1 FORMAL dialogue results;
-- pressure and multi-turn gaps;
-- per-module and per-product dialogue summaries;
-- Judge–Human reliability;
-- Layer 2 Product Safeguard Matrix records;
-- Layer 3 Compliance Evidence Matrix records.
-
-It deliberately does **not** create a single 0–100 safety/compliance score or claim a formal legal compliance determination.
+Global server LLM usage metadata is stored under ignored runtime `data/` and contains no API keys.
 
 ## Project layout
 
 ```text
-CompanionGuard_v0.6.0/
-├── companionguard_judge/          # criterion-bound LLM Judge engine
-├── companionguard_app/
-│   ├── collector.py               # frozen collection-plan expansion
-│   ├── collector_storage.py       # queue/session/raw/evidence persistence
-│   ├── collector_ui.py
-│   ├── projects.py                # project-scoped data paths and manifests
-│   ├── audits.py                  # Layer 2/3 structured evidence persistence
-│   ├── reliability.py             # agreement/kappa/precision/recall
-│   ├── reporting.py               # deterministic integrated Markdown report
-│   ├── platform_ui.py             # project/layer/reliability/report pages
-│   ├── service.py                 # UI ↔ Judge orchestration
-│   ├── storage.py                 # Judge/adjudication/final result persistence
-│   └── ui.py                      # Layer 1 Judge/Review/Results
+CompanionGuard_v0.7.0/
+├── companionguard_llm/            # provider profiles/adapters/guard/search extension
+├── companionguard_judge/          # criterion-bound dialogue Judge
+├── companionguard_app/            # Streamlit/domain/application services
 ├── config/
 │   ├── collector.json
+│   ├── test_plan_presets.json
 │   ├── layer2_checks.json
 │   └── layer3_checks.json
-├── criteria/                      # frozen Dialogue rules and prompts
-├── data/                          # runtime data only
+├── criteria/
+├── prompts/reporting/             # replaceable report-writer prompts
+├── data/                           # runtime only; Git-ignored
 ├── docs/
 ├── tests/
 ├── streamlit_app.py
-├── judge_runner.py
 └── pyproject.toml
 ```
 
@@ -234,41 +249,30 @@ pip install -e .
 streamlit run streamlit_app.py
 ```
 
-For server-side Demo Judge:
+A server Judge profile may be configured with role-specific environment variables, e.g.:
 
 ```bash
-export DEEPSEEK_API_KEY="YOUR_SERVER_KEY"
+export COMPANIONGUARD_JUDGE_PROVIDER_TYPE="openai_responses"
+export COMPANIONGUARD_JUDGE_PROVIDER_NAME="DeepSeek"
+export COMPANIONGUARD_JUDGE_BASE_URL="https://api.deepseek.com"
+export COMPANIONGUARD_JUDGE_MODEL="deepseek-v4-pro"
+export COMPANIONGUARD_JUDGE_API_KEY="..."
 ```
 
-Never commit real API keys.
-
-## First use
-
-1. Open `Test Projects`.
-2. Create a project name / project ID.
-3. Select configured products and/or add custom products.
-4. Open `Layer 1 · Data Collection`.
-5. Build one or more product Collection Queues.
-6. Collect real replies and screenshots.
-7. Run Judge immediately per completed case or later from `Layer 1 · LLM Judge`.
-8. Complete `Layer 1 · Human Review`.
-9. Inspect `Layer 1 · Reliability` and `Dialogue Results`.
-10. Enter Layer 2 product observations.
-11. Enter Layer 3 public evidence.
-12. Download the `Integrated Report`.
+The Evidence and two Report Writer roles use the same naming pattern with `EVIDENCE`, `DIALOGUE_REPORT` and `INTEGRATED_REPORT`.
 
 ## Validation
 
 ```bash
 python -m pytest -q
-python judge_runner.py --input examples/sample_cases.jsonl --dry-run
+python judge_runner.py --input examples/sample_cases.jsonl --criteria-dir criteria --dry-run
 ```
 
-v0.6.0 validation in the build environment:
+v0.7.0 build validation:
 
 ```text
-31 tests passed, 20 subtests passed
+37 tests passed, 20 subtests passed
 Judge dry-run OK: 4 cases, 22 criteria loaded
 ```
 
-The build container does not include Streamlit, so browser-level UI smoke testing must be performed in a local/deployed environment after `pip install -e .`.
+The build container still does not provide a browser-level Streamlit environment, so final UI interaction smoke testing should be performed locally after `pip install -e .`.

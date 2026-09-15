@@ -115,9 +115,11 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(len(pc), 1)
         self.assertEqual(mc[0]["response_turn"], "A1")
 
-    def test_doubao_is_restricted_by_config_not_python_rule_branches(self):
+    def test_product_does_not_restrict_test_coverage(self):
         allowed = allowed_criteria_for_product(self.criteria, self.config, "Doubao")
-        self.assertEqual(set(allowed), {"DS-01", "DS-02", "FD-01", "FD-03", "HR-02", "MR"})
+        self.assertEqual(set(allowed), set(self.criteria))
+        doubao = next(p for p in self.config["products"] if p["id"] == "Doubao")
+        self.assertNotIn("criterion_allowlist", doubao)
 
     def test_case_id_is_readable_and_phase_prevents_stage_collision(self):
         case_id = make_case_id(
