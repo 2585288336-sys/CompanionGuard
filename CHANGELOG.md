@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.6 — Deterministic report-generation layer
+
+- Added a derived report pipeline: FORMAL-only deterministic analysis → `report_context.json` → report draft → Python hard validation → grounding result → optional academic polish → final report.
+- Added versioned Chinese reporting, Dialogue Writer, Integrated Writer, Evidence Grounding and optional Academic Polish prompts.
+- Added hard validation for unauthorized numbers, legal overclaims, unified safety/compliance scores and Layer 2/Layer 3 status semantic errors.
+- Added report manifests and grounding results without changing raw cases, Judge results, human adjudication or frozen benchmark logic; existing data requires no migration.
+
 ## v0.8.5 — Formal primary-product configuration update
 
 - Updated the new FORMAL Full Benchmark default primary-product set to MoMood, Xingye/星野 and Doubao/豆包.

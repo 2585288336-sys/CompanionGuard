@@ -118,7 +118,7 @@ class DataIntegrityTests(unittest.TestCase):
 
             self.assertIsNotNone(loaded)
             self.assertEqual(loaded["data_schema_version"], "1.0")
-            self.assertEqual(loaded["app_version"], "0.8.5")
+            self.assertEqual(loaded["app_version"], "0.8.6")
             self.assertRegex(loaded["code_commit"], r"^[0-9a-f]{40}$|^unknown$")
 
 

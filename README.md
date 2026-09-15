@@ -1,4 +1,4 @@
-# CompanionGuard v0.8.4
+# CompanionGuard v0.8.6
 
 CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.4 keeps the post-smoke-test workflow and Chinese-first UI refinement release, and adds read-only project portability checks. It preserves the frozen CompanionGuard v4 dialogue benchmark, criterion prompts, Judge schema and metric definitions while making collection, evidence inspection, Judge selection, human review and later data migration safer.
 
@@ -23,6 +23,8 @@ Test Project
 ```
 
 Runtime data is isolated under `data/projects/<project_id>/`. SMOKE/CALIBRATION/FORMAL share a project file set but remain explicitly phase-tagged; official benchmark metrics use `phase == FORMAL`. For cleaner experiments, use a separate project for UI smoke tests and formal evaluation.
+
+The report-generation layer is downstream-only. It reads existing project results, writes derived `report_context.json`, `draft_report.md`, `grounding_result.json`, `final_report.md` and `report_manifest.json` under the project `reports/` directory, and never rewrites raw cases, Judge results or human adjudication. A final report is published only after hard validation and grounding validation pass; no migration is required for existing projects.
 
 The current FORMAL Full Benchmark primary-product set is **MoMood、星野、豆包** — three consumer-facing AI products with anthropomorphic conversational or companionship features. Replika remains available for reading legacy project metadata and historical SMOKE/CALIBRATION data, but is not a default product for new FORMAL projects. Product identity remains separate from Test Plan coverage.
 

@@ -1,6 +1,6 @@
 # CompanionGuard v0.8 Architecture Notes
 
-v0.8 is a smoke-test-driven UX refinement over v0.7. v0.8.1 adds evidence visibility and collected-case Judge access. v0.8.2 adds automatic case-validity screening and frozen FORMAL human-adjudication policies. v0.8.3 refines the Chinese-first workflow UI and keeps the presentation changes separate from the frozen dialogue criteria, Judge semantics and metric definitions. v0.8.4 adds project portability metadata and read-only integrity checks without changing those experimental boundaries. v0.8.5 updates only the new FORMAL primary-product configuration.
+v0.8 is a smoke-test-driven UX refinement over v0.7. v0.8.1 adds evidence visibility and collected-case Judge access. v0.8.2 adds automatic case-validity screening and frozen FORMAL human-adjudication policies. v0.8.3 refines the Chinese-first workflow UI and keeps the presentation changes separate from the frozen dialogue criteria, Judge semantics and metric definitions. v0.8.4 adds project portability metadata and read-only integrity checks without changing those experimental boundaries. v0.8.5 updates only the new FORMAL primary-product configuration. v0.8.6 adds a downstream-only deterministic report-generation and validation layer.
 
 ## v0.8.3 presentation boundary
 
@@ -30,6 +30,10 @@ Each new project manifest records `data_schema_version`, `app_version` and the c
 ## FORMAL product boundary
 
 New FORMAL Full Benchmark projects default to MoMood, Xingye/星野 and Doubao/豆包. These are described as consumer-facing AI products with anthropomorphic conversational or companionship features. Replika is retained only as a legacy registry entry and remains readable through the product list stored in historical project manifests. Product identity remains independent from Test Plan coverage; `COMPARATOR_SUBSET_V1` is a generic reusable preset rather than a Doubao restriction.
+
+## Report-generation boundary
+
+Report context and report outputs are derived artifacts under a project’s `reports/` directory. The pipeline reads existing `final_results.csv`, Layer 2 and Layer 3 records, includes only `phase == FORMAL` rows in formal dialogue metrics, and never writes back to raw cases, Judge results or human adjudication. `report_context.json` is the reader-facing analytical source of truth; `report_manifest.json` records prompt, context and validation versions. Existing projects can be analyzed directly; no migration is required.
 
 ## Main workflow
 

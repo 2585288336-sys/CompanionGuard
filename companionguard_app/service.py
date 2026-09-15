@@ -167,3 +167,38 @@ def run_report_writer(
     text, usage = client.generate_text(system_prompt=system_prompt, payload={"report_context": report_context}, max_output_tokens=6000)
     _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage)
     return text.strip() + "\n"
+
+
+def run_grounding_validator(
+    *, draft_report: str, report_context: dict[str, Any], llm_profile: LLMProfile,
+    session_id: str | None = None, project_id: str | None = None,
+) -> dict[str, Any]:
+    if llm_profile.role != "grounding_validator":
+        raise ValueError("grounding validator requires the grounding_validator role")
+    schema = {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            "validator_version": {"type": "string"}, "overall_status": {"enum": ["PASS", "WARN", "FAIL"]},
+            "summary": {"type": "object"}, "issues": {"type": "array"}, "unsupported_numbers": {"type": "array"},
+            "cross_layer_errors": {"type": "array"}, "legal_overclaim_errors": {"type": "array"}, "final_decision": {"type": "string"},
+        },
+        "required": ["validator_version", "overall_status", "summary", "issues", "unsupported_numbers", "cross_layer_errors", "legal_overclaim_errors", "final_decision"],
+    }
+    system_prompt = (PROMPTS_DIR / "reporting" / "evidence_grounding.md").read_text(encoding="utf-8")
+    _before_call(llm_profile, session_id=session_id)
+    result, usage = make_client(llm_profile).generate_json(system_prompt=system_prompt, payload={"draft_report": draft_report, "report_context": report_context}, schema_name="evidence_grounding", schema=schema)
+    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage)
+    return result
+
+
+def run_academic_polish(
+    *, report_text: str, report_context: dict[str, Any], llm_profile: LLMProfile,
+    session_id: str | None = None, project_id: str | None = None,
+) -> str:
+    if llm_profile.role != "academic_polish":
+        raise ValueError("academic polish requires the academic_polish role")
+    system_prompt = (PROMPTS_DIR / "reporting" / "academic_polish.md").read_text(encoding="utf-8")
+    _before_call(llm_profile, session_id=session_id)
+    text, usage = make_client(llm_profile).generate_text(system_prompt=system_prompt, payload={"report_text": report_text, "report_context": report_context}, max_output_tokens=6000)
+    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage)
+    return text.strip() + "\n"

@@ -36,6 +36,12 @@ def build_integrated_report(
     adjudication_status = Counter(str(r.get("adjudication_status") or "REVIEWED") for r in formal_all)
     policy = project.get("human_adjudication_policy", "FULL_ADJUDICATION")
     rel = reliability_metrics(formal)
+    reliability_display = {
+        "exact_agreement": _pct(rel.get("exact_agreement")),
+        "finding_precision": _pct(rel.get("finding_precision")),
+        "finding_recall": _pct(rel.get("finding_recall")),
+        "cohen_kappa": "N/A" if rel.get("cohen_kappa") is None else f"{rel['cohen_kappa']:.3f}",
+    }
     l2 = load_jsonl(layer2_path)
     l3 = load_jsonl(layer3_path)
 
@@ -131,9 +137,46 @@ def build_dialogue_report_context(*, project: dict[str, Any], final_rows: list[d
         products[product] = {
             "formal_cases": len(rows),
             "finding_rate": finding_rate(rows),
+            "finding_rate_display": _pct(finding_rate(rows)),
             "coverage_types": coverage_types,
         }
+    modules = module_finding_rates(formal)
+    criteria = {}
+    for row in formal:
+        cid = row.get("criterion_id")
+        if not cid:
+            continue
+        bucket = criteria.setdefault(cid, {"criterion_name": row.get("criterion_name", ""), "module": row.get("module", ""), "formal_cases": 0, "finding_rate": None})
+        bucket["formal_cases"] += 1
+    for cid, bucket in criteria.items():
+        bucket["finding_rate"] = finding_rate([r for r in formal if r.get("criterion_id") == cid])
+    condition_rates = {}
+    for condition in ("C0", "C1", "C2"):
+        condition_rates[condition] = finding_rate([r for r in formal if r.get("condition") == condition])
+    pressure = robustness_gap(formal, "C1")
+    multi_turn = robustness_gap(formal, "C2")
+    representative = []
+    for row in formal:
+        if (row.get("analysis_label") or row.get("final_label")) == "FINDING":
+            representative.append({
+                "case_id": row.get("case_id"), "product": row.get("product"), "condition": row.get("condition"),
+                "criterion_id": row.get("criterion_id"), "final_label": "FINDING", "finding_type": row.get("matched_target_behaviors", ""),
+                "evidence_excerpt": row.get("evidence", ""), "why_representative": "deterministically selected first valid FINDING per available evidence",
+                "supported_aggregate": False,
+            })
+            if len(representative) >= 10:
+                break
+    validity = case_validity_counts(formal_all)
+    reliability_display = {
+        "exact_agreement": _pct(rel.get("exact_agreement")),
+        "finding_precision": _pct(rel.get("finding_precision")),
+        "finding_recall": _pct(rel.get("finding_recall")),
+        "cohen_kappa": "N/A" if rel.get("cohen_kappa") is None else f"{rel['cohen_kappa']:.3f}",
+    }
     return {
+        "meta": {"context_schema_version": "1.0", "report_type": "dialogue", "project_id": project.get("project_id"), "source_policy": "FORMAL-only metrics"},
+        "coverage": {"formal_case_count": len(formal), "adjudicated_formal_case_count": len(reviewed_formal), "phases_included": ["FORMAL"]},
+        "overall": {"macro_finding_rate": overall_macro_finding_rate(formal), "macro_finding_rate_display": _pct(overall_macro_finding_rate(formal)), "case_validity": validity},
         "project": {
             "project_id": project.get("project_id"),
             "project_name": project.get("project_name"),
@@ -148,11 +191,27 @@ def build_dialogue_report_context(*, project: dict[str, Any], final_rows: list[d
             "UNREVIEWED": adjudication_status.get("UNREVIEWED", 0),
         },
         "overall_macro_finding_rate": overall_macro_finding_rate(formal),
-        "pressure_gap_c1_minus_c0": robustness_gap(formal, "C1"),
-        "multi_turn_gap_c2_minus_c0": robustness_gap(formal, "C2"),
-        "module_finding_rates": module_finding_rates(formal),
+        "overall_macro_finding_rate_display": _pct(overall_macro_finding_rate(formal)),
+        "pressure_gap_c1_minus_c0": pressure,
+        "pressure_gap_c1_minus_c0_display": _pp(pressure),
+        "multi_turn_gap_c2_minus_c0": multi_turn,
+        "multi_turn_gap_c2_minus_c0_display": _pp(multi_turn),
+        "module_finding_rates": modules,
+        "module_finding_rates_display": {key: _pct(value) for key, value in modules.items()},
         "products": products,
         "reliability": rel,
+        "reliability_display": reliability_display,
+        "modules": modules,
+        "criteria": criteria,
+        "conditions": {key: {"finding_rate": value, "finding_rate_display": _pct(value), "small_sample": value is None} for key, value in condition_rates.items()},
+        "comparisons": {
+            "pressure": {"supported": pressure is not None, "raw_value": pressure, "display_value": _pp(pressure), "allowed_interpretation": ["C1与C0的正式风险发现率差异"] if pressure is not None else []},
+            "multi_turn": {"supported": multi_turn is not None, "raw_value": multi_turn, "display_value": _pp(multi_turn), "allowed_interpretation": ["C2与C0的正式风险发现率差异"] if multi_turn is not None else []},
+        },
+        "representative_findings": representative,
+        "layer2": {}, "layer3": {}, "cross_layer": {"aligned_patterns": [], "inconsistent_patterns": [], "unresolved_patterns": []},
+        "limitations": ["仅使用 phase == FORMAL 的有效案例计算正式对话指标。"],
+        "unresolved_questions": [], "verification_needed": [],
         "interpretation_boundary": {
             "no_single_safety_score": True,
             "no_formal_legal_compliance_determination": True,
@@ -168,10 +227,18 @@ def build_integrated_report_context(
     layer2_path: Path,
     layer3_path: Path,
 ) -> dict[str, Any]:
+    dialogue = build_dialogue_report_context(project=project, final_rows=final_rows)
+    layer2 = load_jsonl(layer2_path)
+    layer3 = load_jsonl(layer3_path)
+    dialogue["meta"]["report_type"] = "integrated"
+    dialogue["layer2"] = {"records": layer2, "record_count": len(layer2)}
+    dialogue["layer3"] = {"records": layer3, "record_count": len(layer3)}
+    dialogue["cross_layer"] = {"aligned_patterns": [], "inconsistent_patterns": [], "unresolved_patterns": [{"pattern_id": "XL-UNRESOLVED-001", "summary": "跨层模式需要基于完整的 Layer 2/Layer 3 记录和正式对话结果进一步人工解释。", "verification_needed": True}]}
     return {
-        "dialogue": build_dialogue_report_context(project=project, final_rows=final_rows),
-        "layer2_product_safeguards": load_jsonl(layer2_path),
-        "layer3_public_compliance_evidence": load_jsonl(layer3_path),
+        **dialogue,
+        "dialogue": dialogue,
+        "layer2_product_safeguards": layer2,
+        "layer3_public_compliance_evidence": layer3,
         "evidence_boundary": {
             "dialogue_evidence_cannot_substitute_product_evidence": True,
             "product_evidence_cannot_substitute_documentary_evidence": True,

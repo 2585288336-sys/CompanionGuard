@@ -11,7 +11,7 @@ from companionguard_llm.search import DisabledSearchProvider, SearchNotConfigure
 
 
 def test_four_llm_roles_are_independent_profiles():
-    assert set(ROLE_NAMES) == {"judge", "dialogue_report", "evidence", "integrated_report"}
+    assert set(ROLE_NAMES) == {"judge", "dialogue_report", "evidence", "integrated_report", "grounding_validator", "academic_polish"}
     profiles = [
         LLMProfile(role=role, provider_type="openai_chat_compatible", provider_name=f"P-{role}", model=f"M-{role}", api_key="secret", base_url="https://example.invalid/v1")
         for role in ROLE_NAMES

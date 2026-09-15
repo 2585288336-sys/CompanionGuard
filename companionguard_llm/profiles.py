@@ -8,6 +8,8 @@ ROLE_NAMES = {
     "dialogue_report": "Dialogue Report Writer",
     "evidence": "Layer 3 Evidence Assistant",
     "integrated_report": "Integrated Report Writer",
+    "grounding_validator": "Evidence Grounding Validator",
+    "academic_polish": "Academic Polish",
 }
 
 

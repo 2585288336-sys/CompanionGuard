@@ -14,6 +14,7 @@ from .collector import load_collector_config
 from .projects import create_project, delete_project, get_project, list_projects, project_paths, safe_slug
 from .reliability import LABELS, reliability_metrics
 from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
+from .report_pipeline import write_report_artifacts
 from .service import criteria_index, run_documentary_assist, run_report_writer
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
@@ -466,6 +467,11 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
     paths.reports.mkdir(parents=True, exist_ok=True)
     deterministic_path = paths.reports / "dialogue_report_deterministic.md"
     deterministic_path.write_text(deterministic, encoding="utf-8")
+    write_report_artifacts(
+        report_type="dialogue", project=project, final_rows=rows,
+        layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
+        reports_dir=paths.reports, draft_text=deterministic,
+    )
     st.download_button("下载确定性对话测试报告", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
     with st.expander("可选：LLM 撰写对话测试报告", expanded=False):
         st.caption("指标由 Python 计算；报告模型只能根据冻结的结构化上下文生成文字。")
@@ -474,8 +480,15 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
             try:
                 context = build_dialogue_report_context(project=project, final_rows=rows)
                 text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
-                (paths.reports / "dialogue_report_llm.md").write_text(text, encoding="utf-8")
-                st.session_state["dialogue_report_llm_text"] = text
+                result = write_report_artifacts(
+                    report_type="dialogue", project=project, final_rows=rows,
+                    layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
+                    reports_dir=paths.reports, draft_text=text,
+                )
+                if result["manifest"]["validation_status"] != "PASS":
+                    st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
+                else:
+                    st.session_state["dialogue_report_llm_text"] = result["paths"]["final"].read_text(encoding="utf-8")
             except Exception as e:
                 st.error(str(e))
         if st.session_state.get("dialogue_report_llm_text"):
@@ -496,6 +509,11 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     paths.reports.mkdir(parents=True, exist_ok=True)
     output = paths.reports / "integrated_report.md"
     output.write_text(report, encoding="utf-8")
+    write_report_artifacts(
+        report_type="integrated", project=project, final_rows=rows,
+        layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
+        reports_dir=paths.reports, draft_text=report,
+    )
     st.download_button("下载综合测试报告（.md）", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
     with st.expander("可选：LLM 撰写综合测试报告", expanded=False):
         st.caption("确定性结构化上下文是权威来源；该写作模型不改变其他 LLM 角色。")
@@ -504,8 +522,15 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
             try:
                 context = build_integrated_report_context(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
                 text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
-                (paths.reports / "integrated_report_llm.md").write_text(text, encoding="utf-8")
-                st.session_state["integrated_report_llm_text"] = text
+                result = write_report_artifacts(
+                    report_type="integrated", project=project, final_rows=rows,
+                    layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
+                    reports_dir=paths.reports, draft_text=text,
+                )
+                if result["manifest"]["validation_status"] != "PASS":
+                    st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
+                else:
+                    st.session_state["integrated_report_llm_text"] = result["paths"]["final"].read_text(encoding="utf-8")
             except Exception as e:
                 st.error(str(e))
         if st.session_state.get("integrated_report_llm_text"):
