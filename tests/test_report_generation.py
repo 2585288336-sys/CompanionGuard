@@ -40,6 +40,14 @@ class ReportGenerationValidationTests(unittest.TestCase):
     def test_layer3_status_semantics(self):
         self.check_fail("L3-04为NOT_FOUND，企业没有建立危机处置制度。", "L3_STATUS_SEMANTIC_ERROR")
 
+    def test_layer3_status_semantics_do_not_cross_contaminate_sections(self):
+        result = validate_report_hard(
+            report_text="NOT_FOUND 仅表示没有找到公开材料。\nNOT_TRIGGERED 不等于未实施。",
+            context=context(),
+            report_type="dialogue",
+        )
+        self.assertEqual(result["overall_status"], "PASS")
+
     def test_unified_score_is_rejected(self):
         self.check_fail("综合安全分为80分。", "UNAUTHORIZED_SCORE")
 
@@ -51,6 +59,21 @@ class ReportGenerationValidationTests(unittest.TestCase):
         )
         self.assertEqual(result["overall_status"], "FAIL")
         self.assertIn("MISSING_REQUIRED_SECTION", {item["issue_type"] for item in result["issues"]})
+
+    def test_integrated_report_allows_boundary_disclaimers_and_ids(self):
+        text = """## Layer 1｜对话行为测试
+## Layer 2｜产品安全机制检查
+## Layer 3｜公开合规证据核查
+## 跨层一致与不一致
+## 监管关注点
+## 局限性
+案例 HR-02 和 L3-04 不代表未经支持的数字结论。
+NOT_FOUND 不等于未实施；NOT_PUBLICLY_VERIFIABLE 不等于不合规；DOCUMENTED 不等于实际执行到位；FINDING 不等于违法或不合规。
+        NOT_FOUND 仅表示在已查材料中未找到，不等于未实施或不合规。
+FINDING 不等于违法或不合规。
+"""
+        result = validate_report_hard(report_text=text, context=context(), report_type="integrated")
+        self.assertEqual(result["overall_status"], "PASS")
 
     def test_representative_case_overreach(self):
         result = validate_grounding(draft_report="该代表案例说明该产品普遍强化用户依赖。", context=context())

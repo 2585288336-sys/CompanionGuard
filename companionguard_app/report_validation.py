@@ -12,6 +12,11 @@ FORBIDDEN_PHRASES = {
 L2_BAD = ("功能不存在", "机制失效")
 L3_BAD = ("未实施", "没有建立", "未履行义务")
 
+LEGAL_BOUNDARY_DISCLAIMERS = (
+    "本报告不生成统一安全分或合规分，也不作出正式法律合规结论。",
+    "NOT_FOUND 不等于未实施；NOT_PUBLICLY_VERIFIABLE 不等于不合规；DOCUMENTED 不等于实际执行到位；FINDING 不等于违法或不合规。",
+)
+
 INTEGRATED_REQUIRED_SECTIONS = (
     ("LAYER_1_ANALYSIS", ("Layer 1", "对话行为测试")),
     ("LAYER_2_ANALYSIS", ("Layer 2", "产品安全机制检查")),
@@ -43,6 +48,35 @@ def _allowed_numbers(context: dict[str, Any]) -> set[str]:
     return values
 
 
+def _report_numeric_literals(report_text: str) -> list[str]:
+    """Return report numbers while ignoring headings and identifier tokens."""
+    lines = []
+    for line in report_text.splitlines():
+        # Section numbering such as "2.1" is structure, not an analytical claim.
+        if re.match(r"^\s*(?:#{1,6}\s*)?\d+(?:\.\d+)*\s+", line):
+            continue
+        lines.append(line)
+    text = "\n".join(lines)
+    # IDs such as HR-02, L3-04, XL-CRISIS-001 and criterion/module keys are
+    # identifiers, not numeric claims that need to appear in report_context.
+    text = re.sub(r"\b[A-Za-z][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+\b", "", text)
+    return re.findall(r"(?<![A-Za-z0-9_.-])\d+(?:\.\d+)?(?:%|个百分点| pp)?(?![A-Za-z0-9_.-])", text)
+
+
+def _claim_text_without_boundary_disclaimers(report_text: str) -> str:
+    cleaned = report_text
+    for disclaimer in LEGAL_BOUNDARY_DISCLAIMERS:
+        cleaned = cleaned.replace(disclaimer, "")
+    # Writers may add a short qualifier before the same boundary statement,
+    # e.g. "NOT_FOUND 仅表示未找到，不等于未实施或不合规".  Remove only
+    # these explicit non-inference clauses; substantive legal claims remain
+    # subject to the forbidden-phrase checks below.
+    cleaned = re.sub(r"NOT_FOUND[^。\n]*不等于[^。\n]*。", "", cleaned)
+    cleaned = re.sub(r"FINDING[^。\n]*不等于[^。\n]*。", "", cleaned)
+    cleaned = re.sub(r"本报告不生成[^。\n]*安全分[^。\n]*不作(?:出)?正式法律合规(?:结论|判定)。", "", cleaned)
+    return cleaned
+
+
 def validate_report_hard(*, report_text: str, context: dict[str, Any], report_type: str, manifest: dict[str, Any] | None = None) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     context_errors = validate_context_shape(context)
@@ -67,24 +101,25 @@ def validate_report_hard(*, report_text: str, context: dict[str, Any], report_ty
 
     allowed = _allowed_numbers(context)
     numeric_text = re.sub(r"Layer\s+[123]|0[–-]100", "", report_text)
-    for literal in re.findall(r"(?<![A-Za-z])\d+(?:\.\d+)?(?:%|个百分点| pp)?", numeric_text):
+    for literal in _report_numeric_literals(numeric_text):
         if literal not in allowed:
             issues.append({"issue_type": "NUMBER_MISMATCH", "value": literal, "reason": "number is not present in report_context"})
     if re.search(r"(?:增加|减少|高于|低于)\s*\d+(?:\.\d+)?\s*个百分点", report_text):
         comparison_text = " ".join(_context_strings(context.get("comparisons", {})))
         if "个百分点" not in comparison_text:
             issues.append({"issue_type": "UNAUTHORIZED_CALCULATION", "reason": "comparison gap was not supplied as a display field in report_context"})
+    claim_text = _claim_text_without_boundary_disclaimers(report_text)
     for issue_type, phrases in FORBIDDEN_PHRASES.items():
         for phrase in phrases:
-            if phrase in report_text:
+            if phrase in claim_text:
                 issues.append({"issue_type": issue_type, "value": phrase, "reason": "forbidden legal or unified-score claim"})
-    if "NOT_FOUND" in report_text and any(p in report_text for p in L3_BAD):
+    if re.search(r"NOT_FOUND[^。\n]*(?:未实施|没有建立|未履行义务)", claim_text):
         issues.append({"issue_type": "L3_STATUS_SEMANTIC_ERROR", "reason": "NOT_FOUND is not evidence that a duty was not implemented"})
-    if "NOT_PUBLICLY_VERIFIABLE" in report_text and any(p in report_text for p in ("不合规", "未实施")):
+    if re.search(r"NOT_PUBLICLY_VERIFIABLE[^。\n]*(?:不合规|未实施)", claim_text):
         issues.append({"issue_type": "L3_STATUS_SEMANTIC_ERROR", "reason": "public non-verifiability is not noncompliance"})
-    if "NOT_OBSERVED" in report_text and any(p in report_text for p in L2_BAD):
+    if re.search(r"NOT_OBSERVED[^。\n]*(?:功能不存在|机制失效)", claim_text):
         issues.append({"issue_type": "L2_STATUS_SEMANTIC_ERROR", "reason": "NOT_OBSERVED is not proof that a feature does not exist"})
-    if "FINDING" in report_text and any(p in report_text for p in ("不合规", "违法", "违规")):
+    if re.search(r"FINDING[^。\n]*(?:不合规|违法|违规)", claim_text):
         issues.append({"issue_type": "LEGAL_OVERCLAIM", "reason": "Finding is not a legal determination"})
     status = "FAIL" if issues else "PASS"
-    return {"validator_version": "Python Hard Validation v1.0", "overall_status": status, "issues": issues, "summary": {"issue_count": len(issues), "numbers_checked": len(re.findall(r"(?<![A-Za-z])\d+(?:\.\d+)?(?:%|个百分点| pp)?", numeric_text))}}
+    return {"validator_version": "Python Hard Validation v1.0", "overall_status": status, "issues": issues, "summary": {"issue_count": len(issues), "numbers_checked": len(_report_numeric_literals(numeric_text))}}
