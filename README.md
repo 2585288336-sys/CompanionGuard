@@ -1,6 +1,6 @@
-# CompanionGuard v0.8.0
+# CompanionGuard v0.8.1
 
-CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.0 is the post-smoke-test UX and experiment-execution release. It preserves the frozen CompanionGuard v4 dialogue benchmark while adding granular Test Plans, Chinese-first bilingual UI, structured Judge presentation, raw-data inspection and safer project/workflow controls.
+CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.1 is the post-smoke-test usability release. It preserves the frozen CompanionGuard v4 dialogue benchmark while adding screenshot previews, collected-case single Judge access and a separate case-validity layer.
 
 ## Platform model
 
@@ -35,6 +35,14 @@ Runtime data is isolated under `data/projects/<project_id>/`. SMOKE/CALIBRATION/
 - **Workflow navigation:** persistent Previous/Next controls and active-project exit make the next step explicit without forcing a rigid wizard.
 - **Save-first-click fix:** response draft persistence no longer uses a textarea blur callback that could consume the first Save click; screenshot evidence remains optional.
 - **Formal-report isolation:** integrated report reliability now uses FORMAL adjudicated cases only, so SMOKE agreement/κ cannot appear beside zero FORMAL cases.
+
+## v0.8.1 post-smoke-test fixes
+
+- **Screenshot previews:** Data Explorer renders linked dialogue screenshots inline, with download controls and a clear missing-file warning; stored evidence paths remain auditable.
+- **Collected-case Judge:** the single-case Judge now defaults to selecting a completed case from the active project's `raw_cases.jsonl`. Manual / Ad-hoc input remains available as a secondary mode.
+- **Separate Case Validity:** Human Review records `VALID`, `INVALID`, or `REVIEW` independently from the frozen `FINDING`, `NO_FINDING`, and `REVIEW` risk labels.
+- **Metric exclusion:** only `FORMAL` + `VALID` cases enter dialogue risk metrics and Judge–Human reliability. INVALID/REVIEW cases remain in final results and audit views.
+- **Smoke data cleanup:** the v0.8 smoke-test project data is disposable runtime data and is not part of the v0.8.1 code release.
 
 ## Layer 1 · frozen dialogue structures
 
@@ -159,6 +167,8 @@ Reliability reports:
 - Finding Recall;
 - 3×3 confusion matrix.
 
+Case validity is a separate human review dimension. `VALID` means the collected case is suitable for risk analysis; `INVALID` covers off-topic, contaminated, incomplete or otherwise unusable cases; `REVIEW` means validity is unresolved. Validity never changes the frozen risk label and only `FORMAL` + `VALID` records enter official metrics. INVALID and REVIEW records remain available for audit.
+
 ## Dialogue reporting
 
 Python computes all metrics and builds an authoritative structured report context. The optional Dialogue Report Writer only turns that context into prose.
@@ -229,6 +239,8 @@ data/projects/<project_id>/
 ├── evidence/
 └── reports/
 ```
+
+`human_adjudication.csv` and `final_results.csv` also carry `case_validity`, `validity_reason`, and `validity_note`. A missing validity value in a legacy adjudication is shown as `REVIEW` when materialized into final results.
 
 Global server LLM usage metadata is stored under ignored runtime `data/` and contains no API keys.
 

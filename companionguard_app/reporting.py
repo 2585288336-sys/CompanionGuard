@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .audits import load_jsonl
-from .metrics import finding_rate, module_finding_rates, overall_macro_finding_rate, robustness_gap
+from .metrics import case_validity_counts, finding_rate, module_finding_rates, overall_macro_finding_rate, robustness_gap, valid_case_rows
 from .reliability import reliability_metrics
 
 
@@ -28,7 +28,9 @@ def build_integrated_report(
     layer2_path: Path,
     layer3_path: Path,
 ) -> str:
-    formal = [r for r in final_rows if r.get("phase") == "FORMAL"]
+    formal_all = [r for r in final_rows if r.get("phase") == "FORMAL"]
+    formal = valid_case_rows(formal_all)
+    validity = case_validity_counts(formal_all)
     rel = reliability_metrics(formal)
     l2 = load_jsonl(layer2_path)
     l3 = load_jsonl(layer3_path)
@@ -44,6 +46,8 @@ def build_integrated_report(
         "## Layer 1｜对话行为测试 / Dialogue Behavioral Testing",
         "",
         f"- Adjudicated FORMAL cases: {len(formal)}",
+        f"- Case Validity: VALID {validity['VALID']}; INVALID {validity['INVALID']}; REVIEW {validity['REVIEW']}",
+        f"- FORMAL cases excluded by Case Validity: {validity['INVALID'] + validity['REVIEW']} (INVALID {validity['INVALID']}, REVIEW {validity['REVIEW']})",
         f"- Overall Macro Finding Rate: {_pct(overall_macro_finding_rate(formal))}",
         f"- Pressure condition gap (C1−C0): {_pp(robustness_gap(formal, 'C1'))}",
         f"- Multi-turn condition gap (C2−C0): {_pp(robustness_gap(formal, 'C2'))}",
@@ -106,7 +110,8 @@ def build_integrated_report(
 
 
 def build_dialogue_report_context(*, project: dict[str, Any], final_rows: list[dict[str, Any]]) -> dict[str, Any]:
-    formal = [r for r in final_rows if r.get("phase") == "FORMAL"]
+    formal_all = [r for r in final_rows if r.get("phase") == "FORMAL"]
+    formal = valid_case_rows(formal_all)
     rel = reliability_metrics(formal)
     product_names = [p.get("label") or p.get("name") or p.get("id", "") for p in project.get("products", [])]
     products: dict[str, Any] = {}
@@ -125,6 +130,7 @@ def build_dialogue_report_context(*, project: dict[str, Any], final_rows: list[d
             "mode": project.get("mode"),
         },
         "formal_case_count": len(formal),
+        "formal_case_validity": case_validity_counts(formal_all),
         "overall_macro_finding_rate": overall_macro_finding_rate(formal),
         "pressure_gap_c1_minus_c0": robustness_gap(formal, "C1"),
         "multi_turn_gap_c2_minus_c0": robustness_gap(formal, "C2"),
@@ -164,6 +170,8 @@ def build_dialogue_report(project: dict[str, Any], final_rows: list[dict[str, An
         f"# CompanionGuard Dialogue Report — {project.get('project_name', project.get('project_id'))}",
         "",
         f"- FORMAL cases: {context['formal_case_count']}",
+        f"- Case Validity: VALID {context['formal_case_validity']['VALID']}; INVALID {context['formal_case_validity']['INVALID']}; REVIEW {context['formal_case_validity']['REVIEW']}",
+        f"- FORMAL cases excluded by Case Validity: {sum(context['formal_case_validity'][key] for key in ('INVALID', 'REVIEW'))} (INVALID {context['formal_case_validity']['INVALID']}, REVIEW {context['formal_case_validity']['REVIEW']})",
         f"- Overall Macro Finding Rate: {_pct(context['overall_macro_finding_rate'])}",
         f"- Pressure condition gap (C1−C0): {_pp(context['pressure_gap_c1_minus_c0'])}",
         f"- Multi-turn condition gap (C2−C0): {_pp(context['multi_turn_gap_c2_minus_c0'])}",

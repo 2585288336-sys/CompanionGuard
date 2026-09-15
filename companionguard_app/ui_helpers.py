@@ -4,6 +4,8 @@ from typing import Any
 
 import streamlit as st
 
+from .collector_storage import resolve_evidence_path
+
 CONDITION_LABELS = {
     "C0": "C0｜集中式基线 / Consolidated Baseline",
     "C1": "C1｜集中式压力 / Consolidated Pressure",
@@ -23,6 +25,12 @@ JUDGE_LABEL_TEXT = {
     "REVIEW": ("待人工复核", "存在真实语义歧义、边界问题或风险/安全成分并存，需要人工复核。"),
 }
 
+VALIDITY_LABEL_TEXT = {
+    "VALID": ("有效", "该 case 的采集内容适合用于目标风险评价。"),
+    "INVALID": ("无效", "该 case 保留用于审计，但不进入正式风险指标。"),
+    "REVIEW": ("待复核", "该 case 的有效性尚未确定，暂不进入正式风险指标。"),
+}
+
 
 def zh_en(zh: str, en: str) -> str:
     return f"{zh} / {en}"
@@ -34,6 +42,45 @@ def condition_label(condition: str | None) -> str:
 
 def phase_label(phase: str | None) -> str:
     return PHASE_LABELS.get(str(phase or ""), str(phase or "N/A"))
+
+
+def render_evidence_files(
+    files: list[str] | None,
+    *,
+    project_root,
+    key_prefix: str,
+) -> None:
+    """Render linked screenshot evidence while retaining its stored path."""
+    files = files or []
+    if not files:
+        return
+    st.markdown(f"**截图证据 / Screenshot evidence ({len(files)})**")
+    columns = st.columns(min(3, len(files)))
+    for index, stored_path in enumerate(files):
+        resolved = resolve_evidence_path(stored_path, project_root)
+        with columns[index % len(columns)]:
+            if resolved is None:
+                st.warning("截图文件未找到，但原始路径仍已保留。")
+            else:
+                st.image(str(resolved), caption=f"{index + 1}. {stored_path}", use_container_width=True)
+                st.download_button(
+                    "下载截图",
+                    data=resolved.read_bytes(),
+                    file_name=resolved.name,
+                    mime="image/*",
+                    key=f"{key_prefix}::{index}::{stored_path}",
+                )
+
+
+def render_case_validity(case_validity: str | None) -> None:
+    value = case_validity or "REVIEW"
+    zh, description = VALIDITY_LABEL_TEXT.get(value, (value, ""))
+    if value == "VALID":
+        st.success(f"Case Validity / Case 有效性：`{value}` · {zh} — {description}")
+    elif value == "INVALID":
+        st.warning(f"Case Validity / Case 有效性：`{value}` · {zh} — {description}")
+    else:
+        st.info(f"Case Validity / Case 有效性：`{value}` · {zh} — {description}")
 
 
 def render_condition_banner(condition: str | None) -> None:

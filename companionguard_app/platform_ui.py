@@ -17,7 +17,8 @@ from .service import run_documentary_assist, run_report_writer
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
 from .collector_storage import load_raw_cases
-from .ui_helpers import condition_label, phase_label, render_judge_result
+from .metrics import case_validity_counts, valid_case_rows
+from .ui_helpers import condition_label, phase_label, render_case_validity, render_evidence_files, render_judge_result
 
 
 def active_project_id() -> str | None:
@@ -149,16 +150,24 @@ def data_explorer_page() -> None:
         st.info("当前项目还没有 COMPLETE raw case。")
         return
 
+    adjudications = {r.get("case_id"): r for r in load_adjudications(paths.adjudication)}
+    judge_results = load_judge_results(paths.judge_results)
     table = []
     for case in cases:
+        case_id = case.get("case_id")
+        evidence_count = sum(len(step.get("evidence_files") or []) for step in (case.get("collection_trace") or []))
+        judge_status = "完成" if any(r.get("case_id") == case_id and r.get("status") == "ok" for r in judge_results) else "未完成"
         table.append({
-            "case_id": case.get("case_id"),
+            "case_id": case_id,
             "product": case.get("product"),
             "criterion": case.get("criterion_id"),
             "scenario": (case.get("metadata") or {}).get("scenario_id") or case.get("scenario_id"),
             "condition": condition_label(case.get("condition")),
             "phase": phase_label(case.get("phase") or (case.get("metadata") or {}).get("phase")),
             "run": (case.get("metadata") or {}).get("run_number") or case.get("run_number"),
+            "screenshots": evidence_count,
+            "judge": judge_status,
+            "case_validity": adjudications.get(case_id, {}).get("case_validity", "REVIEW"),
         })
     st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
     case_id = st.selectbox("选择 Case / Select case", [c.get("case_id") for c in cases])
@@ -176,7 +185,7 @@ def data_explorer_page() -> None:
                 st.code(step.get("response", ""), language=None)
                 files = step.get("evidence_files") or []
                 if files:
-                    st.caption("截图证据 / Evidence: " + ", ".join(files))
+                    render_evidence_files(files, project_root=paths.root, key_prefix=f"data-explorer::{case_id}::{step.get('response_turn')}")
                 st.divider()
         else:
             for msg in case.get("conversation") or []:
@@ -193,9 +202,9 @@ def data_explorer_page() -> None:
             render_judge_result(judge_rows[-1], compact=True)
         else:
             st.info("该 case 尚未完成 LLM Judge。")
-        adjudications = {r.get("case_id"): r for r in load_adjudications(paths.adjudication)}
         if case_id in adjudications:
             st.markdown("#### 人工复核 / Human Adjudication")
+            render_case_validity(adjudications[case_id].get("case_validity"))
             st.json(adjudications[case_id])
 
 
@@ -323,7 +332,11 @@ def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
         return
     phases = sorted({r.get("phase", "") for r in rows if r.get("phase")})
     phase = st.multiselect("Phase", phases, default=phases)
-    filtered = [r for r in rows if not phase or r.get("phase") in phase]
+    filtered_all = [r for r in rows if not phase or r.get("phase") in phase]
+    filtered = valid_case_rows(filtered_all)
+    validity = case_validity_counts(filtered_all)
+    if validity["INVALID"] or validity["REVIEW"]:
+        st.info(f"Case Validity 筛选：VALID {validity['VALID']}；INVALID {validity['INVALID']}；REVIEW {validity['REVIEW']}。后两类不进入一致性指标。")
     result = reliability_metrics(filtered)
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Cases compared", result["n"])

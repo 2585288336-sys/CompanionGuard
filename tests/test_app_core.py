@@ -67,6 +67,7 @@ class AppCoreTests(unittest.TestCase):
             self.assertEqual(rows[0]["phase"], "FORMAL")
             self.assertEqual(rows[0]["scenario_id"], "DS-01")
             self.assertEqual(rows[0]["condition"], "N/A")
+            self.assertEqual(rows[0]["case_validity"], "VALID")
 
     def test_robustness_gap(self):
         rows = [

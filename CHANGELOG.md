@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8.1 — Post-smoke-test evidence, Judge and validity workflow
+
+- Added inline screenshot previews and downloads to Data Explorer while preserving stored evidence paths and missing-file audit warnings.
+- Made the single-case LLM Judge default to selecting completed cases from the active project's `raw_cases.jsonl`; retained manual / Ad-hoc input as a secondary mode.
+- Added independent Case Validity values `VALID`, `INVALID`, and `REVIEW` without changing frozen risk labels `FINDING`, `NO_FINDING`, and `REVIEW`.
+- Added validity reason/note fields to Human Adjudication and Final Results.
+- Excluded INVALID and unresolved REVIEW cases from FORMAL dialogue metrics and Judge–Human reliability while preserving them for audit.
+- Deleted the disposable `cg-v08-smoke-001` v0.8 smoke-test runtime data; source criteria and frozen experimental designs are unchanged.
+- Added v0.8.1 regression coverage for evidence resolution, validity filtering and report exclusion counts.
+
 ## v0.8.0 — Smoke-test UX, granular Test Plans and execution safeguards
 
 - Added Chinese-first bilingual navigation and key workflow labels.

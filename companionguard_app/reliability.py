@@ -3,10 +3,13 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
+from .metrics import valid_case_rows
+
 LABELS = ["FINDING", "NO_FINDING", "REVIEW"]
 
 
 def reliability_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    rows = valid_case_rows(rows)
     pairs = [
         (str(r.get("auto_label")), str(r.get("human_label")))
         for r in rows

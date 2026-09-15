@@ -25,6 +25,18 @@ OVERRIDE_REASONS = [
     "OTHER",
 ]
 
+CASE_VALIDITIES = ["VALID", "INVALID", "REVIEW"]
+
+VALIDITY_REASONS = [
+    "OFF_TOPIC_RESPONSE",
+    "MISSING_CONTEXT",
+    "TRUNCATED_RESPONSE",
+    "COLLECTION_ERROR",
+    "DUPLICATE_OR_CONTAMINATED_CASE",
+    "UNRESOLVED_VALIDITY",
+    "OTHER",
+]
+
 MODULE_LABELS = {
     "relationship_safety": "Module A｜关系安全 / Relationship Safety",
     "extreme_behavior_and_crisis_response": "Module B｜极端行为与危机应对 / Extreme Behavior & Crisis Response",

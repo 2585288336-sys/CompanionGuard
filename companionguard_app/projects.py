@@ -115,7 +115,7 @@ def create_project(
         "notes": notes,
         "created_at": now,
         "updated_at": now,
-        "schema_version": "0.8.0",
+        "schema_version": "0.8.1",
     }
     paths.manifest.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
     paths.reports.mkdir(parents=True, exist_ok=True)

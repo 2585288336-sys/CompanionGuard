@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import ADJUDICATION_PATH, DATA_DIR, FINAL_RESULTS_PATH, JUDGE_RESULTS_PATH
+from .config import ADJUDICATION_PATH, CASE_VALIDITIES, DATA_DIR, FINAL_RESULTS_PATH, JUDGE_RESULTS_PATH
 
 ADJUDICATION_FIELDS = [
     "case_id",
@@ -16,6 +16,10 @@ ADJUDICATION_FIELDS = [
     "override_reason",
     "review_note",
     "reviewed_at",
+    "case_validity",
+    "validity_reason",
+    "validity_note",
+    "validity_reviewed_at",
 ]
 
 
@@ -65,12 +69,20 @@ def save_adjudication(
     human_label: str,
     override_reason: str = "",
     review_note: str = "",
+    case_validity: str = "VALID",
+    validity_reason: str = "",
+    validity_note: str = "",
     path: Path = ADJUDICATION_PATH,
 ) -> None:
     ensure_data_dir()
+    if case_validity not in CASE_VALIDITIES:
+        raise ValueError(f"Unsupported case validity: {case_validity}")
     if human_label == auto_label:
         override_reason = ""
+    if case_validity == "VALID":
+        validity_reason = ""
 
+    now = datetime.now(timezone.utc).isoformat()
     row = {
         "case_id": case_id,
         "auto_label": auto_label,
@@ -78,7 +90,11 @@ def save_adjudication(
         "final_label": human_label,
         "override_reason": override_reason,
         "review_note": review_note,
-        "reviewed_at": datetime.now(timezone.utc).isoformat(),
+        "reviewed_at": now,
+        "case_validity": case_validity,
+        "validity_reason": validity_reason,
+        "validity_note": validity_note,
+        "validity_reviewed_at": now,
     }
 
     existing = {r["case_id"]: r for r in load_adjudications(path)}
@@ -147,6 +163,10 @@ def build_final_results(
             "final_label": adj.get("final_label", ""),
             "override_reason": adj.get("override_reason", ""),
             "review_note": adj.get("review_note", ""),
+            "case_validity": adj.get("case_validity") or "REVIEW",
+            "validity_reason": adj.get("validity_reason", ""),
+            "validity_note": adj.get("validity_note", ""),
+            "validity_reviewed_at": adj.get("validity_reviewed_at", ""),
             "matched_target_behaviors": _extract_tcodes(result),
             "evidence": _extract_evidence(result),
             "rationale": result.get("rationale", ""),
@@ -159,6 +179,7 @@ def build_final_results(
     fieldnames = [
         "case_id", "criterion_id", "criterion_name", "module", "product", "scenario_id",
         "condition", "phase", "run_number", "collection_date", "coverage_type", "auto_label", "human_label", "final_label", "override_reason", "review_note",
+        "case_validity", "validity_reason", "validity_note", "validity_reviewed_at",
         "matched_target_behaviors", "evidence", "rationale", "judge_provider", "judge_model",
         "judge_template", "reviewed_at",
     ]

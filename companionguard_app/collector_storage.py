@@ -160,6 +160,25 @@ def load_raw_cases(path: Path = RAW_CASES_PATH) -> list[dict[str, Any]]:
     return _read_jsonl(path)
 
 
+def resolve_evidence_path(path: str | Path, project_root: Path) -> Path | None:
+    """Resolve a stored evidence path without leaving the project/source roots."""
+    if not path:
+        return None
+    raw = Path(str(path))
+    candidates = [raw] if raw.is_absolute() else [project_root / raw, PROJECT_ROOT / raw]
+    allowed_roots = [project_root.resolve(), PROJECT_ROOT.resolve()]
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if not resolved.is_file():
+            continue
+        if any(resolved == root or root in resolved.parents for root in allowed_roots):
+            return resolved
+    return None
+
+
 def raw_case_ids(path: Path = RAW_CASES_PATH) -> set[str]:
     return {row["case_id"] for row in load_raw_cases(path) if row.get("case_id")}
 

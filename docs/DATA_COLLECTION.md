@@ -85,6 +85,8 @@ data/evidence/Example_MR-02_NA_FORMAL_run01/A_R2_01.png
 
 The paths are written into the corresponding `collection_trace[].evidence_files` record in `raw_cases.jsonl`. Therefore no manually maintained screenshot-index document is required; the data structure itself is the index.
 
+Data Explorer resolves these stored paths against the active project and renders the screenshots inline under the response turn they document. The original stored path remains visible and each available image can be downloaded. If a file was moved or removed, the case and path remain available for audit and the UI reports that the image is missing.
+
 If multiple screenshots are needed for one response (for example a long reply requiring scrolling), upload them together in display order; the Collector assigns `_01`, `_02`, etc.
 
 ## Source repository vs experimental evidence
