@@ -44,6 +44,7 @@ from .collector_storage import (
     upsert_collection_session,
 )
 from .service import criteria_index, run_single_case
+from .platform_ui import active_project, active_paths
 from .storage import completed_case_ids
 
 
@@ -136,8 +137,11 @@ def _render_product_selector(config: dict[str, Any], *, prefix: str) -> tuple[st
 
 
 def _render_resume_panel() -> None:
-    queues = sorted(in_progress_queues(), key=lambda x: x.get("updated_at", ""), reverse=True)
-    sessions = sorted(in_progress_sessions(), key=lambda x: x.get("updated_at", ""), reverse=True)
+    paths = active_paths()
+    if not paths:
+        return
+    queues = sorted(in_progress_queues(paths.collection_queues), key=lambda x: x.get("updated_at", ""), reverse=True)
+    sessions = sorted(in_progress_sessions(paths.collection_sessions), key=lambda x: x.get("updated_at", ""), reverse=True)
     if not queues and not sessions:
         return
     st.subheader("Resume Collection")
@@ -173,6 +177,9 @@ def _render_resume_panel() -> None:
 
 
 def _render_single_setup(criteria: dict[str, dict[str, Any]], config: dict[str, Any]) -> None:
+    paths = active_paths()
+    if not paths:
+        return
     st.subheader("Single Case")
     product_id, product_name, product_slug, pconfig = _render_product_selector(config, prefix="collector_single")
     available = allowed_criteria_for_product(criteria, config, product_id)
@@ -218,11 +225,11 @@ def _render_single_setup(criteria: dict[str, dict[str, Any]], config: dict[str, 
         st.code(preview_case_id, language=None)
 
     if st.button("Start / Resume Case", type="primary", disabled=not bool(product_name), key="collector_single_start"):
-        existing = get_collection_session(preview_case_id)
+        existing = get_collection_session(preview_case_id, paths.collection_sessions)
         if existing and existing.get("collection_status") == "IN_PROGRESS":
             st.session_state["collector_active_session"] = preview_case_id
             st.rerun()
-        if preview_case_id in raw_case_ids():
+        if preview_case_id in raw_case_ids(paths.raw_cases):
             st.error("该 case_id 已存在于 data/raw_cases.jsonl。请更改 run、phase 或测试选择，避免覆盖实验记录。")
             return
         session = create_collection_session(
@@ -238,12 +245,16 @@ def _render_single_setup(criteria: dict[str, dict[str, Any]], config: dict[str, 
             collection_date=collection_date,
             notes=notes,
         )
-        upsert_collection_session(session)
+        session["project_id"] = active_project().get("project_id") if active_project() else None
+        upsert_collection_session(session, paths.collection_sessions)
         st.session_state["collector_active_session"] = session["session_id"]
         st.rerun()
 
 
 def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str, Any]) -> None:
+    paths = active_paths()
+    if not paths:
+        return
     st.subheader("Collection Queue")
     st.caption("Build a reusable queue from configured products/criteria. Queue logic does not hard-code model names or criterion IDs.")
     product_id, product_name, product_slug, pconfig = _render_product_selector(config, prefix="collector_queue")
@@ -293,7 +304,7 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
             st.dataframe(preview_items, use_container_width=True, hide_index=True)
 
     if st.button("Create Queue", type="primary", disabled=not bool(preview_items), key="collector_queue_create"):
-        queue_id = make_queue_id(product_slug=product_slug, phase=phase, collection_date=collection_date)
+        queue_id = make_queue_id(product_slug=product_slug, phase=phase, collection_date=collection_date, path=paths.collection_queues)
         queue = create_collection_queue(
             queue_id=queue_id,
             queue_name=queue_name,
@@ -306,24 +317,28 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
             items=preview_items,
             notes=notes,
         )
-        upsert_collection_queue(queue)
-        queue = reconcile_collection_queue(queue)
-        upsert_collection_queue(queue)
+        queue["project_id"] = active_project().get("project_id") if active_project() else None
+        upsert_collection_queue(queue, paths.collection_queues)
+        queue = reconcile_collection_queue(queue, raw_path=paths.raw_cases, sessions_path=paths.collection_sessions)
+        upsert_collection_queue(queue, paths.collection_queues)
         st.session_state["collector_active_queue"] = queue_id
         st.rerun()
 
 
 def _start_queue_case(queue: dict[str, Any], item: dict[str, Any], criteria: dict[str, dict[str, Any]]) -> None:
-    case_id = item["case_id"]
-    if case_id in raw_case_ids():
-        update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="COMPLETE", session_id=case_id)
+    paths = active_paths()
+    if not paths:
         return
-    existing = get_collection_session(case_id)
+    case_id = item["case_id"]
+    if case_id in raw_case_ids(paths.raw_cases):
+        update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="COMPLETE", session_id=case_id, path=paths.collection_queues)
+        return
+    existing = get_collection_session(case_id, paths.collection_sessions)
     if existing and existing.get("collection_status") == "IN_PROGRESS":
         if not existing.get("queue_id"):
             existing["queue_id"] = queue["queue_id"]
-            upsert_collection_session(existing)
-        update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="IN_PROGRESS", session_id=case_id)
+            upsert_collection_session(existing, paths.collection_sessions)
+        update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="IN_PROGRESS", session_id=case_id, path=paths.collection_queues)
         st.session_state["collector_active_session"] = case_id
         st.session_state["collector_active_queue"] = queue["queue_id"]
         return
@@ -342,20 +357,24 @@ def _start_queue_case(queue: dict[str, Any], item: dict[str, Any], criteria: dic
         notes=queue.get("notes", ""),
         queue_id=queue["queue_id"],
     )
-    upsert_collection_session(session)
-    update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="IN_PROGRESS", session_id=session["session_id"])
+    session["project_id"] = queue.get("project_id")
+    upsert_collection_session(session, paths.collection_sessions)
+    update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="IN_PROGRESS", session_id=session["session_id"], path=paths.collection_queues)
     st.session_state["collector_active_session"] = session["session_id"]
     st.session_state["collector_active_queue"] = queue["queue_id"]
 
 
 def _render_queue(criteria: dict[str, dict[str, Any]], queue_id: str) -> None:
-    queue = get_collection_queue(queue_id)
+    paths = active_paths()
+    if not paths:
+        return
+    queue = get_collection_queue(queue_id, paths.collection_queues)
     if not queue:
         st.error("Saved collection queue was not found.")
         st.session_state.pop("collector_active_queue", None)
         return
-    queue = reconcile_collection_queue(queue)
-    upsert_collection_queue(queue)
+    queue = reconcile_collection_queue(queue, raw_path=paths.raw_cases, sessions_path=paths.collection_sessions)
+    upsert_collection_queue(queue, paths.collection_queues)
     items = queue.get("items", [])
     complete = sum(i.get("status") == "COMPLETE" for i in items)
     st.markdown(f"## Queue · {queue.get('queue_name', queue_id)}")
@@ -403,32 +422,34 @@ def _render_queue(criteria: dict[str, dict[str, Any]], queue_id: str) -> None:
 
 
 def _persist_response_draft(session_id: str, step_index: int, response_key: str) -> None:
+    paths = active_paths()
+    if not paths:
+        return
     try:
-        session = get_collection_session(session_id)
+        session = get_collection_session(session_id, paths.collection_sessions)
         if not session or session.get("collection_status") != "IN_PROGRESS":
             return
         draft = st.session_state.get(response_key, "")
         updated = save_step_draft(session, step_index=step_index, draft_response=draft)
-        upsert_collection_session(updated)
+        upsert_collection_session(updated, paths.collection_sessions)
     except Exception:
         # Draft autosave must never block the primary Save & Next path.
         return
 
 
 def _collector_api_key_input(case_id: str) -> str:
-    existing = os.environ.get("DEEPSEEK_API_KEY", "")
-    if existing:
-        st.caption("DeepSeek API Key loaded from environment.")
-        return existing
+    server_key = os.environ.get("DEEPSEEK_API_KEY", "")
     try:
         secret_key = st.secrets.get("DEEPSEEK_API_KEY", "")
     except Exception:
         secret_key = ""
-    if secret_key:
-        st.caption("DeepSeek API Key loaded from Streamlit secrets.")
-        return secret_key
+    server_key = server_key or secret_key
+    options = ["Demo / server Judge", "BYOK"] if server_key else ["BYOK"]
+    mode = st.radio("Judge access", options, horizontal=True, key=f"collector_judge_mode::{case_id}")
+    if mode == "Demo / server Judge":
+        return server_key
     return st.text_input(
-        "DeepSeek API Key (optional, session-only)",
+        "DeepSeek API Key (session-only)",
         type="password",
         key=f"collector_judge_key::{case_id}",
         help="Only needed for Send This Case to Judge. The key is not written to JSONL/CSV/logs.",
@@ -452,6 +473,9 @@ def _render_judge_result(row: dict[str, Any]) -> None:
 
 
 def _render_completed_session(criteria: dict[str, dict[str, Any]], session: dict[str, Any]) -> None:
+    paths = active_paths()
+    if not paths:
+        return
     case_id = session["case_id"]
     st.success(f"Case complete · {case_id}")
     st.caption("Saved to data/raw_cases.jsonl and validated against the existing Judge input contract.")
@@ -465,7 +489,7 @@ def _render_completed_session(criteria: dict[str, dict[str, Any]], session: dict
             st.dataframe(evidence_rows, use_container_width=True, hide_index=True)
 
     with st.expander("Optional: Send This Case to Judge", expanded=False):
-        if case_id in completed_case_ids():
+        if case_id in completed_case_ids(paths.judge_results):
             st.info("This case already has a successful Judge result in data/judge_results.jsonl.")
         else:
             api_key = _collector_api_key_input(case_id)
@@ -473,23 +497,23 @@ def _render_completed_session(criteria: dict[str, dict[str, Any]], session: dict
                 if not api_key:
                     st.error("Provide a DeepSeek API Key first, or judge later from Run Test.")
                 else:
-                    raw_case = get_raw_case(case_id)
+                    raw_case = get_raw_case(case_id, paths.raw_cases)
                     if raw_case is None:
                         st.error("Raw case not found.")
                     else:
                         try:
                             with st.spinner("Running criterion-bound Judge..."):
-                                row = run_single_case(case=raw_case, criteria=criteria, api_key=api_key, persist=True)
+                                row = run_single_case(case=raw_case, criteria=criteria, api_key=api_key, persist=True, judge_path=paths.judge_results)
                             _render_judge_result(row)
                         except Exception as exc:
                             st.error(str(exc))
 
     queue_id = session.get("queue_id") or st.session_state.get("collector_active_queue")
     if queue_id:
-        queue = get_collection_queue(queue_id)
+        queue = get_collection_queue(queue_id, paths.collection_queues)
         if queue:
-            queue = reconcile_collection_queue(queue)
-            upsert_collection_queue(queue)
+            queue = reconcile_collection_queue(queue, raw_path=paths.raw_cases, sessions_path=paths.collection_sessions)
+            upsert_collection_queue(queue, paths.collection_queues)
             current = next_queue_item(queue)
             if current:
                 if st.button("Next Case →", type="primary", use_container_width=True, key=f"collector_next_case::{case_id}"):
@@ -509,7 +533,10 @@ def _render_completed_session(criteria: dict[str, dict[str, Any]], session: dict
 
 
 def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str) -> None:
-    session = get_collection_session(session_id)
+    paths = active_paths()
+    if not paths:
+        return
+    session = get_collection_session(session_id, paths.collection_sessions)
     if not session:
         st.error("Saved collection session was not found.")
         st.session_state.pop("collector_active_session", None)
@@ -581,7 +608,7 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
     with left:
         if idx > 0 and st.button("← Previous", use_container_width=True):
             session = previous_step(session)
-            upsert_collection_session(session)
+            upsert_collection_session(session, paths.collection_sessions)
             st.rerun()
     with middle:
         is_last = idx == total - 1
@@ -600,6 +627,7 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
                     case_id=session["case_id"],
                     response_turn=step["response_turn"],
                     files=[(item.name, item.getvalue()) for item in uploads],
+                    evidence_dir=paths.dialogue_evidence,
                 )
             updated = save_step_response(
                 session,
@@ -612,20 +640,23 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
                 errors = dry_run([raw_case], criteria)
                 if errors:
                     raise ValueError("Judge compatibility validation failed: " + "; ".join(errors))
-                append_raw_case(raw_case)
+                raw_case["project_id"] = session.get("project_id")
+                raw_case.setdefault("metadata", {})["project_id"] = session.get("project_id")
+                append_raw_case(raw_case, paths.raw_cases)
                 updated = mark_session_complete(updated)
-                upsert_collection_session(updated)
+                upsert_collection_session(updated, paths.collection_sessions)
                 if updated.get("queue_id"):
                     update_queue_item_status(
                         queue_id=updated["queue_id"],
                         case_id=updated["case_id"],
                         status="COMPLETE",
                         session_id=updated["session_id"],
+                        path=paths.collection_queues,
                     )
                 st.session_state["collector_active_session"] = updated["session_id"]
                 st.rerun()
             else:
-                upsert_collection_session(updated)
+                upsert_collection_session(updated, paths.collection_sessions)
                 st.session_state["collector_auto_copy_target"] = f"{updated['case_id']}::{updated['current_step_index']}"
                 st.rerun()
         except Exception as exc:
@@ -633,13 +664,21 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
 
 
 def data_collection_page() -> None:
+    project = active_project()
+    paths = active_paths()
+    if not project or not paths:
+        st.warning("请先在 Test Projects 创建并选择项目。")
+        return
     st.header("Data Collection")
+    st.caption(f"Active Project: {project.get('project_name')}")
     st.caption(
         "Human-in-the-loop real-product collection. CompanionGuard controls prompts, case/turn alignment, queue state, "
         "evidence linkage and raw JSONL; the researcher only sends prompts in the external product and pastes verbatim replies."
     )
     criteria = criteria_index()
     config = load_collector_config()
+    config = dict(config)
+    config["products"] = project.get("products", config.get("products", []))
 
     active_session = st.session_state.get("collector_active_session")
     if active_session:

@@ -10,3 +10,6 @@ data/*.csv
 
 # Collector runtime evidence
 data/evidence/
+
+# v0.6 project-scoped runtime data
+data/projects/

@@ -1,0 +1,14 @@
+{
+  "layer": "Layer 3 Lite",
+  "name_en": "Public Compliance Evidence Audit",
+  "name_zh": "公开合规证据核查",
+  "statuses": ["DOCUMENTED", "PARTIALLY_DOCUMENTED", "NOT_FOUND", "NOT_PUBLICLY_VERIFIABLE"],
+  "checks": [
+    {"code":"L3-01","name_zh":"交互数据是否向第三方提供及其条件","regulation":"第16条"},
+    {"code":"L3-02","name_zh":"敏感交互数据用于模型训练及单独同意","regulation":"第16条"},
+    {"code":"L3-03","name_zh":"不满14周岁个人信息处理及监护人同意规则","regulation":"第17条"},
+    {"code":"L3-04","name_zh":"极端情境/自伤自杀的公开危机处置规则","regulation":"第13条等"},
+    {"code":"L3-05","name_zh":"申诉、投诉举报处理流程及反馈说明","regulation":"第21条"},
+    {"code":"L3-06","name_zh":"算法备案公开状态","regulation":"第26条"}
+  ]
+}

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6.0 — Project-scoped three-layer testing platform
+
+- Added `Test Projects` as the top-level evaluation batch abstraction with multiple configured/custom products.
+- Isolated runtime evidence under `data/projects/<project_id>/` instead of one global experiment dataset.
+- Kept the frozen Layer 1 dialogue structures, criteria and four Judge templates unchanged.
+- Added explicit Demo/server-key and BYOK Judge access behavior.
+- Added a dedicated Judge–Human Reliability page with Exact Agreement, Cohen's κ, Finding Precision/Recall and a three-class confusion matrix.
+- Preserved 100% Human Adjudication in Benchmark Mode; added optional full/random/criterion-stratified review views for Custom Mode.
+- Added Layer 2 Product Safeguard Checks with 22 configured checks, four observation states, standardized nine-step inspection path and screenshot evidence.
+- Added Layer 3 Lite Public Compliance Evidence Audit with six configured checks, four documentary states, source/evidence recording and optional DeepSeek evidence-extraction assist with human-final status.
+- Added deterministic integrated Markdown reporting across Layer 1, Layer 2, Layer 3 and reliability without a 0–100 safety/compliance score.
+- Added project/audit/reliability/report tests. Current suite: 31 tests + 20 subtests pass.
+
 ## v0.5.1 — Module A C1 pressure prompt freeze
 
 - Added the seven previously missing fixed `pressure_variant.L5` prompts for UE-01, UE-02, DS-01, DS-02, FD-01, FD-02 and FD-03.

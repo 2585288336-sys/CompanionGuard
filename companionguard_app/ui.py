@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 from typing import Any
 
 import pandas as pd
@@ -17,6 +18,7 @@ from .cases import (
 from .collector_storage import load_raw_cases
 from .config import MODULE_LABELS, OVERRIDE_REASONS
 from .metrics import label_counts, module_finding_rates, overall_macro_finding_rate, robustness_gap
+from .platform_ui import active_project, active_paths
 from .service import criteria_index, run_batch_cases, run_single_case
 from .storage import (
     build_final_results,
@@ -33,22 +35,18 @@ def get_criteria() -> dict[str, dict[str, Any]]:
 
 
 def _api_key_input() -> str:
-    existing = os.environ.get("DEEPSEEK_API_KEY", "")
-    if existing:
-        st.caption("DeepSeek API Key 已从环境变量读取。")
-        return existing
+    server_key = os.environ.get("DEEPSEEK_API_KEY", "")
     try:
         secret_key = st.secrets.get("DEEPSEEK_API_KEY", "")
     except Exception:
         secret_key = ""
-    if secret_key:
-        st.caption("DeepSeek API Key 已从 Streamlit secrets 读取。")
-        return secret_key
-    return st.text_input(
-        "DeepSeek API Key",
-        type="password",
-        help="仅用于当前会话调用API，不写入项目文件。部署时建议使用环境变量或Streamlit secrets。",
-    )
+    server_key = server_key or secret_key
+    options = ["Demo / server Judge", "BYOK"] if server_key else ["BYOK"]
+    mode = st.radio("Judge access", options, horizontal=True, help="Demo使用服务器侧Key；BYOK Key仅保存在当前Streamlit session，不写入项目数据。")
+    if mode == "Demo / server Judge":
+        st.caption("Using the server-side DeepSeek Judge. The API key is not exposed to the browser or saved in project files.")
+        return server_key
+    return st.text_input("DeepSeek API Key", type="password", help="仅用于当前会话调用API，不写入JSONL、CSV、日志或Git。")
 
 
 def _criterion_label(item: tuple[str, dict[str, Any]]) -> str:
@@ -81,7 +79,13 @@ def _judge_result_card(row: dict[str, Any]) -> None:
 
 
 def run_test_page() -> None:
+    project = active_project()
+    paths = active_paths()
+    if not project or not paths:
+        st.warning("请先在 Test Projects 创建并选择项目。")
+        return
     st.header("Run Test")
+    st.caption(f"Active Project: {project.get('project_name')} ({project.get('project_id')})")
     st.caption("Benchmark Mode：选择冻结criterion，输入真实模型回复，调用DeepSeek Judge。")
     criteria = get_criteria()
     api_key = _api_key_input()
@@ -161,6 +165,7 @@ def run_test_page() -> None:
                             criteria=criteria,
                             api_key=api_key,
                             persist=True,
+                            judge_path=paths.judge_results,
                         )
                     st.session_state["last_judge_result"] = row
                 except Exception as e:
@@ -178,7 +183,7 @@ def run_test_page() -> None:
         cases: list[dict[str, Any]] = []
         try:
             if source == "Collected raw_cases.jsonl":
-                cases = load_raw_cases()
+                cases = load_raw_cases(paths.raw_cases)
                 if not cases:
                     st.info("data/raw_cases.jsonl 还没有已完成的采集case。先到 Data Collection 完成至少一个case。")
                 else:
@@ -226,6 +231,7 @@ def run_test_page() -> None:
                                 criteria=criteria,
                                 api_key=api_key,
                                 progress=progress,
+                                judge_path=paths.judge_results,
                             )
                         ok = sum(r.get("status") == "ok" for r in results)
                         st.success(f"完成：{ok}/{len(results)} 成功。结果已写入 data/judge_results.jsonl")
@@ -234,20 +240,45 @@ def run_test_page() -> None:
 
 
 def human_review_page() -> None:
+    project = active_project()
+    paths = active_paths()
+    if not project or not paths:
+        st.warning("请先在 Test Projects 创建并选择项目。")
+        return
     st.header("Human Review")
+    st.caption(f"Active Project: {project.get('project_name')}")
     criteria = get_criteria()
-    judge_rows = [r for r in load_judge_results() if r.get("status") == "ok"]
-    adjudicated = {r["case_id"]: r for r in load_adjudications()}
+    judge_rows = [r for r in load_judge_results(paths.judge_results) if r.get("status") == "ok"]
+    adjudicated = {r["case_id"]: r for r in load_adjudications(paths.adjudication)}
 
     if not judge_rows:
         st.info("还没有可复核的Judge结果。先在 Run Test 运行至少一个case。")
         return
 
-    mode = st.radio("显示", ["待复核", "全部"], horizontal=True)
-    candidates = [
-        r for r in judge_rows
-        if mode == "全部" or r.get("case_id") not in adjudicated
-    ]
+    pending = [r for r in judge_rows if r.get("case_id") not in adjudicated]
+    if project.get("mode") == "BENCHMARK":
+        st.info("Benchmark Mode：按冻结协议执行 100% Human Adjudication；FORMAL case 不提供抽样替代。")
+        mode = st.radio("显示", ["待复核", "全部"], horizontal=True)
+        candidates = pending if mode == "待复核" else judge_rows
+    else:
+        review_scope = st.radio("Review scope", ["全部待复核", "随机抽样", "按Criterion分层抽样", "全部结果"], horizontal=True)
+        if review_scope == "全部结果":
+            candidates = judge_rows
+        elif review_scope == "随机抽样":
+            n = int(st.number_input("Sample size", min_value=1, max_value=max(len(pending), 1), value=min(10, max(len(pending), 1))))
+            candidates = random.Random(42).sample(pending, min(n, len(pending))) if pending else []
+        elif review_scope == "按Criterion分层抽样":
+            per_criterion = int(st.number_input("Cases per criterion", min_value=1, max_value=20, value=1))
+            grouped = {}
+            for row in pending:
+                grouped.setdefault(row.get("criterion_id"), []).append(row)
+            candidates = []
+            rng = random.Random(42)
+            for cid in sorted(grouped, key=str):
+                group = grouped[cid]
+                candidates.extend(rng.sample(group, min(per_criterion, len(group))))
+        else:
+            candidates = pending
     if not candidates:
         st.success("当前没有待复核case。")
         return
@@ -301,8 +332,9 @@ def human_review_page() -> None:
             human_label=human_label,
             override_reason=override_reason,
             review_note=review_note,
+            path=paths.adjudication,
         )
-        build_final_results(criteria)
+        build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results)
         st.success("已保存人工复核，并更新 data/final_results.csv。")
         st.rerun()
 
@@ -319,10 +351,16 @@ def _pp(value: float | None) -> str:
 
 
 def results_page() -> None:
-    st.header("Results")
+    project = active_project()
+    paths = active_paths()
+    if not project or not paths:
+        st.warning("请先在 Test Projects 创建并选择项目。")
+        return
+    st.header("Dialogue Results")
+    st.caption(f"Active Project: {project.get('project_name')}")
     criteria = get_criteria()
-    build_final_results(criteria)
-    rows = load_final_results()
+    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results)
+    rows = load_final_results(paths.final_results)
     if not rows:
         st.info("还没有final results。先完成至少一个Human Review。")
         return
@@ -363,13 +401,13 @@ def results_page() -> None:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Adjudicated FORMAL Cases", len(filtered_rows))
     c2.metric("Findings", counts["FINDING"])
-    c3.metric("Overall Macro Finding Rate", _pct(macro))
+    c3.metric("总体宏平均风险发现率", _pct(macro))
     c4.metric("Review", counts["REVIEW"])
     st.caption("Overall Macro Finding Rate 仅在五个冻结模块都有FORMAL结果时显示。")
 
     r1, r2 = st.columns(2)
-    r1.metric("Pressure Robustness Gap", _pp(pressure))
-    r2.metric("Multi-turn Robustness Gap", _pp(multiturn))
+    r1.metric("压力条件风险发现率差值（C1−C0）", _pp(pressure))
+    r2.metric("多轮条件风险发现率差值（C2−C0）", _pp(multiturn))
 
     module_rates = module_finding_rates(filtered_rows)
     if module_rates:

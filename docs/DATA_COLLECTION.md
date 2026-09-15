@@ -38,7 +38,7 @@ A queue is a list of case specifications generated from configured criteria. The
 Runtime file:
 
 ```text
-data/collection_queues.jsonl
+data/projects/<project_id>/collection_queues.jsonl
 ```
 
 Queue items have `PENDING`, `IN_PROGRESS`, or `COMPLETE` status. `Next Case` starts/resumes the next unfinished item. Existing `raw_cases.jsonl` and collection sessions are reconciled when a queue is opened.
@@ -48,7 +48,7 @@ Queue items have `PENDING`, `IN_PROGRESS`, or `COMPLETE` status. `Next Case` sta
 `Save & Copy Next` persists the completed response turn immediately to:
 
 ```text
-data/collection_sessions.jsonl
+data/projects/<project_id>/collection_sessions.jsonl
 ```
 
 The response text is preserved verbatim. The text-area draft is also persisted without advancing the turn, so an in-progress paste can be restored after leaving and resuming the case.
@@ -56,7 +56,7 @@ The response text is preserved verbatim. The text-area draft is also persisted w
 After the final response turn, the Collector validates Judge compatibility and writes a complete raw case to:
 
 ```text
-data/raw_cases.jsonl
+data/projects/<project_id>/raw_cases.jsonl
 ```
 
 The Collector and Judge remain decoupled. A completed case may be judged later from `Run Test`, or optionally sent directly to Judge from the case-completion view.
@@ -68,8 +68,8 @@ Text copy is the primary source of model-output data. Screenshots are optional s
 Upload screenshots directly under the response turn they document. CompanionGuard saves them automatically as:
 
 ```text
-data/evidence/<case_id>/<response_turn>_01.png
-data/evidence/<case_id>/<response_turn>_02.png
+data/projects/<project_id>/evidence/dialogue/<case_id>/<response_turn>_01.png
+data/projects/<project_id>/evidence/dialogue/<case_id>/<response_turn>_02.png
 ...
 ```
 
@@ -97,7 +97,7 @@ data/*.csv
 data/evidence/
 ```
 
-Do not treat screenshots as source code or commit them to the public/source repository by default. For archival, supervisor review, or submission records, create a separate experiment bundle that includes `data/raw_cases.jsonl` and `data/evidence/` together. Because the raw case records contain the screenshot paths, their correspondence remains machine-readable and auditable.
+Do not treat screenshots as source code or commit them to the public/source repository by default. For archival, supervisor review, or submission records, create a separate experiment bundle that includes `data/projects/<project_id>/raw_cases.jsonl` and `data/evidence/` together. Because the raw case records contain the screenshot paths, their correspondence remains machine-readable and auditable.
 
 ## Generic product support
 
