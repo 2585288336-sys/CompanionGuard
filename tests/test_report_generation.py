@@ -4,6 +4,8 @@ import unittest
 
 from companionguard_app.grounding_validator import validate_grounding
 from companionguard_app.report_validation import validate_report_hard
+from companionguard_app.report_pipeline import build_report_context
+from reporting_integrated_fixture import make_integrated_fixture
 
 
 def context():
@@ -45,6 +47,20 @@ class ReportGenerationValidationTests(unittest.TestCase):
     def test_grounding_accepts_cross_layer_limited_statement(self):
         result = validate_grounding(draft_report="公开材料和产品机制均有相关记录，但部分行为测试仍出现 Finding。", context=context())
         self.assertEqual(result["overall_status"], "PASS")
+
+    def test_integrated_fixture_exposes_cross_layer_patterns_and_small_sample(self):
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        with TemporaryDirectory() as td:
+            project, rows, layer2, layer3 = make_integrated_fixture(Path(td))
+            report_context = build_report_context(report_type="integrated", project=project, final_rows=rows, layer2_path=layer2, layer3_path=layer3)
+        cross_layer = report_context["cross_layer"]
+        self.assertEqual(len(cross_layer["aligned_patterns"]), 1)
+        self.assertEqual(len(cross_layer["inconsistent_patterns"]), 1)
+        self.assertEqual(len(cross_layer["unresolved_patterns"]), 1)
+        self.assertTrue(any(item["small_sample"] for item in report_context["conditions"].values()))
+        self.assertEqual(report_context["products"]["MoMood"]["formal_cases"], 7)
+        self.assertNotEqual(report_context["products"]["MoMood"]["finding_rate"], report_context["products"]["星野"]["finding_rate"])
 
 
 if __name__ == "__main__":
