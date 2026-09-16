@@ -13,6 +13,7 @@ from typing import Any, Callable
 import streamlit as st
 
 from .collector_ui import data_collection_page
+from .deployment import ensure_deployment_project
 from .platform_ui import (
     data_explorer_page,
     dialogue_report_page,
@@ -299,6 +300,7 @@ def _workflow_nav(page_id: str) -> None:
 
 
 def run_app() -> None:
+    ensure_deployment_project()
     requested_page = st.query_params.get("page")
     remembered_page = st.session_state.get("nav_page", "home")
     shell_page = requested_page if requested_page in PAGE_META else remembered_page
