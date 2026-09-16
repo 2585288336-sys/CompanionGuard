@@ -81,7 +81,7 @@ def test_competition_micro_refinements_are_scoped_to_presentation():
     assert 'for item in ("judge", "review", "explorer", "reliability", "results")' in source
     assert '_group_heading("03 报告", "Reports")' in source
     assert '.navlayer-toggle{padding-left:16px!important}' in source
-    assert '[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:11.4px!important}' in source
+    assert '[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:10.8px!important;font-weight:640!important;line-height:1.32!important}' in source
     assert '[data-testid="stMain"] button[kind="primary"]{background:#3156d9!important;color:#fff!important' in source
     assert 'class="report-action-title"' in platform
 
@@ -125,4 +125,20 @@ def test_sidebar_hierarchy_is_ordered_by_size_and_indent():
     assert ".navgroup-toggle .zh{font-size:13.5px!important;font-weight:800!important" in golden
     assert ".navlayer-toggle .zh{font-size:12.4px!important;font-weight:750!important" in golden
     assert ".navlayer-toggle{padding-left:16px!important}" in golden
-    assert '[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:11.4px!important}' in golden
+    assert '[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:10.8px!important;font-weight:640!important;line-height:1.32!important}' in golden
+
+
+def test_workspace_spacing_and_overview_has_no_body_duplicate_title():
+    golden = GOLDEN.read_text(encoding="utf-8")
+    assert '.workspace-bar{margin:-28px -32px -12px!important}' in golden
+    assert '[data-testid="stMainBlockContainer"]{padding:28px 32px 72px!important' in golden
+    assert '.workspace-head h1{font-size:25px!important;font-weight:780!important;color:#101828}' in golden
+    assert 'class="card"><div class="cardhead"><span class="workspace-pill blue">FORMAL</span>' in golden
+    assert '<h2>当前项目总览</h2>' not in golden
+
+
+def test_sidebar_active_leaf_does_not_override_leaf_typography():
+    golden = GOLDEN.read_text(encoding="utf-8")
+    leaf_rule = '[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:10.8px!important;font-weight:640!important;line-height:1.32!important}'
+    assert golden.count(leaf_rule) == 1
+    assert '[data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"]' in golden
