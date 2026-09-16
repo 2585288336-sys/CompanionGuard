@@ -22,7 +22,7 @@ from .collector_storage import load_raw_cases
 from .metrics import case_validity_counts, valid_case_rows
 from .display_labels import criterion_label, module_label, scenario_label
 from .ui_helpers import condition_label, phase_label, render_case_conversation, render_case_validity, render_judge_result
-from .ui_theme import empty_state
+from .ui_theme import empty_state, llm_actionbar
 
 
 def active_project_id() -> str | None:
@@ -58,8 +58,10 @@ def _default_benchmark_product_ids(products: list[dict[str, Any]]) -> list[str]:
     ]
 
 
-def sidebar_project_selector() -> dict[str, Any] | None:
+def sidebar_project_selector(*, researcher: bool = False) -> dict[str, Any] | None:
     projects = list_projects()
+    if not researcher:
+        projects = [project for project in projects if is_read_only_project(project)]
     if not projects:
         st.sidebar.info("先创建一个测试项目 / Create a Test Project first.")
         st.session_state["active_project_id"] = "__NONE__"
@@ -489,26 +491,28 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
         reports_dir=paths.reports, draft_text=deterministic,
     )
     st.download_button("下载确定性对话测试报告", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
-    with st.expander("可选：LLM 撰写对话测试报告", expanded=False):
+    with st.expander("LLM 配置 / Server API or BYOK", expanded=False):
         st.caption("指标由 Python 计算；报告模型只能根据冻结的结构化上下文生成文字。")
         profile = render_llm_profile_selector("dialogue_report", key_prefix="dialogue_report_writer")
-        if st.button("生成 LLM 对话测试报告", disabled=profile is None):
-            try:
-                context = build_dialogue_report_context(project=project, final_rows=rows)
-                text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
-                result = write_report_artifacts(
-                    report_type="dialogue", project=project, final_rows=rows,
-                    layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
-                    reports_dir=paths.reports, draft_text=text,
-                )
-                if result["manifest"]["validation_status"] != "PASS":
-                    st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
-                else:
-                    st.session_state["dialogue_report_llm_text"] = result["paths"]["final"].read_text(encoding="utf-8")
-            except Exception as e:
-                st.error(str(e))
-        if st.session_state.get("dialogue_report_llm_text"):
-            st.markdown(st.session_state["dialogue_report_llm_text"])
+    llm_actionbar(title="Dialogue Report Writer · LLM", profile=profile, notes=["Evidence Grounding · enabled"])
+    if st.button("生成 / 更新对话评测报告", type="primary", disabled=profile is None, key="dialogue_report_generate_golden"):
+        try:
+            context = build_dialogue_report_context(project=project, final_rows=rows)
+            text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
+            result = write_report_artifacts(
+                report_type="dialogue", project=project, final_rows=rows,
+                layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
+                reports_dir=paths.reports, draft_text=text,
+            )
+            if result["manifest"]["validation_status"] != "PASS":
+                st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
+            else:
+                st.session_state["dialogue_report_llm_text"] = result["paths"]["final"].read_text(encoding="utf-8")
+                st.success("对话评测报告已生成并通过校验。")
+        except Exception as e:
+            st.error(str(e))
+    if st.session_state.get("dialogue_report_llm_text"):
+        st.markdown(st.session_state["dialogue_report_llm_text"])
 
 
 def report_page(criteria: dict[str, dict[str, Any]]) -> None:
@@ -535,7 +539,8 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
         st.caption("确定性分析摘要只是 Python 结果汇总；正式 LLM 综合报告必须同时经过 Evidence Grounding Validator LLM。")
         profile = render_llm_profile_selector("integrated_report", key_prefix="integrated_report_writer")
         grounding_profile = render_llm_profile_selector("grounding_validator", key_prefix="integrated_report_grounding")
-        if st.button("生成并验证 LLM 综合测试报告", disabled=profile is None or grounding_profile is None):
+        llm_actionbar(title="Integrated Report Writer · LLM", profile=profile, notes=["Hard Validation", "Evidence Grounding"])
+        if st.button("生成 / 更新综合评测报告", type="primary", disabled=profile is None or grounding_profile is None, key="integrated_report_generate_golden"):
             try:
                 context = build_integrated_report_context(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
                 text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))

@@ -16,12 +16,41 @@ from .audits import load_jsonl
 from .collector_storage import load_raw_cases
 from .display_labels import condition_label, criterion_label, module_label, phase_label
 from .platform_ui import active_paths, active_project
-from .storage import load_adjudications, load_judge_results
+from .projects import is_read_only_project, list_projects
+from .reliability import reliability_metrics
+from .storage import load_adjudications, load_final_results, load_judge_results
+from .metrics import valid_case_rows
 from .ui_theme import empty_state
 
 
 def _banner() -> None:
     st.info("当前为公开演示快照：本页展示已保存的项目数据和完整工作流 UI，不会向快照写入采集、Judge、人工复核或报告数据。")
+
+
+def readonly_projects_page() -> None:
+    """Public project index without create/delete controls."""
+    st.header("测试项目设计 / Test Project Design")
+    st.caption("PUBLIC_VIEWER 只能浏览公开快照；创建、编辑和删除研究项目需要进入 AUTHORIZED_RESEARCHER。")
+    _banner()
+    projects = [project for project in list_projects() if is_read_only_project(project)]
+    if not projects:
+        empty_state("当前没有公开项目快照", "授权研究者可以在研究模式中创建独立项目；公开快照不会被改写。")
+        return
+    st.subheader("公开项目 / Public Projects")
+    st.dataframe(
+        pd.DataFrame([
+            {
+                "项目": project.get("project_name", project.get("project_id")),
+                "Project ID": project.get("project_id"),
+                "模式": project.get("mode"),
+                "状态": "FORMAL · read only",
+                "产品数": len(project.get("products", [])),
+            }
+            for project in projects
+        ]),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def _context() -> tuple[dict[str, Any] | None, Any]:
@@ -148,6 +177,37 @@ def _dialogue_report_preview(project: dict[str, Any], paths: Any) -> None:
     st.markdown(selected.read_text(encoding="utf-8"))
 
 
+def _integrated_report_preview(project: dict[str, Any], paths: Any) -> None:
+    st.header("综合评测报告 / Integrated Report")
+    st.caption("公开快照中的 Integrated Report 仅供浏览；不会重新计算、生成或写入任何报告产物。")
+    _banner()
+    report_files = []
+    if paths.reports.exists():
+        report_files = [path for path in sorted(paths.reports.glob("*.md")) if "integrated" in path.name or path.name == "final_report.md"]
+    if not report_files:
+        empty_state("当前项目暂无已保存的综合报告", "授权研究者可在独立的 writable Project 中运行既有报告 pipeline。")
+        return
+    selected = st.selectbox("已保存报告 / Saved report", report_files, format_func=lambda p: p.name)
+    st.markdown(selected.read_text(encoding="utf-8"))
+
+
+def _reliability_preview(project: dict[str, Any], paths: Any) -> None:
+    st.header("判定一致性 / Judge–Human Reliability")
+    st.caption("公开快照只读取已经保存的 final_results，不在快照中重建或写入派生数据。")
+    _banner()
+    rows = valid_case_rows(load_final_results(paths.final_results))
+    if not rows:
+        empty_state("当前快照暂无可用一致性记录", "只有同时存在有效案例、自动判定和人工复核的数据才会进入一致性指标。")
+        return
+    result = reliability_metrics(rows)
+    cols = st.columns(4)
+    cols[0].metric("比较案例数", result["n"])
+    cols[1].metric("完全一致率", "—" if result["exact_agreement"] is None else f"{result['exact_agreement'] * 100:.1f}%")
+    cols[2].metric("Cohen's κ", "—" if result["cohen_kappa"] is None else f"{result['cohen_kappa']:.3f}")
+    cols[3].metric("Finding Recall", "—" if result["finding_recall"] is None else f"{result['finding_recall'] * 100:.1f}%")
+    st.dataframe(pd.DataFrame(result["matrix"]).T, use_container_width=True)
+
+
 def readonly_page(page: str) -> None:
     """Render a non-mutating equivalent of a write-oriented workflow page."""
     project, paths = _context()
@@ -166,5 +226,9 @@ def readonly_page(page: str) -> None:
         _audit_preview("公开制度材料核查 / Public Evidence", "展示当前 Project 已保存的 Layer 3 公开材料核查记录。", paths.layer3_records, ["product", "check_code", "status", "notes"], "当前项目暂无正式核查记录", "空数据不代表功能未完成；研发版可按正式六项检查录入公开证据。")
     elif page == "dialogue_report":
         _dialogue_report_preview(project, paths)
+    elif page == "integrated_report":
+        _integrated_report_preview(project, paths)
+    elif page == "reliability":
+        _reliability_preview(project, paths)
     else:
         st.info("当前页面为公开快照的只读展示。")

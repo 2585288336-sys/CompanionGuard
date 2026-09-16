@@ -1,6 +1,7 @@
 import streamlit as st
 
 from companionguard_app.collector_ui import data_collection_page
+from companionguard_app.auth import render_access_control
 from companionguard_app.platform_ui import (
     data_explorer_page,
     layer2_page,
@@ -11,9 +12,9 @@ from companionguard_app.platform_ui import (
     sidebar_project_selector,
 )
 from companionguard_app.projects import is_read_only_project
-from companionguard_app.readonly_ui import readonly_page
+from companionguard_app.readonly_ui import readonly_page, readonly_projects_page
 from companionguard_app.ui import get_criteria, human_review_page, run_test_page
-from companionguard_app.ui_theme import inject_theme
+from companionguard_app.ui_theme import inject_theme, workspace_topbar
 from companionguard_app.workspace_ui import home_page, integrated_report_page_v09, project_overview_page, results_page_v09, test_plan_page
 
 st.set_page_config(
@@ -72,7 +73,8 @@ def _nav_leaf(page_id: str) -> None:
 
 st.sidebar.title("CompanionGuard")
 st.sidebar.caption("拟人化 AI 监管测试平台 / Regulatory testing platform")
-project = sidebar_project_selector()
+authorized = render_access_control()
+project = sidebar_project_selector(researcher=authorized)
 st.sidebar.divider()
 st.sidebar.markdown("<div class='cg-sidebar-kicker'>WORKSPACE</div>", unsafe_allow_html=True)
 _nav_leaf("home")
@@ -95,6 +97,9 @@ _nav_leaf("dialogue_results")
 
 page = st.session_state["nav_page"]
 
+if page != "home":
+    workspace_topbar(page_title=PAGE_LABELS[page].split(" / ")[0], project=project, authorized=authorized)
+
 # Persistent workflow cue. This is guidance, not a hard wizard: users may jump
 # between layers when their protocol permits it.
 idx = PAGE_IDS.index(page)
@@ -104,9 +109,13 @@ st.sidebar.progress((idx + 1) / len(PAGE_IDS))
 if project:
     st.sidebar.caption("典型主线：项目 → 对话采集 → 采集数据查看 → LLM 判定 → 人工复核 → 一致性/结果 → Layer 2/3 → 综合测试报告")
 
-READ_ONLY_BLOCKED_PAGES = {"data_collection", "judge", "human_review", "layer2", "layer3", "dialogue_report"}
+RESEARCH_ONLY_PAGES = {"projects", "plan", "data_collection", "judge", "human_review", "layer2", "layer3", "dialogue_report", "integrated_report"}
 
-if project and is_read_only_project(project) and page in READ_ONLY_BLOCKED_PAGES:
+if page == "projects" and not authorized:
+    readonly_projects_page()
+elif page in RESEARCH_ONLY_PAGES and (not authorized or (project and is_read_only_project(project))):
+    readonly_page(page)
+elif page == "reliability" and (not authorized or (project and is_read_only_project(project))):
     readonly_page(page)
 elif page == "home":
     home_page(project)
