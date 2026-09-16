@@ -27,16 +27,28 @@ def _go(page: str) -> None:
 
 def home_page(project: dict[str, Any] | None = None) -> None:
     hero(
-        eyebrow="Regulatory Testing & Risk Diagnosis",
-        title="把拟人化 AI 的监管要求，转化为可执行、可复核的测试。",
-        body="CompanionGuard 是一套面向拟人化 AI 服务的监管测试与风险诊断框架。项目从监管要求出发，将抽象义务转化为真实产品上可以执行、记录和复核的测试要求，重点观察过度迎合、情感依赖、退出挽留、危机应对、未成年人保护和敏感信息诱导等过程性风险。",
+        eyebrow="REGULATORY TESTING & RISK DIAGNOSIS",
+        title="把拟人化 AI 的监管要求，转化为可执行、可复核的测试",
+        body="CompanionGuard 是一套面向拟人化 AI 服务的监管测试与风险诊断框架。项目从《人工智能拟人化互动服务管理暂行办法》的监管要求出发，将抽象的监管规则与义务转化为可以在真实产品上执行、记录和复核的测试要求，重点观察过度迎合、情感依赖、退出挽留、危机应对、未成年人保护、敏感信息诱导等拟人化互动中的风险。\n\n在测试结果层面，CompanionGuard 建立了面向风险诊断的指标体系，包括风险发现率、压力鲁棒性、多轮鲁棒性、明确触发后的风险转变、专项风险指标和 Judge–Human Reliability。CompanionGuard 支持建立自定义测试项目，用户可以选择 AI 产品、配置测试范围和实验条件，并通过统一流程完成测试、判定、人工复核和结果分析。",
     )
     left, right = st.columns([1, 1])
     with left:
-        if st.button("进入 Test Project", type="primary", use_container_width=True, key="home_enter_project"):
+        if st.button("进入工作台", type="primary", use_container_width=True, key="home_enter_project"):
             _go("overview" if project else "projects")
     with right:
-        st.markdown("<div class='cg-note'>Finding 表示在预设监管测试场景中观察到的风险表现，用于定位问题和支持后续审核，不等同于正式的法律不合规认定。</div>", unsafe_allow_html=True)
+        if st.button("查看构建与方法", use_container_width=True, key="home_view_methods"):
+            _go("plan")
+
+    st.markdown("<div class='cg-note'>Finding 表示在预设监管测试场景中观察到的风险表现，用于定位具体问题和支持后续审核；它不直接等同于法律意义上的不合规认定。</div>", unsafe_allow_html=True)
+
+    st.markdown(
+        "<div class='cg-reference'><div class='cg-eyebrow'>PRELOADED REFERENCE PROJECT</div>"
+        "<h3>CompanionGuard Formal Full Benchmark 2026-09</h3>"
+        "<p>预置的完整参考项目，用于展示从测试设计、三层取证、自动 Judge、人工复核到结果分析的完整流程。</p>"
+        "<span class='cg-pill blue'>FORMAL</span> <span class='cg-pill blue'>Layer 1 + Layer 2 + Layer 3</span> "
+        "<span class='cg-pill'>自动 Judge + 人工复核</span></div>",
+        unsafe_allow_html=True,
+    )
 
     if project:
         st.markdown(
@@ -223,7 +235,7 @@ def results_page_v09() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("评测结果 / Results")
+    st.header("对话评测结果与指标 / Dialogue Results & Metrics")
     st.caption("结果数据按当前 Project 实际记录展示；自动 Judge 结果与人工最终裁定严格分开。")
     raw_cases = {c.get("case_id"): c for c in load_raw_cases(paths.raw_cases)}
     adjudications = {r.get("case_id"): r for r in load_adjudications(paths.adjudication)}
@@ -305,7 +317,7 @@ def integrated_report_page_v09() -> None:
     from .projects import is_read_only_project
 
     read_only = is_read_only_project(project)
-    st.header("综合报告 / Integrated Report")
+    st.header("综合评测报告 / Integrated Report")
     st.caption("当前报告随 Project 数据更新；下游报告产物保存在项目的 reports/ 目录，不改写原始采集数据。")
     criteria = criteria_index()
     if not read_only:

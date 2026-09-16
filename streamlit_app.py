@@ -11,6 +11,7 @@ from companionguard_app.platform_ui import (
     sidebar_project_selector,
 )
 from companionguard_app.projects import is_read_only_project
+from companionguard_app.readonly_ui import readonly_page
 from companionguard_app.ui import get_criteria, human_review_page, run_test_page
 from companionguard_app.ui_theme import inject_theme
 from companionguard_app.workspace_ui import home_page, integrated_report_page_v09, project_overview_page, results_page_v09, test_plan_page
@@ -24,39 +25,75 @@ inject_theme()
 
 PAGES = [
     ("home", "首页 / Home"),
-    ("projects", "项目 · 测试项目 / Test Projects"),
-    ("overview", "项目 · 项目总览 / Project Overview"),
-    ("plan", "项目 · 测试计划 / Test Plan"),
-    ("data_collection", "项目 · 数据采集 / Data Collection"),
-    ("judge", "评测 · 自动判定 / Dialogue Judge"),
-    ("human_review", "评测 · 人工复核 / Human Review"),
-    ("data_explorer", "评测 · 数据浏览 / Data Explorer"),
-    ("layer2", "分析 · 产品安全机制 / Product Safeguards"),
-    ("layer3", "分析 · 公开合规证据 / Public Evidence"),
-    ("dialogue_results", "分析 · 评测结果 / Results"),
-    ("dialogue_report", "报告 · 对话报告 / Dialogue Report"),
-    ("integrated_report", "报告 · 综合报告 / Integrated Report"),
-    ("reliability", "分析 · 判定一致性 / Reliability"),
+    ("projects", "测试项目 / Test Project Design"),
+    ("plan", "项目计划 / Test Plan"),
+    ("data_collection", "对话数据采集 / Dialogue Data Collection"),
+    ("overview", "当前项目总览 / Current Project Overview"),
+    ("judge", "自动判定 / Dialogue Judge"),
+    ("human_review", "人工复核 / Human Review"),
+    ("data_explorer", "数据浏览 / Data Explorer"),
+    ("reliability", "判定一致性 / Reliability"),
+    ("layer2", "产品安全机制检查 / Product Safeguards"),
+    ("layer3", "公开制度材料核查 / Public Evidence"),
+    ("dialogue_results", "对话评测结果与指标 / Dialogue Results & Metrics"),
+    ("dialogue_report", "对话评测报告 / Dialogue Report"),
+    ("integrated_report", "综合评测报告 / Integrated Report"),
 ]
 PAGE_IDS = [x[0] for x in PAGES]
 PAGE_LABELS = dict(PAGES)
 
-st.sidebar.title("CompanionGuard")
-st.sidebar.caption("拟人化 AI 监管测试平台 / Regulatory testing platform")
-project = sidebar_project_selector()
-st.sidebar.divider()
+NAV_GROUPS = {
+    "01 项目与测试 / Project Setup": ["projects", "plan", "data_collection", "overview"],
+    "02 三层证据评测 / Three-Layer Evaluation": ["judge", "human_review", "data_explorer", "reliability", "layer2", "layer3"],
+    "04 报告 / Reports": ["dialogue_report", "integrated_report"],
+}
 
 requested = st.session_state.pop("requested_nav", None)
 if requested in PAGE_IDS:
     st.session_state["nav_page"] = requested
 if st.session_state.get("nav_page") not in PAGE_IDS:
     st.session_state["nav_page"] = "home"
-page = st.sidebar.radio(
-    "导航 / Navigation",
-    PAGE_IDS,
-    format_func=lambda pid: PAGE_LABELS[pid],
-    key="nav_page",
-)
+
+
+def _nav_leaf(page_id: str) -> None:
+    label = PAGE_LABELS[page_id]
+    zh, _, en = label.partition(" / ")
+    active = st.session_state.get("nav_page") == page_id
+    if st.sidebar.button(
+        zh,
+        key=f"nav::{page_id}",
+        type="primary" if active else "secondary",
+        use_container_width=True,
+    ):
+        st.session_state["nav_page"] = page_id
+        st.rerun()
+    st.sidebar.caption(en)
+
+
+st.sidebar.title("CompanionGuard")
+st.sidebar.caption("拟人化 AI 监管测试平台 / Regulatory testing platform")
+project = sidebar_project_selector()
+st.sidebar.divider()
+st.sidebar.markdown("<div class='cg-sidebar-kicker'>WORKSPACE</div>", unsafe_allow_html=True)
+_nav_leaf("home")
+for group_label, children in NAV_GROUPS.items():
+    expanded = st.session_state.get("nav_page") in children
+    with st.sidebar.expander(group_label, expanded=expanded):
+        if group_label.startswith("02"):
+            st.markdown("<div class='cg-sidebar-layer'>Layer 1｜对话行为测试<br><span>Dialogue Testing</span></div>", unsafe_allow_html=True)
+            for page_id in ["judge", "human_review", "data_explorer", "reliability"]:
+                _nav_leaf(page_id)
+            st.markdown("<div class='cg-sidebar-layer'>Layer 2｜产品安全机制检查<br><span>Product Safeguards</span></div>", unsafe_allow_html=True)
+            _nav_leaf("layer2")
+            st.markdown("<div class='cg-sidebar-layer'>Layer 3｜公开制度材料核查<br><span>Public Evidence</span></div>", unsafe_allow_html=True)
+            _nav_leaf("layer3")
+        else:
+            for page_id in children:
+                _nav_leaf(page_id)
+st.sidebar.markdown("<div class='cg-sidebar-direct'>03 对话评测结果与指标<br><span>Dialogue Results &amp; Metrics</span></div>", unsafe_allow_html=True)
+_nav_leaf("dialogue_results")
+
+page = st.session_state["nav_page"]
 
 # Persistent workflow cue. This is guidance, not a hard wizard: users may jump
 # between layers when their protocol permits it.
@@ -70,8 +107,7 @@ if project:
 READ_ONLY_BLOCKED_PAGES = {"data_collection", "judge", "human_review", "layer2", "layer3", "dialogue_report"}
 
 if project and is_read_only_project(project) and page in READ_ONLY_BLOCKED_PAGES:
-    st.header(f"{PAGE_LABELS[page]}")
-    st.info("当前项目是公开演示快照，只读展示；不会向快照写入采集、Judge、人工复核或报告数据。")
+    readonly_page(page)
 elif page == "home":
     home_page(project)
 elif page == "projects":

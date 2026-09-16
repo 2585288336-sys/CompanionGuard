@@ -36,6 +36,14 @@ def inject_theme() -> None:
         [data-testid="stHeader"] { background: rgba(246,247,249,.92); }
         [data-testid="stSidebar"] { background: #fbfcfd; border-right: 1px solid var(--cg-border); }
         [data-testid="stSidebar"] > div:first-child { padding-top: 1.2rem; }
+        .cg-sidebar-kicker { color: var(--cg-muted); font-size: .68rem; font-weight: 780; letter-spacing: .12em; margin: .25rem 0 .35rem; }
+        .cg-sidebar-layer { color: var(--cg-text); font-size: .78rem; font-weight: 700; line-height: 1.45; padding: .6rem .2rem .15rem 1.2rem; }
+        .cg-sidebar-layer span { color: var(--cg-muted); font-size: .68rem; font-weight: 500; }
+        .cg-sidebar-direct { color: var(--cg-text); font-size: .78rem; font-weight: 750; line-height: 1.45; padding: .75rem .2rem .2rem; }
+        .cg-sidebar-direct span { color: var(--cg-muted); font-size: .68rem; font-weight: 500; }
+        [data-testid="stSidebar"] [data-testid="stExpander"] summary { color: var(--cg-text); font-weight: 700; }
+        [data-testid="stSidebar"] [data-testid="stButton"] button { text-align: left; padding-left: 1.05rem; }
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] { padding-left: 1.05rem; margin-top: -.25rem; margin-bottom: .15rem; }
         h1, h2, h3 { color: var(--cg-text); letter-spacing: -.02em; }
         h1 { font-size: clamp(1.75rem, 3vw, 2.65rem) !important; line-height: 1.15 !important; }
         h2 { font-size: 1.35rem !important; }
@@ -51,7 +59,10 @@ def inject_theme() -> None:
         .cg-hero { background: var(--cg-surface); border: 1px solid var(--cg-border); border-radius: 16px; padding: 2.5rem 2.75rem; margin: .5rem 0 1.5rem; }
         .cg-eyebrow { color: var(--cg-brand); font-size: .72rem; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
         .cg-hero h1 { font-size: clamp(2rem, 4.4vw, 3.55rem) !important; margin: .75rem 0 1rem; max-width: 780px; }
-        .cg-hero p { font-size: 1rem; line-height: 1.8; max-width: 820px; }
+        .cg-hero p { font-size: 1rem; line-height: 1.8; max-width: 820px; white-space: pre-line; }
+        .cg-reference { background: #eef4fb; border: 1px solid #d8e4f2; border-radius: 13px; padding: 1.1rem 1.25rem; margin: 1rem 0 1.7rem; }
+        .cg-reference h3 { color: #172b4d; margin: .35rem 0 .45rem; }
+        .cg-reference p { color: #52657d; font-size: .88rem; line-height: 1.6; margin: 0 0 .45rem; }
         .cg-note { background: #f8fafc; border: 1px dashed #d0d5dd; border-radius: 9px; padding: .75rem .9rem; color: var(--cg-muted); font-size: .82rem; line-height: 1.6; }
         .cg-card { background: var(--cg-surface); border: 1px solid var(--cg-border); border-radius: 11px; padding: 1rem 1.1rem; height: 100%; }
         .cg-card h3 { margin: 0 0 .4rem; }

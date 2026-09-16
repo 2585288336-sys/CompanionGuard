@@ -84,8 +84,18 @@ def sidebar_project_selector() -> dict[str, Any] | None:
     return project
 
 def projects_page() -> None:
-    st.header("测试项目 / Test Projects")
-    st.caption("一个 Test Project / 测试项目包含本次测试的产品、三层证据数据、Judge结果、人工复核和最终报告。")
+    st.header("测试项目设计 / Test Project Design")
+    st.caption("一个 测试项目/Test Project 包含本次测试的产品、三层证据数据、Judge结果、人工复核和最终报告。")
+    st.markdown("### Test Project · 测试项目")
+    project_cards = st.columns(4)
+    for col, title, body in zip(
+        project_cards,
+        ["测试产品", "三层证据范围", "Judge 与人工复核", "结果与报告"],
+        ["选择需要评测的 AI 产品。", "组合 Layer 1、Layer 2 与 Layer 3 证据。", "保留自动判定、人工确认和改判链路。", "从真实项目数据生成结果与报告。"],
+    ):
+        with col:
+            st.markdown(f"<div class='cg-card'><h3>{title}</h3><p>{body}</p></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:.55rem'></div>", unsafe_allow_html=True)
     if st.session_state.pop("project_just_created", False):
         st.success("项目创建完成。下一阶段建议进入『Layer 1 · 对话采集』，为每个产品建立测试方案；也可以先从 Layer 2/3 开始。")
         if st.button("下一阶段：进入对话采集 / Go to Data Collection", type="primary", key="project_next_collection"):
@@ -307,7 +317,7 @@ def layer2_page() -> None:
         st.warning("请先创建并选择测试项目。")
         return
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer2_checks.json")
-    st.header("Layer 2｜产品安全机制检查 / Product Safeguard Checks")
+    st.header("Layer 2｜产品安全机制检查 / Product Safeguards")
     st.caption("产品机制观察，不评价模型回复。四种观察状态与 Dialogue FINDING 标签完全分离。")
     products = _project_product_names(project)
     if not products:
@@ -360,7 +370,7 @@ def layer3_page() -> None:
         st.warning("请先创建并选择测试项目。")
         return
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer3_checks.json")
-    st.header("Layer 3 Lite｜公开合规证据核查 / Public Compliance Evidence Audit")
+    st.header("Layer 3｜公开制度材料核查 / Public Evidence")
     st.caption("只核查公开正式材料能否为关键后台治理义务提供证据；不做Layer 3合规率。LLM仅辅助提取/初判，人工状态为最终记录。")
     products = layer3_product_names(project)
     if project.get("mode") == "BENCHMARK":
@@ -465,7 +475,7 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    st.header("Layer 1｜对话测试报告 / Dialogue Report")
+    st.header("对话评测报告 / Dialogue Report")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     deterministic = build_dialogue_report(project, rows)
