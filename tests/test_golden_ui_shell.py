@@ -33,6 +33,18 @@ def test_golden_home_required_copy_is_embedded_verbatim():
         assert text in source, text
 
 
+def test_golden_home_excludes_obsolete_design_review_banner():
+    source = GOLDEN.read_text(encoding="utf-8")
+    for obsolete in (
+        "UI/UX Refactor v0.9",
+        "纯前端审查稿",
+        "不读取、不写入正式数据",
+        "示例数字仅用于布局",
+    ):
+        assert obsolete not in source, obsolete
+    assert ".cg-home .review" not in source
+
+
 def test_golden_shell_preserves_contrast_and_overflow_guards():
     source = GOLDEN.read_text(encoding="utf-8")
     assert ".btn.primary{background:#3156d9;border-color:#3156d9;color:#fff}" in source
