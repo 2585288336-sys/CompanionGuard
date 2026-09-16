@@ -11,7 +11,7 @@ import streamlit as st
 from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE, adjudication_policy
 from .audits import load_json, load_jsonl, make_audit_row, save_audit_evidence, upsert_jsonl
 from .collector import load_collector_config
-from .projects import create_project, delete_project, get_project, is_read_only_project, list_projects, project_paths, safe_slug
+from .projects import create_project, delete_project, get_project, list_projects, project_paths, safe_slug
 from .reliability import LABELS, reliability_metrics
 from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
 from .report_pipeline import write_report_artifacts
@@ -22,7 +22,6 @@ from .collector_storage import load_raw_cases
 from .metrics import case_validity_counts, valid_case_rows
 from .display_labels import criterion_label, module_label, scenario_label
 from .ui_helpers import condition_label, phase_label, render_case_conversation, render_case_validity, render_judge_result
-from .ui_theme import empty_state
 
 
 def active_project_id() -> str | None:
@@ -84,18 +83,7 @@ def sidebar_project_selector() -> dict[str, Any] | None:
     return project
 
 def projects_page() -> None:
-    st.header("测试项目设计 / Test Project Design")
-    st.caption("一个 测试项目/Test Project 包含本次测试的产品、三层证据数据、Judge结果、人工复核和最终报告。")
-    st.markdown("### Test Project · 测试项目")
-    project_cards = st.columns(4)
-    for col, title, body in zip(
-        project_cards,
-        ["测试产品", "三层证据范围", "Judge 与人工复核", "结果与报告"],
-        ["选择需要评测的 AI 产品。", "组合 Layer 1、Layer 2 与 Layer 3 证据。", "保留自动判定、人工确认和改判链路。", "从真实项目数据生成结果与报告。"],
-    ):
-        with col:
-            st.markdown(f"<div class='cg-card'><h3>{title}</h3><p>{body}</p></div>", unsafe_allow_html=True)
-    st.markdown("<div style='height:.55rem'></div>", unsafe_allow_html=True)
+    st.caption("一个 Test Project / 测试项目包含本次测试的产品、三层证据数据、Judge结果、人工复核和最终报告。")
     if st.session_state.pop("project_just_created", False):
         st.success("项目创建完成。下一阶段建议进入『Layer 1 · 对话采集』，为每个产品建立测试方案；也可以先从 Layer 2/3 开始。")
         if st.button("下一阶段：进入对话采集 / Go to Data Collection", type="primary", key="project_next_collection"):
@@ -116,11 +104,10 @@ def projects_page() -> None:
             for p in existing
         ]), use_container_width=True, hide_index=True)
 
-    deletable = [p for p in existing if not is_read_only_project(p)]
-    if deletable:
+    if existing:
         with st.expander("删除测试项目 / Delete Project", expanded=False):
             st.warning("删除会永久移除该项目目录下的 raw cases、截图、Judge结果、人工复核、Layer 2/3 与报告；不会修改源码或 criteria。建议只用于删除 smoke test。")
-            delete_id = st.selectbox("选择项目 / Project", [p["project_id"] for p in deletable], key="delete_project_select")
+            delete_id = st.selectbox("选择项目 / Project", [p["project_id"] for p in existing], key="delete_project_select")
             confirm = st.text_input("输入 Project ID 以确认 / Type Project ID to confirm", key="delete_project_confirm")
             if st.button("永久删除项目 / Permanently delete", disabled=confirm != delete_id, key="delete_project_btn"):
                 try:
@@ -239,7 +226,6 @@ def data_explorer_page() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("采集数据查看 / Data Explorer")
     st.caption("查看已生成的标准案例、逐轮原始回复、截图预览，以及对应的 Judge / 人工复核结果。这里用于检查与导出，不建议手工编辑 JSON。")
     criteria = criteria_index()
     cases = load_raw_cases(paths.raw_cases)
@@ -317,7 +303,6 @@ def layer2_page() -> None:
         st.warning("请先创建并选择测试项目。")
         return
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer2_checks.json")
-    st.header("Layer 2｜产品安全机制检查 / Product Safeguards")
     st.caption("产品机制观察，不评价模型回复。四种观察状态与 Dialogue FINDING 标签完全分离。")
     products = _project_product_names(project)
     if not products:
@@ -359,8 +344,6 @@ def layer2_page() -> None:
             use_container_width=True,
             hide_index=True,
         )
-    else:
-        empty_state("当前项目暂无正式检查记录", "开始检查并保存证据后，将在此生成“检查项 × 产品”矩阵。")
 
 
 def layer3_page() -> None:
@@ -370,7 +353,6 @@ def layer3_page() -> None:
         st.warning("请先创建并选择测试项目。")
         return
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer3_checks.json")
-    st.header("Layer 3｜公开制度材料核查 / Public Evidence")
     st.caption("只核查公开正式材料能否为关键后台治理义务提供证据；不做Layer 3合规率。LLM仅辅助提取/初判，人工状态为最终记录。")
     products = layer3_product_names(project)
     if project.get("mode") == "BENCHMARK":
@@ -428,8 +410,6 @@ def layer3_page() -> None:
             use_container_width=True,
             hide_index=True,
         )
-    else:
-        empty_state("当前项目暂无正式核查记录", "开始核查并保存公开材料证据后，将在此生成“核查项 × 产品”矩阵。")
 
 
 def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
@@ -438,7 +418,6 @@ def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    st.header("Judge—人工一致性 / Judge–Human Reliability")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     if not rows:
@@ -475,11 +454,12 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    st.header("对话评测报告 / Dialogue Report")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     deterministic = build_dialogue_report(project, rows)
-    st.markdown(deterministic)
+    with st.container():
+        st.markdown('<span class="report-document-marker" aria-hidden="true"></span>', unsafe_allow_html=True)
+        st.markdown(deterministic)
     paths.reports.mkdir(parents=True, exist_ok=True)
     deterministic_path = paths.reports / "dialogue_report_deterministic.md"
     deterministic_path.write_text(deterministic, encoding="utf-8")
@@ -489,7 +469,11 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
         reports_dir=paths.reports, draft_text=deterministic,
     )
     st.download_button("下载确定性对话测试报告", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
-    with st.expander("可选：LLM 撰写对话测试报告", expanded=False):
+    st.markdown(
+        '<div class="report-action-heading"><div class="report-action-eyebrow">LLM REPORT WRITER</div><div class="report-action-title">可选：LLM 撰写对话测试报告</div></div>',
+        unsafe_allow_html=True,
+    )
+    with st.expander("展开配置 / Open configuration", expanded=False):
         st.caption("指标由 Python 计算；报告模型只能根据冻结的结构化上下文生成文字。")
         profile = render_llm_profile_selector("dialogue_report", key_prefix="dialogue_report_writer")
         if st.button("生成 LLM 对话测试报告", disabled=profile is None):
@@ -517,11 +501,12 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    st.header("确定性分析摘要 / Deterministic Analysis Summary")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     report = build_integrated_report(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
-    st.markdown(report)
+    with st.container():
+        st.markdown('<span class="report-document-marker" aria-hidden="true"></span>', unsafe_allow_html=True)
+        st.markdown(report)
     paths.reports.mkdir(parents=True, exist_ok=True)
     output = paths.reports / "integrated_report.md"
     output.write_text(report, encoding="utf-8")
@@ -531,7 +516,11 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
         reports_dir=paths.reports, draft_text=report, writer_prompt_version="1.0",
     )
     st.download_button("下载综合测试报告（.md）", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
-    with st.expander("生成 LLM 综合测试报告 / Generate LLM Integrated Report", expanded=False):
+    st.markdown(
+        '<div class="report-action-heading"><div class="report-action-eyebrow">LLM REPORT WRITER</div><div class="report-action-title">生成 LLM 综合测试报告</div><div class="report-action-subtitle">Generate LLM Integrated Report</div></div>',
+        unsafe_allow_html=True,
+    )
+    with st.expander("展开配置 / Open configuration", expanded=False):
         st.caption("确定性分析摘要只是 Python 结果汇总；正式 LLM 综合报告必须同时经过 Evidence Grounding Validator LLM。")
         profile = render_llm_profile_selector("integrated_report", key_prefix="integrated_report_writer")
         grounding_profile = render_llm_profile_selector("grounding_validator", key_prefix="integrated_report_grounding")

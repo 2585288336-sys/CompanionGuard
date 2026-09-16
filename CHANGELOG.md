@@ -1,24 +1,5 @@
 # Changelog
 
-## v0.9.2 — latest UI/UX package integration
-
-- Updated the workspace navigation to the latest Chinese-first `01 / 02 / 03 / 04` information architecture, with explicit Layer 1/2/3 hierarchy and report entries.
-- Updated Home, Test Project, Results, Layer 2, Layer 3 and Dialogue Report presentation labels and reference-project treatment to match the latest UI/UX package.
-- Added non-mutating workflow previews for read-only deployment snapshots so Data Collection, Dialogue Judge, Human Review, Layer 2, Layer 3 and Dialogue Report remain visible without weakening snapshot write protection.
-- Verified that the R&D copy of `CompanionGuard-Formal-Full-Benchmark-2026-09` already contains byte-identical Judge and Human Adjudication records from the FORMAL freeze; no data migration or raw-data rewrite was required.
-
-## v0.9.1 — deployment-ready public result viewer
-
-- Migrated the completed FORMAL project into the development checkout as a local analysis copy without modifying the frozen source project.
-- Added a privacy-preserving, read-only `data/demo_submission/` snapshot for Streamlit Community Cloud; conversation bodies, collection traces, Judge evidence/rationales and screenshots remain local-only.
-- Added Cloud Secrets-compatible Server API loading, nested `[llm]` aliases, read-only snapshot routing and write protection, plus a deployable `requirements.txt`.
-
-## v0.9.0 — UI/UX v0.9 research workspace
-
-- Reframed the Streamlit presentation as a complete three-layer regulatory testing system with a public Home, Project Overview, read-only Test Plan, grouped workspace navigation and restrained research SaaS styling.
-- Added data-driven project status, automatic-result presentation, light empty states for Layer 2/3, and a current Integrated Report view without changing the storage contract.
-- Preserved the frozen benchmark, project-relative evidence references, machine values and existing FORMAL data; existing projects require no migration.
-
 ## v0.8.6 — Deterministic report-generation layer
 
 - Added a derived report pipeline: FORMAL-only deterministic analysis → `report_context.json` → report draft → Python hard validation → grounding result → optional academic polish → final report.

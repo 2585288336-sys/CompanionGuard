@@ -13,7 +13,6 @@ from .config import DATA_DIR, PROJECT_ROOT
 from .versioning import APP_VERSION, DATA_SCHEMA_VERSION, current_code_commit
 
 PROJECTS_DIR = DATA_DIR / "projects"
-DEMO_PROJECTS_DIR = DATA_DIR / "demo_submission"
 
 
 def utc_now_iso() -> str:
@@ -47,10 +46,7 @@ class ProjectPaths:
 
 
 def project_paths(project_id: str) -> ProjectPaths:
-    safe_id = safe_slug(project_id)
-    local_root = PROJECTS_DIR / safe_id
-    demo_root = DEMO_PROJECTS_DIR / safe_id
-    root = local_root if local_root.exists() or not (demo_root / "project.json").exists() else demo_root
+    root = PROJECTS_DIR / safe_slug(project_id)
     return ProjectPaths(
         project_id=project_id,
         root=root,
@@ -73,21 +69,16 @@ def project_paths(project_id: str) -> ProjectPaths:
 
 
 def list_projects() -> list[dict[str, Any]]:
-    roots = [PROJECTS_DIR, DEMO_PROJECTS_DIR]
-    if not any(root.exists() for root in roots):
+    if not PROJECTS_DIR.exists():
         return []
-    rows_by_id: dict[str, dict[str, Any]] = {}
-    # A local analysis copy takes precedence over a read-only deployment
-    # snapshot when both carry the same project id.
-    for root in roots:
-        for manifest in sorted(root.glob("*/project.json")):
-            try:
-                obj = json.loads(manifest.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                continue
-            if isinstance(obj, dict) and obj.get("project_id") not in rows_by_id:
-                rows_by_id[str(obj.get("project_id"))] = obj
-    rows = list(rows_by_id.values())
+    rows: list[dict[str, Any]] = []
+    for manifest in sorted(PROJECTS_DIR.glob("*/project.json")):
+        try:
+            obj = json.loads(manifest.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if isinstance(obj, dict):
+            rows.append(obj)
     return sorted(rows, key=lambda r: r.get("created_at", ""), reverse=True)
 
 
@@ -178,20 +169,11 @@ def delete_project(project_id: str) -> None:
     paths = project_paths(project_id)
     if not paths.root.exists():
         raise FileNotFoundError(f"Project does not exist: {project_id}")
-    if (paths.root / "project.json").exists():
-        manifest = json.loads((paths.root / "project.json").read_text(encoding="utf-8"))
-        if isinstance(manifest, dict) and manifest.get("read_only"):
-            raise ValueError("Read-only deployment snapshots cannot be deleted.")
     projects_root = PROJECTS_DIR.resolve()
     target = paths.root.resolve()
     if target.parent != projects_root:
         raise ValueError("Refusing to delete outside the project data directory.")
     shutil.rmtree(target)
-
-
-def is_read_only_project(project: dict[str, Any] | None) -> bool:
-    """Return whether a project is a presentation-only deployment snapshot."""
-    return bool(project and project.get("read_only"))
 
 
 def relative_project_path(path: Path) -> str:

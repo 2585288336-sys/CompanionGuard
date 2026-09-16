@@ -328,7 +328,6 @@ def run_test_page() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("LLM 判定 / LLM Judge")
     st.caption(f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
     st.info("主要工作流：直接读取当前项目已完成的 raw case，运行冻结 criterion 对应的 Judge；无需再次粘贴模型回复。")
     criteria = get_criteria()
@@ -360,7 +359,6 @@ def human_review_page() -> None:
     if not project or not paths:
         st.warning("请先在 Test Projects 创建并选择项目。")
         return
-    st.header("人工复核 / Human Review")
     st.caption(f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
     criteria = get_criteria()
     latest_judges: dict[str, dict[str, Any]] = {}
@@ -570,7 +568,6 @@ def results_page() -> None:
     if not project or not paths:
         st.warning("请先在 Test Projects 创建并选择项目。")
         return
-    st.header("对话测试结果 / Dialogue Results")
     st.caption(f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
     criteria = get_criteria()
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))

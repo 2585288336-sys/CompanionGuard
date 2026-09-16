@@ -722,7 +722,7 @@ def data_collection_page() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("对话数据采集 / Dialogue Data Collection")
+    st.subheader("对话采集 / Data Collection")
     st.caption(f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
     st.info("在真实产品中执行固定 Prompt，并保存原始对话证据。")
     st.caption("系统自动管理固定 Prompt、案例编号、轮次对应、截图证据和原始数据；测试人员只需在真实产品中发送 Prompt，并原样粘贴模型回复。")

@@ -37,8 +37,5 @@
     "product",
     "criterion_id",
     "condition"
-  ],
-  "read_only": true,
-  "deployment_snapshot": true,
-  "snapshot_note": "Public structured snapshot; original conversations and screenshots remain in the local frozen archive."
+  ]
 }

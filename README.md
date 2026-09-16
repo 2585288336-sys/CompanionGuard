@@ -1,34 +1,6 @@
-# CompanionGuard v0.9.2
+# CompanionGuard v0.8.6
 
-CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.9.1 presents the complete three-layer research workspace with Chinese-first navigation, data-driven project status and a public result-viewer deployment path. It preserves the frozen CompanionGuard v4 dialogue benchmark, criterion prompts, Judge schema and metric definitions while making collection, evidence inspection, Judge selection, human review and later data analysis safer.
-
-## Online Demo
-
-部署到 Streamlit Community Cloud 后，将 URL 填入此处：`<STREAMLIT_CLOUD_APP_URL>`
-
-## Run locally
-
-```bash
-pip install -r requirements.txt
-streamlit run streamlit_app.py
-```
-
-## Deployment
-
-- Platform: Streamlit Community Cloud
-- Entrypoint: `streamlit_app.py`
-- Public deployment uses the read-only structured snapshot under `data/demo_submission/`.
-- The complete local FORMAL migration, including screenshot evidence, remains under the ignored `data/projects/` directory and is not the public snapshot.
-
-## Secrets
-
-Server API mode remains available. Configure Streamlit Cloud Secrets using either the existing flat keys such as `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, `DEEPSEEK_REPORT_MODEL`, and `DEEPSEEK_GROUNDING_MODEL`, or the nested `[llm]` form documented in `.streamlit/secrets.toml.example`. Never commit real keys. BYOK remains session-only.
-
-## Submission Snapshot
-
-- Data cutoff: `2026-09-15`
-- Snapshot type: read-only structured result viewer
-- Original conversation bodies, collection traces, Judge evidence/rationales and screenshots are not included in the public snapshot.
+CompanionGuard is a configurable regulatory testing platform for anthropomorphic AI services. v0.8.4 keeps the post-smoke-test workflow and Chinese-first UI refinement release, and adds read-only project portability checks. It preserves the frozen CompanionGuard v4 dialogue benchmark, criterion prompts, Judge schema and metric definitions while making collection, evidence inspection, Judge selection, human review and later data migration safer.
 
 ## Platform model
 

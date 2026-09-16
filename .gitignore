@@ -1,8 +1,6 @@
 __pycache__/
 *.py[cod]
 .venv/
-.pytest_cache/
-companionguard.egg-info/
 .env
 outputs/
 .DS_Store
@@ -15,8 +13,3 @@ data/evidence/
 
 # v0.6 project-scoped runtime data
 data/projects/
-
-# Public, read-only deployment snapshot. Local research projects remain ignored.
-!data/demo_submission/
-!data/demo_submission/**/
-!data/demo_submission/**/*
