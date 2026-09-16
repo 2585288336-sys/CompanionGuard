@@ -138,6 +138,10 @@ def render_llm_profile_selector(role: str, *, key_prefix: str, allow_server: boo
         key=f"{key_prefix}_api_key",
         help="只在当前Streamlit session中使用；不写入JSONL、CSV、project.json、日志或Git。",
     )
+    if model and not api_key:
+        st.error("缺少 API Secret / API Key。请在当前 session 填写 BYOK secret；不会写入 Project 数据或日志。")
+    elif model and provider_type in {"openai_chat_compatible", "openai_responses"} and not base_url:
+        st.error("缺少 Base URL。请填写兼容 API endpoint。")
     if not api_key or not model or (provider_type in {"openai_chat_compatible", "openai_responses"} and not base_url):
         return None
     profile = LLMProfile(
