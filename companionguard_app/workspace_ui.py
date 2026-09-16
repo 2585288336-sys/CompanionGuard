@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from html import escape
 from typing import Any
 
 import pandas as pd
@@ -17,7 +18,7 @@ from .report_pipeline import write_report_artifacts
 from .service import criteria_index, run_grounding_validator, run_report_writer
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
 from .llm_ui import llm_session_id, render_llm_profile_selector
-from .ui_theme import card, empty_state, flow, hero, pill, section_intro
+from .ui_theme import card, empty_state, flow, hero, llm_actionbar, pill, section_intro
 
 
 def _go(page: str) -> None:
@@ -26,10 +27,25 @@ def _go(page: str) -> None:
 
 
 def home_page(project: dict[str, Any] | None = None) -> None:
-    hero(
-        eyebrow="REGULATORY TESTING & RISK DIAGNOSIS",
-        title="把拟人化 AI 的监管要求，转化为可执行、可复核的测试",
-        body="CompanionGuard 是一套面向拟人化 AI 服务的监管测试与风险诊断框架。项目从《人工智能拟人化互动服务管理暂行办法》的监管要求出发，将抽象的监管规则与义务转化为可以在真实产品上执行、记录和复核的测试要求，重点观察过度迎合、情感依赖、退出挽留、危机应对、未成年人保护、敏感信息诱导等拟人化互动中的风险。\n\n在测试结果层面，CompanionGuard 建立了面向风险诊断的指标体系，包括风险发现率、压力鲁棒性、多轮鲁棒性、明确触发后的风险转变、专项风险指标和 Judge–Human Reliability。CompanionGuard 支持建立自定义测试项目，用户可以选择 AI 产品、配置测试范围和实验条件，并通过统一流程完成测试、判定、人工复核和结果分析。",
+    st.markdown(
+        """<div class="cg-home-hero">
+          <div>
+            <div class="cg-home-section" style="border-top:0;padding:0">
+              <div class="kicker">REGULATORY TESTING &amp; RISK DIAGNOSIS</div>
+              <h1>把拟人化 AI 的监管要求，转化为可执行、可复核的测试</h1>
+              <p class="lead">CompanionGuard 是一套面向拟人化 AI 服务的监管测试与风险诊断框架。</p>
+              <p class="body">项目从《人工智能拟人化互动服务管理暂行办法》的监管要求出发，将抽象的监管规则与义务转化为可以在真实产品上执行、记录和复核的测试要求，重点观察过度迎合、情感依赖、退出挽留、危机应对、未成年人保护、敏感信息诱导等拟人化互动中的风险。</p>
+              <p class="body">在测试结果层面，CompanionGuard 建立了面向风险诊断的指标体系，包括风险发现率、压力鲁棒性、多轮鲁棒性、明确触发后的风险转变、专项风险指标和 Judge–Human Reliability。指标不仅记录“是否出现问题”，还用于判断风险集中在哪里、用户施压或多轮互动后模型能否继续保持安全边界。</p>
+            </div>
+          </div>
+          <div class="cg-home-shot">
+            <div class="fakebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+            <div class="shotbody"><div class="shotside"><div class="hair blue" style="width:80%"></div><div class="mini" style="width:64%"></div><div class="mini" style="width:78%"></div><div class="mini" style="width:70%"></div><div class="mini" style="width:55%;margin-top:28px"></div></div>
+              <div class="shotmain"><div class="hair" style="width:175px;background:#344054;height:12px"></div><div class="hair" style="width:245px"></div><div class="cg-home-grid3" style="margin-top:22px"><div class="cg-home-card"><p>Layer 1</p></div><div class="cg-home-card"><p>Layer 2</p></div><div class="cg-home-card"><p>Layer 3</p></div></div><div class="cg-home-card" style="margin-top:12px"><p>Risk Diagnosis · 结果分析</p><div class="hair red" style="width:64%"></div><div class="hair blue" style="width:84%"></div><div class="hair green" style="width:48%"></div></div></div>
+            </div>
+          </div>
+        </div>""",
+        unsafe_allow_html=True,
     )
     left, right = st.columns([1, 1])
     with left:
@@ -50,63 +66,19 @@ def home_page(project: dict[str, Any] | None = None) -> None:
         unsafe_allow_html=True,
     )
 
-    if project:
-        st.markdown(
-            f"<div class='cg-micro' style='margin-top:1rem'>当前 Test Project · 结果数据将随 {project.get('project_name', project.get('project_id'))} 持续更新。</div>",
-            unsafe_allow_html=True,
-        )
-
-    section_intro("三层评测框架", "三层证据分别回答不同问题，可以相互印证，也可能出现差异；系统不将其压缩为单一安全分或合规分。")
-    cols = st.columns(3)
-    layers = [
-        ("Layer 1", "对话行为证据", "通过标准化场景观察模型实际回应、目标风险及其出现时点。"),
-        ("Layer 2", "产品安全机制检查", "检查外部研究者能够观察、操作和触发的产品保护机制。"),
-        ("Layer 3", "公开合规证据核查", "核查公开正式材料能够支持到什么程度，并保留证据边界。"),
-    ]
-    for col, (code, title, text) in zip(cols, layers):
-        with col:
-            card(f"{code}｜{title}", text)
-
-    section_intro("评测范围", "首页使用自然中文说明；具体 criterion_id、scenario_id 与机器值仍由 Project 数据和冻结配置驱动。")
-    scope = [
-        ("关系安全", "过度迎合、排他性关系、现实关系替代，以及用户退出和现实事务冲突中的挽留压力。"),
-        ("极端行为与危机应对", "暴力支持、自伤自杀安全应对，以及语言暴力和人格伤害。"),
-        ("未成年人保护", "虚拟亲密关系边界，以及不安全行为、极端情绪和不良嗜好等内容保护。"),
-        ("信息与权益保护", "工作或商业秘密、第三方隐私、个人信息和国家秘密相关的诱导披露。"),
-        ("禁止性内容生成专项测试", "通过固定单轮场景检查七类明确禁止内容，作为传统内容安全测试的补充。"),
-    ]
-    cols = st.columns(5)
-    for col, (title, text) in zip(cols, scope):
-        with col:
-            card(title, text)
-
-    section_intro("从监管要求到可追溯结论")
-    flow(["监管要求", "可观察要求", "测试场景 / 产品检查", "证据记录", "结构化判定", "人工复核", "Finding"])
-
-    section_intro("构建与方法", "从监管要求到可执行、可复核的 AI 测试。完整定义仍以正式方法说明为准。")
-    methods = [
-        ("01", "从监管要求出发设计测试", "把监管义务转化为可观察行为或产品机制。"),
-        ("02", "用标准化场景观察真实对话表现", "通过 C0、C1、C2 比较标准、压力与多轮条件。"),
-        ("03", "覆盖五类核心监管问题", "关系安全、危机应对、未成年人、信息权益和禁止性内容。"),
-        ("04", "三层证据分别取证", "对话行为、产品机制和公开制度材料分开观察。"),
-        ("05", "受准则约束的自动 Judge + 人工复核", "Judge 依据冻结标准，人工负责确认、改判和边界处理。"),
-        ("06", "指标用于定位问题，不制造单一排名", "指标回答问题集中在哪里、何种条件下增加及判定是否可靠。"),
-    ]
-    cols = st.columns(3)
-    for index, (num, title, text) in enumerate(methods):
-        with cols[index % 3]:
-            st.markdown(f"<div class='cg-card' style='margin-bottom:1rem'><div class='cg-eyebrow'>{num}</div><h3>{title}</h3><p>{text}</p></div>", unsafe_allow_html=True)
-
-    section_intro("冻结条件结构")
-    cols = st.columns(3)
-    condition_text = [
-        ("C0｜标准条件 / Baseline Condition", "L1–L4 合并发送 → A4；再发送普通 L5 → A5。"),
-        ("C1｜压力条件 / Pressure Condition", "与 C0 相同的 L1–L4，仅增强 L5 互动压力 → A5。"),
-        ("C2｜多轮条件 / Sequential Multi-turn Condition", "L1 → A1 → L2 → A2 → L3 → A3 → L4 → A4 → L5 → A5。"),
-    ]
-    for col, (title, text) in zip(cols, condition_text):
-        with col:
-            card(title, text)
+    current_name = escape(str((project or {}).get("project_name") or (project or {}).get("project_id") or "当前项目"))
+    st.markdown(
+        f"""<div class="cg-home-section"><div class="intro"><div class="kicker">Regulation → Testable Evidence</div><h2>从《人工智能拟人化互动服务管理暂行办法》监管要求到真实产品测试</h2><p>监管规范通常以原则和义务的形式提出要求，而产品测试需要把这些要求进一步拆解为能够被观察、记录和复核的具体问题。</p></div><div class="cg-home-grid2"><div class="cg-home-card"><div class="cg-home-grid3" style="grid-template-columns:1fr"><div class="cg-home-card"><h3>模型实际会怎样回应？</h3></div><div class="cg-home-card"><h3>用户进一步施压后，原有边界还能否保持？</h3></div><div class="cg-home-card"><h3>产品是否设置了相应保护机制？</h3></div><div class="cg-home-card"><h3>公开材料能否支持对制度安排的核查？</h3></div></div></div><div class="cg-home-card"><p>CompanionGuard 将监管要求拆解为可观察行为、标准测试场景、产品检查项和公开材料核查项，使抽象规则能够进入真实产品测试。</p><div class="cg-home-flow" style="margin-top:1rem"><span>监管要求</span><i>→</i><span>测试场景</span><i>→</i><span>证据记录</span><i>→</i><span>Finding</span></div></div></div></div>
+        <div class="cg-home-section"><div class="intro"><div class="kicker">Three-Layer Regulatory Evaluation</div><h2>三层监管评测框架</h2><p>同一项监管要求，可能分别体现在模型回答、产品功能和企业公开制度中。三层结果可以相互印证，也可能出现差异。</p></div><div class="cg-home-grid3"><div class="cg-home-card"><h3>Layer 1 · 对话行为测试</h3><p>通过标准化测试场景观察模型实际回答，以及标准、压力和多轮条件下的变化。</p></div><div class="cg-home-card"><h3>Layer 2 · 产品安全机制检查</h3><p>检查外部测试人员能够实际观察、操作或触发的产品保护机制。</p></div><div class="cg-home-card"><h3>Layer 3 · 公开制度材料核查</h3><p>核查企业公开正式材料中能够确认的制度信息，并保留证据边界。</p></div></div></div>
+        <div class="cg-home-section"><div class="intro"><div class="kicker">Core Regulatory Scope</div><h2>核心测试范围</h2></div><div class="cg-home-grid5"><div class="cg-home-card"><h3>关系安全</h3><p>过度迎合、排他性关系、现实关系替代和退出挽留压力。</p></div><div class="cg-home-card"><h3>极端行为与危机应对</h3><p>暴力支持、自伤自杀安全应对，以及语言暴力和人格伤害。</p></div><div class="cg-home-card"><h3>未成年人保护</h3><p>虚拟亲密关系边界和不安全行为、极端情绪及不良嗜好。</p></div><div class="cg-home-card"><h3>信息与权益保护</h3><p>工作秘密、商业秘密、第三方隐私和个人信息诱导披露。</p></div><div class="cg-home-card"><h3>禁止性内容专项测试</h3><p>通过固定单轮测试检查七类明确禁止内容。</p></div></div></div>
+        <div class="cg-home-section"><div class="intro"><div class="kicker">Custom Test Projects</div><h2>支持自定义测试项目</h2><p>用户可以选择产品、测试范围、实验条件、分析指标和证据范围，并通过统一 Project 完成测试、判定、人工复核与结果分析。</p></div><div class="cg-home-grid2"><div class="cg-home-grid3"><div class="cg-home-card"><h3>测试产品</h3><p>选择需要评测的 AI 产品或目标模型。</p></div><div class="cg-home-card"><h3>三层证据范围</h3><p>组合 Layer 1、Layer 2 与 Layer 3 证据。</p></div><div class="cg-home-card"><h3>实验条件</h3><p>配置 C0、C1、C2 和专项测试。</p></div><div class="cg-home-card"><h3>分析指标</h3><p>选择总体、条件鲁棒性、专项风险和一致性指标。</p></div><div class="cg-home-card"><h3>证据范围</h3><p>组合对话测试、产品机制和公开材料核查。</p></div><div class="cg-home-card"><h3>统一工作流</h3><p>在同一 Project 中完成测试、复核和报告。</p></div></div><div class="cg-home-dark"><div class="kicker" style="color:#9bb4ff">REFERENCE CONFIGURATION</div><h3>CompanionGuard Formal Full Benchmark 2026-09</h3><p>统一监管测试方案，覆盖三层证据、自动 Judge、人工复核和结果报告。</p><div class="cg-home-flow" style="margin-top:1rem"><span>FORMAL</span><span>3 个代表性产品</span><span>Layer 1 + 2 + 3</span></div></div></div></div>
+        <div class="cg-home-section"><div class="intro"><div class="kicker">Dialogue Conditions</div><h2>对话测试与实验条件</h2><p>三种实验条件分别观察不同问题，因此分别记录和比较，不合并为一种笼统的“高难度测试”。</p></div><div class="cg-home-grid3"><div class="cg-home-card"><h3 style="color:#3156d9">C0 · 标准条件 / Baseline Condition</h3><p>在自然、集中表达的测试场景中观察模型的基本表现。</p></div><div class="cg-home-card"><h3 style="color:#b54708">C1 · 压力条件 / Pressure Condition</h3><p>保持关键事实不变，只增强用户互动压力，观察边界保持能力。</p></div><div class="cg-home-card"><h3 style="color:#6941c6">C2 · 多轮条件 / Sequential Multi-turn Condition</h3><p>将场景信息逐轮呈现，观察上下文累积后的持续安全能力。</p></div></div></div>
+        <div class="cg-home-section"><div class="intro"><div class="kicker">Structured Judgment</div><h2>LLM Judge + 人工复核</h2></div><div class="cg-home-grid2"><div class="cg-home-card"><h3>LLM Judge 依据预定义边界判定</h3><p>每项测试在执行前定义 Target Behaviors、Non-target Behaviors 和边界规则，Judge 围绕 Criterion 做结构化初判。</p><div class="cg-home-flow" style="margin-top:1rem"><span>FINDING</span><span>NO_FINDING</span><span>REVIEW</span></div></div><div class="cg-home-card"><h3>自动判定与人工判断可追溯</h3><p>系统同时记录自动判断、人工判断和最终标签，使每一次改判都可以追溯。</p><div class="cg-home-flow" style="margin-top:1rem"><span>Auto Judgment</span><i>→</i><span>Human Review</span><i>→</i><span>Final Label</span></div></div></div></div>
+        <div class="cg-home-section"><div class="intro"><div class="kicker">Metrics &amp; Risk Diagnosis</div><h2>如何理解评测结果</h2><p>指标是证据，用于说明问题出现在哪里、在什么条件下更容易出现，以及自动判定本身是否可靠。</p></div><div class="cg-home-grid2"><div class="cg-home-card"><h3>FINDING · 风险发现</h3><p>定位具体场景中的目标风险，不直接等同于法律意义上的“不合规”。</p></div><div class="cg-home-card"><h3>OVERALL MACRO FINDING RATE · 总体风险发现率</h3><p>观察 Finding 是分散出现还是集中于某个模块或准则。</p></div><div class="cg-home-card"><h3>PRESSURE / MULTI-TURN ROBUSTNESS GAP</h3><p>比较 C1、C2 与 C0，观察用户施压或多轮持续后的边界保持能力。</p></div><div class="cg-home-card"><h3>ELICITATION FLIP · 明确触发后的风险转变</h3><p>关注模型从 NO_FINDING 转为 FINDING 的情况。</p></div><div class="cg-home-card"><h3>SPECIALIZED METRICS · 专项指标</h3><p>定位急性风险、关系限制、未成年人内容和禁止性内容等具体安全能力。</p></div><div class="cg-home-card"><h3>JUDGE–HUMAN RELIABILITY · 判定一致性</h3><p>评价自动判定与人工复核之间的一致性和可靠性。</p></div></div></div>
+        <div class="cg-home-section" id="method"><div class="intro"><div class="kicker">Construction &amp; Method</div><h2>构建与方法</h2><p>从监管要求到可执行、可复核的 AI 测试。</p></div><div class="cg-home-grid3"><div class="cg-home-card"><h3>01 · 确定测试对象</h3><p>从监管要求确定测试对象与观察边界。</p></div><div class="cg-home-card"><h3>02 · 设计标准化场景</h3><p>把要求转化为可执行测试 Prompt。</p></div><div class="cg-home-card"><h3>03 · 设置实验条件</h3><p>分别设置 C0、C1、C2。</p></div><div class="cg-home-card"><h3>04 · 分别采集三层证据</h3><p>对话行为、产品机制和公开制度材料分开取证。</p></div><div class="cg-home-card"><h3>05 · 自动判定与人工复核</h3><p>保留 Auto、Human、Final 三条记录。</p></div><div class="cg-home-card"><h3>06 · 从指标进入风险分析</h3><p>用指标定位问题，不制造单一排名。</p></div></div><div class="cg-home-dark"><h3>正式方法说明</h3><p>CompanionGuard 的正式项目方法、术语与数据口径以工程内现有方法说明和冻结配置为准。</p></div><div class="cg-micro" style="margin-top:1rem">当前 Test Project · {current_name} · 研究项目数据与公开快照保持分离。</div></div>
+        <div class="cg-home-footer"><span>CompanionGuard · Regulatory Testing &amp; Risk Diagnosis</span><span>Layer 1 对话证据 · Layer 2 产品证据 · Layer 3 公开证据</span></div>""",
+        unsafe_allow_html=True,
+    )
 
 
 def _date_cutoff(cases: list[dict[str, Any]]) -> str:
@@ -348,7 +320,8 @@ def integrated_report_page_v09() -> None:
     st.caption("生成 v1.1 LLM 综合报告需要分别配置 Integrated Report Writer 与 Evidence Grounding Validator。Academic Polish 本页不自动启用。")
     writer_profile = render_llm_profile_selector("integrated_report", key_prefix="v09_integrated_report_writer")
     grounding_profile = render_llm_profile_selector("grounding_validator", key_prefix="v09_integrated_report_grounding")
-    if st.button("生成 / 更新 LLM 综合报告", type="primary", disabled=writer_profile is None or grounding_profile is None, key="v09_generate_integrated_report"):
+    llm_actionbar(title="Integrated Report Writer · LLM", profile=writer_profile, notes=["Hard Validation", "Evidence Grounding"])
+    if st.button("生成 / 更新综合评测报告", type="primary", disabled=writer_profile is None or grounding_profile is None, key="v09_generate_integrated_report"):
         try:
             context = build_integrated_report_context(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
             draft = run_report_writer(role="integrated_report", report_context=context, llm_profile=writer_profile, session_id=llm_session_id(), project_id=project.get("project_id"), prompt_version="1.1")

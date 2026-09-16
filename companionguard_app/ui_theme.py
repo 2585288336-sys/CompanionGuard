@@ -82,6 +82,55 @@ def inject_theme() -> None:
         .cg-flow-item { background: #fff; border: 1px solid var(--cg-border); border-radius: 8px; padding: .55rem .75rem; font-size: .82rem; font-weight: 650; }
         .cg-flow-arrow { color: #98a2b3; }
         .cg-micro { font-size: .78rem; color: var(--cg-muted); }
+        .cg-access-pill { display:inline-flex; align-items:center; gap:.35rem; border-radius:999px; padding:.22rem .55rem; font-size:.66rem; font-weight:750; letter-spacing:.04em; }
+        .cg-access-pill.public { color:#475467; background:#f2f4f7; border:1px solid #e4e7ec; }
+        .cg-access-pill.researcher { color:#067647; background:#ecfdf3; border:1px solid #d1fadf; }
+        .cg-workspace-topbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; background:#fff; border-bottom:1px solid var(--cg-border); padding:.75rem 1.1rem; margin:-1rem 0 1.25rem; }
+        .cg-workspace-topbar .crumb { color:var(--cg-muted); font-size:.76rem; }
+        .cg-workspace-topbar .crumb strong { color:#344054; }
+        .cg-workspace-topbar .status { display:flex; align-items:center; gap:.45rem; color:var(--cg-muted); font-size:.7rem; }
+        .cg-workspace-topbar .status i { width:6px; height:6px; border-radius:50%; background:#12b76a; display:inline-block; }
+        .cg-llm-actionbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; background:#fff; border:1px solid var(--cg-border); border-radius:10px; padding:.8rem .95rem; margin:.45rem 0 1rem; }
+        .cg-llm-actionbar .meta { display:flex; align-items:center; flex-wrap:wrap; gap:.45rem; }
+        .cg-llm-actionbar .title { color:#344054; font-size:.78rem; font-weight:760; }
+        .cg-llm-status { display:inline-flex; align-items:center; gap:.35rem; border:1px solid #d1fadf; background:#ecfdf3; color:#067647; border-radius:999px; padding:.22rem .5rem; font-size:.67rem; font-weight:650; }
+        .cg-llm-status:before { content:""; width:6px; height:6px; border-radius:50%; background:#12b76a; }
+        .cg-home-wrap { max-width:1240px; margin:0 auto; background:#fff; }
+        .cg-home-hero { padding:3.3rem 1.25rem 3.8rem; display:grid; grid-template-columns:1.02fr .98fr; gap:3rem; align-items:center; }
+        .cg-home-hero h1 { font-size:clamp(2.4rem,5vw,3.8rem) !important; letter-spacing:-.045em; margin:.8rem 0 1rem; }
+        .cg-home-hero .lead { font-size:1rem; line-height:1.8; color:#475467; margin:0 0 .9rem; }
+        .cg-home-hero .body { font-size:.8rem; line-height:1.8; color:#667085; margin:0 0 .75rem; }
+        .cg-home-shot { border:1px solid #dde3ec; border-radius:16px; background:#fff; box-shadow:0 24px 60px rgba(16,24,40,.11); overflow:hidden; }
+        .cg-home-shot .fakebar { height:2.2rem; border-bottom:1px solid var(--cg-border); background:#fcfcfd; display:flex; align-items:center; padding:0 .85rem; gap:.4rem; }
+        .cg-home-shot .dot { width:8px; height:8px; border-radius:50%; background:#d0d5dd; }
+        .cg-home-shot .shotbody { display:grid; grid-template-columns:8.6rem 1fr; min-height:19rem; }
+        .cg-home-shot .shotside { border-right:1px solid var(--cg-border); background:#fafbfc; padding:1rem .75rem; }
+        .cg-home-shot .shotmain { padding:1.45rem; }
+        .cg-home-shot .hair { height:9px; border-radius:7px; background:#e8ecf2; margin:9px 0; }
+        .cg-home-shot .hair.blue { background:#dce6ff; }
+        .cg-home-shot .hair.red { background:#fee4e2; }
+        .cg-home-shot .hair.green { background:#d1fadf; }
+        .cg-home-shot .mini { height:8px; background:#e4e7ec; border-radius:6px; margin:10px 0; }
+        .cg-home-section { padding:2.8rem 1.25rem; border-top:1px solid #eef1f5; }
+        .cg-home-section .intro { max-width:760px; margin-bottom:1.4rem; }
+        .cg-home-section .kicker { font-size:.65rem; color:var(--cg-brand); font-weight:750; letter-spacing:.08em; text-transform:uppercase; margin-bottom:.45rem; }
+        .cg-home-section h2 { font-size:1.65rem !important; margin:0 0 .55rem; }
+        .cg-home-section .intro p { font-size:.8rem; line-height:1.75; color:#667085; margin:0; }
+        .cg-home-card { background:#fff; border:1px solid var(--cg-border); border-radius:11px; padding:1rem; height:100%; }
+        .cg-home-card h3 { font-size:.92rem; margin:0 0 .45rem; }
+        .cg-home-card p { font-size:.72rem; line-height:1.65; color:#667085; margin:0; }
+        .cg-home-grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:.8rem; }
+        .cg-home-grid5 { display:grid; grid-template-columns:repeat(5,1fr); gap:.7rem; }
+        .cg-home-grid2 { display:grid; grid-template-columns:1.1fr .9fr; gap:1rem; }
+        .cg-home-flow { display:flex; gap:.45rem; align-items:center; flex-wrap:wrap; }
+        .cg-home-flow span { background:#fff; border:1px solid var(--cg-border); border-radius:8px; padding:.55rem .7rem; font-size:.72rem; font-weight:650; }
+        .cg-home-flow i { color:#98a2b3; font-style:normal; }
+        .cg-home-dark { background:#101828; color:#fff; border-radius:13px; padding:1.2rem 1.3rem; margin-top:1rem; }
+        .cg-home-dark h3 { color:#fff; margin:.2rem 0 .4rem; }
+        .cg-home-dark p { color:#d0d5dd; font-size:.72rem; line-height:1.65; margin:0; }
+        .cg-home-footer { padding:2.2rem 1.25rem 3.5rem; border-top:1px solid var(--cg-border); display:flex; justify-content:space-between; color:#667085; font-size:.68rem; }
+        @media (max-width:1100px) { .cg-home-hero,.cg-home-grid2 { grid-template-columns:1fr; } .cg-home-grid5 { grid-template-columns:1fr 1fr; } }
+        @media (max-width:700px) { .cg-home-grid3 { grid-template-columns:1fr; } .cg-home-footer { display:block; } }
         @media (max-width: 800px) { .cg-hero { padding: 1.5rem; } }
         </style>
         """,
@@ -126,3 +175,29 @@ def flow(items: list[str]) -> None:
         html += f'<span class="cg-flow-item">{item}</span>'
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
+
+
+def workspace_topbar(*, page_title: str, project: dict[str, Any] | None, authorized: bool) -> None:
+    project_name = (project or {}).get("project_name") or "No active Test Project"
+    llm_label = "LLM · Server API" if authorized else "PUBLIC_VIEWER · read only"
+    dot = "<i></i>" if authorized else ""
+    st.markdown(
+        f"<div class='cg-workspace-topbar'><div class='crumb'>CompanionGuard / <strong>{page_title}</strong> · {project_name}</div><div class='status'>{dot}{llm_label}</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
+def llm_actionbar(*, title: str, profile: Any | None, notes: list[str] | None = None) -> None:
+    notes = notes or []
+    if profile is None:
+        status = "Server API · 未连接"
+        details = "请在下方 LLM 配置中选择 Server API 或 BYOK"
+    else:
+        mode = "Server API · 已连接" if getattr(profile, "access_mode", "") == "SERVER" else "BYOK · 已配置"
+        status = mode
+        details = f"{getattr(profile, 'provider_name', 'Provider')} · {getattr(profile, 'model', 'Model')}"
+    chips = "".join(f"<span class='cg-pill'>{note}</span>" for note in notes)
+    st.markdown(
+        f"<div class='cg-llm-actionbar'><div><div class='meta'><span class='title'>{title}</span><span class='cg-llm-status'>{status}</span>{chips}</div><div class='cg-micro' style='margin-top:.3rem'>{details}</div></div></div>",
+        unsafe_allow_html=True,
+    )
