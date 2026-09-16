@@ -30,6 +30,7 @@ from .platform_ui import active_project, active_paths
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .service import criteria_index, run_batch_cases, run_single_case
 from .ui_helpers import condition_label, phase_label, render_case_conversation, render_case_validity, render_criterion_context, render_judge_result
+from .ui_theme import llm_actionbar
 from .storage import (
     build_final_results,
     load_adjudications,
@@ -110,7 +111,10 @@ def _run_collected_batch_cases(
         use_container_width=True,
         hide_index=True,
     )
+    run_requested = st.session_state.pop("judge_batch_requested", False)
     if st.button("开始批量判定", type="primary", disabled=not selected_cases, key="run_collected_batch"):
+        run_requested = True
+    if run_requested and selected_cases:
         if not llm_profile:
             st.error("请先配置 Judge 模型。")
             return
@@ -181,7 +185,10 @@ def _run_collected_single_case(*, project: dict[str, Any], paths, criteria: dict
         _judge_result_card(prior[-1])
         return
 
+    run_requested = st.session_state.pop("judge_single_requested", False)
     if st.button("对已采集案例运行 Judge", type="primary", key="run_collected_case"):
+        run_requested = True
+    if run_requested:
         if not llm_profile:
             st.error("请先配置 Judge 模型。")
             return
@@ -328,11 +335,41 @@ def run_test_page() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("LLM 判定 / LLM Judge")
+    st.header("自动判定 / Dialogue Judge")
     st.caption(f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
     st.info("主要工作流：直接读取当前项目已完成的 raw case，运行冻结 criterion 对应的 Judge；无需再次粘贴模型回复。")
     criteria = get_criteria()
-    llm_profile = render_llm_profile_selector("judge", key_prefix="run_test_judge")
+    with st.expander("LLM 配置 / Server API or BYOK", expanded=False):
+        llm_profile = render_llm_profile_selector("judge", key_prefix="run_test_judge")
+    llm_actionbar(title="Dialogue Judge · LLM 运行", profile=llm_profile, notes=["criterion-bound", "writes judge_results only"])
+    action_cols = st.columns(3)
+    with action_cols[0]:
+        if st.button("运行选中案例", key="golden_judge_single", disabled=llm_profile is None, use_container_width=True):
+            st.session_state["judge_single_requested"] = True
+    with action_cols[1]:
+        if st.button("重试失败", key="golden_judge_retry", disabled=llm_profile is None, use_container_width=True):
+            st.session_state["judge_retry_requested"] = True
+    with action_cols[2]:
+        if st.button("运行待判定案例", type="primary", key="golden_judge_batch", disabled=llm_profile is None, use_container_width=True):
+            st.session_state["judge_batch_requested"] = True
+
+    if st.session_state.pop("judge_retry_requested", False):
+        failed = [row for row in load_judge_results(paths.judge_results) if row.get("status") != "ok" and row.get("case_id")]
+        case_map = {case.get("case_id"): case for case in load_raw_cases(paths.raw_cases)}
+        retry_cases = [case_map[row["case_id"]] for row in failed if row["case_id"] in case_map]
+        if not retry_cases:
+            st.info("当前没有可重试的失败 Judge 案例。")
+        else:
+            try:
+                with st.spinner("正在重试失败 Judge..."):
+                    retried = run_batch_cases(
+                        cases=retry_cases, criteria=criteria, llm_profile=llm_profile,
+                        skip_completed=False, judge_path=paths.judge_results,
+                        session_id=llm_session_id(), project_id=project.get("project_id"),
+                    )
+                st.success(f"失败案例重试完成：{sum(row.get('status') == 'ok' for row in retried)} / {len(retried)}。")
+            except Exception as exc:
+                st.error(str(exc))
 
     single_tab, batch_tab, advanced_tab = st.tabs([
         "判定单个案例",
