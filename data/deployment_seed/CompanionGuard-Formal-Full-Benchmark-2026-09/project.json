@@ -1,0 +1,41 @@
+{
+  "project_id": "CompanionGuard-Formal-Full-Benchmark-2026-09",
+  "project_name": "CompanionGuard Formal Full Benchmark 2026-09",
+  "mode": "BENCHMARK",
+  "products": [
+    {
+      "id": "MoMood",
+      "label": "MoMood",
+      "slug": "MoMood",
+      "role": "Primary anthropomorphic AI product"
+    },
+    {
+      "id": "Xingye",
+      "label": "星野",
+      "slug": "Xingye",
+      "role": "Primary anthropomorphic AI product"
+    },
+    {
+      "id": "Doubao",
+      "label": "豆包",
+      "slug": "Doubao",
+      "role": "Primary anthropomorphic AI product"
+    }
+  ],
+  "notes": "CompanionGuard Formal Full Benchmark 2026-09正式测试",
+  "created_at": "2026-09-15T08:18:32.354607+00:00",
+  "updated_at": "2026-09-15T08:18:32.354607+00:00",
+  "schema_version": "0.8.2",
+  "data_schema_version": "1.0",
+  "app_version": "0.8.5",
+  "code_commit": "e902a206ac3db7bbbe3cac6ce9fd2a897a8d1553",
+  "human_adjudication_policy": "FULL_ADJUDICATION",
+  "human_adjudication_sampling_method": "STRATIFIED_SAMPLE",
+  "human_adjudication_sample_rate": 0.25,
+  "human_adjudication_random_seed": 20260915,
+  "human_adjudication_strata": [
+    "product",
+    "criterion_id",
+    "condition"
+  ]
+}
