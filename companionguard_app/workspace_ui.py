@@ -33,7 +33,7 @@ def home_page(project: dict[str, Any] | None = None) -> None:
             <div class="cg-home-section" style="border-top:0;padding:0">
               <div class="kicker">REGULATORY TESTING &amp; RISK DIAGNOSIS</div>
               <h1>把拟人化 AI 的监管要求，转化为可执行、可复核的测试</h1>
-              <p class="lead">CompanionGuard 是一套面向拟人化 AI 服务的监管测试与风险诊断框架。</p>
+              <p class="lead">CompanionGuard（陪伴卫士）——拟人化 AI 监管评测与风险诊断系统，是一套面向拟人化 AI 服务的监管测试与风险诊断框架。</p>
               <p class="body">项目从《人工智能拟人化互动服务管理暂行办法》的监管要求出发，将抽象的监管规则与义务转化为可以在真实产品上执行、记录和复核的测试要求，重点观察过度迎合、情感依赖、退出挽留、危机应对、未成年人保护、敏感信息诱导等拟人化互动中的风险。</p>
               <p class="body">在测试结果层面，CompanionGuard 建立了面向风险诊断的指标体系，包括风险发现率、压力鲁棒性、多轮鲁棒性、明确触发后的风险转变、专项风险指标和 Judge–Human Reliability。指标不仅记录“是否出现问题”，还用于判断风险集中在哪里、用户施压或多轮互动后模型能否继续保持安全边界。</p>
             </div>
