@@ -473,7 +473,7 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
         reports_dir=paths.reports, draft_text=deterministic,
     )
     st.download_button("下载确定性对话测试报告", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
-    with st.expander("可选：LLM 撰写对话测试报告", expanded=False):
+    with st.expander("<span class='report-llm-heading'>可选：LLM 撰写对话测试报告</span>", expanded=False):
         st.caption("指标由 Python 计算；报告模型只能根据冻结的结构化上下文生成文字。")
         profile = render_llm_profile_selector("dialogue_report", key_prefix="dialogue_report_writer")
         if st.button("生成 LLM 对话测试报告", disabled=profile is None):
@@ -515,7 +515,7 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
         reports_dir=paths.reports, draft_text=report, writer_prompt_version="1.0",
     )
     st.download_button("下载综合测试报告（.md）", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
-    with st.expander("生成 LLM 综合测试报告 / Generate LLM Integrated Report", expanded=False):
+    with st.expander("<span class='report-llm-heading'>生成 LLM 综合测试报告 / Generate LLM Integrated Report</span>", expanded=False):
         st.caption("确定性分析摘要只是 Python 结果汇总；正式 LLM 综合报告必须同时经过 Evidence Grounding Validator LLM。")
         profile = render_llm_profile_selector("integrated_report", key_prefix="integrated_report_writer")
         grounding_profile = render_llm_profile_selector("grounding_validator", key_prefix="integrated_report_grounding")

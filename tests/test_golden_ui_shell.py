@@ -73,3 +73,16 @@ def test_six_baseline_workflows_are_still_routed():
         "report_page",
     ):
         assert f"{function_name}(" in source, function_name
+
+
+def test_competition_micro_refinements_are_scoped_to_presentation():
+    source = GOLDEN.read_text(encoding="utf-8")
+    platform = (ROOT / "companionguard_app" / "platform_ui.py").read_text(encoding="utf-8")
+    assert 'for item in ("judge", "review", "explorer", "reliability", "results")' in source
+    assert '_group_heading("03 报告", "Reports")' in source
+    assert '.navlayer-toggle{padding-left:14px!important}' in source
+    assert '[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:10.4px!important}' in source
+    assert '.report-llm-heading{font-size:15px!important;font-weight:750!important;color:#3156d9!important}' in source
+    assert '[data-testid="stMain"] button[kind="primary"]{background:#3156d9!important;color:#fff!important' in source
+    assert "<span class='report-llm-heading'>可选：LLM 撰写对话测试报告</span>" in platform
+    assert "<span class='report-llm-heading'>生成 LLM 综合测试报告 / Generate LLM Integrated Report</span>" in platform
