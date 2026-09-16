@@ -80,9 +80,49 @@ def test_competition_micro_refinements_are_scoped_to_presentation():
     platform = (ROOT / "companionguard_app" / "platform_ui.py").read_text(encoding="utf-8")
     assert 'for item in ("judge", "review", "explorer", "reliability", "results")' in source
     assert '_group_heading("03 报告", "Reports")' in source
-    assert '.navlayer-toggle{padding-left:14px!important}' in source
-    assert '[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:10.4px!important}' in source
-    assert '.report-llm-heading{font-size:15px!important;font-weight:750!important;color:#3156d9!important}' in source
+    assert '.navlayer-toggle{padding-left:16px!important}' in source
+    assert '[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:11.4px!important}' in source
     assert '[data-testid="stMain"] button[kind="primary"]{background:#3156d9!important;color:#fff!important' in source
-    assert "<span class='report-llm-heading'>可选：LLM 撰写对话测试报告</span>" in platform
-    assert "<span class='report-llm-heading'>生成 LLM 综合测试报告 / Generate LLM Integrated Report</span>" in platform
+    assert 'class="report-action-title"' in platform
+
+
+def test_workspace_route_level_headings_are_not_repeated_in_body():
+    ui = (ROOT / "companionguard_app" / "ui.py").read_text(encoding="utf-8")
+    platform = (ROOT / "companionguard_app" / "platform_ui.py").read_text(encoding="utf-8")
+    collector = (ROOT / "companionguard_app" / "collector_ui.py").read_text(encoding="utf-8")
+    for duplicate in (
+        'st.header("LLM 判定 / LLM Judge")',
+        'st.header("人工复核 / Human Review")',
+        'st.header("对话测试结果 / Dialogue Results")',
+        'st.header("测试项目 / Test Projects")',
+        'st.header("采集数据查看 / Data Explorer")',
+        'st.header("Layer 2｜产品安全机制检查 / Product Safeguard Checks")',
+        'st.header("Layer 3 Lite｜公开合规证据核查 / Public Compliance Evidence Audit")',
+        'st.header("Judge—人工一致性 / Judge–Human Reliability")',
+        'st.header("Layer 1｜对话测试报告 / Dialogue Report")',
+        'st.header("确定性分析摘要 / Deterministic Analysis Summary")',
+    ):
+        assert duplicate not in ui + platform + collector
+    assert 'st.subheader("对话采集 / Data Collection")' in collector
+
+
+def test_report_llm_labels_are_plain_text_and_report_css_is_scoped():
+    platform = (ROOT / "companionguard_app" / "platform_ui.py").read_text(encoding="utf-8")
+    golden = GOLDEN.read_text(encoding="utf-8")
+    assert "<span class='report-llm-heading'>" not in platform
+    assert "report-llm-heading'" not in platform
+    assert 'st.expander("展开配置 / Open configuration"' in platform
+    assert 'class="report-document-marker"' in platform
+    assert '[data-testid="stVerticalBlock"]:has(.report-document-marker)' in golden
+    assert ".report-action-eyebrow{font-size:10.5px" in golden
+    assert ".report-action-title{font-size:15px!important;font-weight:750px" not in golden
+    assert ".report-action-title{font-size:15px!important;font-weight:750!important" in golden
+    assert "color:#3156d9!important" in golden
+
+
+def test_sidebar_hierarchy_is_ordered_by_size_and_indent():
+    golden = GOLDEN.read_text(encoding="utf-8")
+    assert ".navgroup-toggle .zh{font-size:13.5px!important;font-weight:800!important" in golden
+    assert ".navlayer-toggle .zh{font-size:12.4px!important;font-weight:750!important" in golden
+    assert ".navlayer-toggle{padding-left:16px!important}" in golden
+    assert '[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:11.4px!important}' in golden
