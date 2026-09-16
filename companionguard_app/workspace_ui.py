@@ -18,7 +18,7 @@ from .report_pipeline import write_report_artifacts
 from .service import criteria_index, run_grounding_validator, run_report_writer
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
 from .llm_ui import llm_session_id, render_llm_profile_selector
-from .ui_theme import card, empty_state, flow, hero, llm_actionbar, pill, section_intro
+from .ui_theme import card, empty_state, flow, golden_card_head, golden_page_head, hero, llm_actionbar, pill, section_intro
 
 
 def _go(page: str) -> None:
@@ -102,8 +102,7 @@ def project_overview_page() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("项目总览 / Project Overview")
-    st.caption("这里集中展示当前 Test Project 的执行状态；数据状态不代表 CompanionGuard 系统功能的开发完成度。")
+    golden_page_head("当前项目总览 / Current Project Overview", "集中展示当前 Test Project 的执行状态与数据覆盖范围。这里描述的是本轮评测项目，而不是 CompanionGuard 系统开发状态。")
     cases = load_raw_cases(paths.raw_cases)
     judges = [r for r in load_judge_results(paths.judge_results) if r.get("status") == "ok"]
     adjudications = load_adjudications(paths.adjudication)
@@ -111,15 +110,17 @@ def project_overview_page() -> None:
     layer3 = load_jsonl(paths.layer3_records)
     formal_cases = [r for r in cases if r.get("phase") == "FORMAL"]
     formal_judges = [r for r in judges if (r.get("metadata") or {}).get("phase", r.get("phase")) == "FORMAL" or r.get("case_id") in {c.get("case_id") for c in formal_cases}]
-    cols = st.columns(4)
-    for col, args in zip(cols, [
-        ("正式对话数据采集", "已完成" if formal_cases else "尚无记录", f"FORMAL records available · {len(formal_cases)} 个", "green"),
-        ("自动 Judge 初步判定", "已完成" if formal_judges else "尚无记录", f"auto_label available · {len(formal_judges)} 个", "brand"),
-        ("人工复核", "进行中" if formal_judges and len(adjudications) < len(formal_judges) else ("已完成" if formal_judges else "尚无记录"), f"已保存 {len(adjudications)} / {len(formal_judges)} 个复核记录", "amber"),
-        ("Layer 2 / Layer 3", f"{len(layer2)} / {len(layer3)} 条", "系统功能已具备；当前 Project 按真实记录显示", "brand"),
-    ]):
-        with col:
-            _status_card(*args)
+    with st.container(border=True):
+        golden_card_head("本轮评测进度", "真实 Project 数据状态")
+        cols = st.columns(4)
+        for col, args in zip(cols, [
+            ("正式对话数据采集", "已完成" if formal_cases else "尚无记录", f"FORMAL records available · {len(formal_cases)} 个", "green"),
+            ("自动 Judge 初步判定", "已完成" if formal_judges else "尚无记录", f"auto_label available · {len(formal_judges)} 个", "brand"),
+            ("人工复核", "进行中" if formal_judges and len(adjudications) < len(formal_judges) else ("已完成" if formal_judges else "尚无记录"), f"已保存 {len(adjudications)} / {len(formal_judges)} 个复核记录", "amber"),
+            ("Layer 2 / Layer 3", f"{len(layer2)} / {len(layer3)} 条", "系统功能已具备；当前 Project 按真实记录显示", "brand"),
+        ]):
+            with col:
+                _status_card(*args)
 
     st.markdown("<div class='cg-status' style='margin:1rem 0'><strong>当前项目状态</strong><br>系统功能已具备；这里显示的是当前 Project 已录入的数据状态。空数据不代表功能未完成。</div>", unsafe_allow_html=True)
     left, right = st.columns(2)
@@ -147,8 +148,7 @@ def test_plan_page() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("测试计划 / Test Plan")
-    st.caption("冻结协议以只读方式展示；产品与 Test Plan 保持解耦，不会修改 Prompt、条件路由、轮次结构或 case_id。")
+    golden_page_head("项目计划制定 / Test Plan", "清晰展示冻结的 benchmark protocol，但不改变 condition 路由、turn 数、Prompt 顺序与 case 边界。")
     plans: list[dict[str, Any]] = []
     if paths.test_plans.exists():
         try:
@@ -207,8 +207,7 @@ def results_page_v09() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("对话评测结果与指标 / Dialogue Results & Metrics")
-    st.caption("结果数据按当前 Project 实际记录展示；自动 Judge 结果与人工最终裁定严格分开。")
+    golden_page_head("对话评测结果与指标 / Dialogue Results & Metrics", "展示当前 Test Project 已经产生的真实评测数据。自动 Judge 结果可正常分析；涉及最终人工裁定的指标只在相应数据具备后显示。")
     raw_cases = {c.get("case_id"): c for c in load_raw_cases(paths.raw_cases)}
     adjudications = {r.get("case_id"): r for r in load_adjudications(paths.adjudication)}
     auto_rows: list[dict[str, Any]] = []
@@ -289,8 +288,7 @@ def integrated_report_page_v09() -> None:
     from .projects import is_read_only_project
 
     read_only = is_read_only_project(project)
-    st.header("综合评测报告 / Integrated Report")
-    st.caption("当前报告随 Project 数据更新；下游报告产物保存在项目的 reports/ 目录，不改写原始采集数据。")
+    golden_page_head("综合评测报告 / Integrated Report", "根据当前 Test Project 已录入的正式评测数据生成或更新报告。页面不引入复杂的比赛快照或历史版本管理。")
     criteria = criteria_index()
     if not read_only:
         build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=project.get("human_adjudication_policy", "FULL_ADJUDICATION"))
@@ -302,14 +300,15 @@ def integrated_report_page_v09() -> None:
         deterministic_path.write_text(deterministic, encoding="utf-8")
     final_path = paths.reports / "final_report.md"
     context_path = paths.reports / "report_context.json"
-    st.markdown(f"<div class='cg-card'><p><strong>Project：</strong>{project.get('project_name', project.get('project_id'))}</p><p><strong>Data cutoff：</strong>{_date_cutoff(load_raw_cases(paths.raw_cases))} · <strong>纳入范围：</strong>FORMAL 阶段有效数据 · <strong>当前报告：</strong>{'已生成' if final_path.exists() else '尚未生成 LLM 版本'}</p></div>", unsafe_allow_html=True)
-    st.markdown("### 当前报告")
-    if final_path.exists():
-        st.markdown(final_path.read_text(encoding="utf-8"))
-        st.download_button("下载当前 LLM 综合报告", data=final_path.read_bytes(), file_name=f"{project.get('project_id')}_final_report.md", mime="text/markdown")
-    else:
-        st.markdown(deterministic)
-        st.download_button("下载确定性分析摘要", data=deterministic.encode("utf-8"), file_name=f"{project.get('project_id')}_deterministic_summary.md", mime="text/markdown")
+    with st.container(border=True):
+        golden_card_head("Integrated Report · 当前报告", "FORMAL 有效数据与三层证据汇总")
+        st.markdown(f"<div class='cg-golden-card-copy'><strong>Project：</strong>{project.get('project_name', project.get('project_id'))}<br><strong>Data cutoff：</strong>{_date_cutoff(load_raw_cases(paths.raw_cases))} · <strong>纳入范围：</strong>FORMAL 阶段有效数据 · <strong>当前报告：</strong>{'已生成' if final_path.exists() else '尚未生成 LLM 版本'}</div>", unsafe_allow_html=True)
+        if final_path.exists():
+            st.markdown(final_path.read_text(encoding="utf-8"))
+            st.download_button("下载当前 LLM 综合报告", data=final_path.read_bytes(), file_name=f"{project.get('project_id')}_final_report.md", mime="text/markdown")
+        else:
+            st.markdown(deterministic)
+            st.download_button("下载确定性分析摘要", data=deterministic.encode("utf-8"), file_name=f"{project.get('project_id')}_deterministic_summary.md", mime="text/markdown")
     with st.expander("报告产物与生成链", expanded=False):
         st.caption("FORMAL Project Data → Python deterministic analysis → report_context → Report Writer → Hard Validation → Evidence Grounding → Academic Polish（可选）")
         st.write({"deterministic_summary": str(deterministic_path) if deterministic_path.exists() else "只读快照中不写入派生文件", "report_context": str(context_path) if context_path.exists() else "只读快照中不写入派生文件", "final_report": str(final_path) if final_path.exists() else "尚无已生成 LLM 报告"})

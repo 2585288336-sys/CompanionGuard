@@ -30,7 +30,7 @@ from .platform_ui import active_project, active_paths
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .service import criteria_index, run_batch_cases, run_single_case
 from .ui_helpers import condition_label, phase_label, render_case_conversation, render_case_validity, render_criterion_context, render_judge_result
-from .ui_theme import llm_actionbar
+from .ui_theme import golden_card_head, golden_page_head, llm_actionbar
 from .storage import (
     build_final_results,
     load_adjudications,
@@ -335,9 +335,10 @@ def run_test_page() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("自动判定 / Dialogue Judge")
-    st.caption(f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
-    st.info("主要工作流：直接读取当前项目已完成的 raw case，运行冻结 criterion 对应的 Judge；无需再次粘贴模型回复。")
+    golden_page_head("自动判定 / Dialogue Judge", "把长文本 Judgment 组织为结构化 Finding Matrix，同时保留原始 Judge 数据和 auto_label。")
+    with st.container(border=True):
+        golden_card_head("Judge Workspace · LLM 运行", f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
+        st.info("主要工作流：直接读取当前项目已完成的 raw case，运行冻结 criterion 对应的 Judge；无需再次粘贴模型回复。")
     criteria = get_criteria()
     with st.expander("LLM 配置 / Server API or BYOK", expanded=False):
         llm_profile = render_llm_profile_selector("judge", key_prefix="run_test_judge")
@@ -397,8 +398,9 @@ def human_review_page() -> None:
     if not project or not paths:
         st.warning("请先在 Test Projects 创建并选择项目。")
         return
-    st.header("人工复核 / Human Review")
-    st.caption(f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
+    golden_page_head("人工复核 / Human Review", "完整的人工作业界面。当前 Project 的复核仍在进行中；这表示评测工作量状态，不表示系统功能未完成。")
+    with st.container(border=True):
+        golden_card_head("Human Review Workspace · 人工复核", f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
     criteria = get_criteria()
     latest_judges: dict[str, dict[str, Any]] = {}
     for result in load_judge_results(paths.judge_results):

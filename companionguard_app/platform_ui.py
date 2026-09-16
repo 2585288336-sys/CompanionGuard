@@ -22,7 +22,7 @@ from .collector_storage import load_raw_cases
 from .metrics import case_validity_counts, valid_case_rows
 from .display_labels import criterion_label, module_label, scenario_label
 from .ui_helpers import condition_label, phase_label, render_case_conversation, render_case_validity, render_judge_result
-from .ui_theme import empty_state, llm_actionbar
+from .ui_theme import empty_state, golden_card_head, golden_page_head, llm_actionbar
 
 
 def active_project_id() -> str | None:
@@ -86,18 +86,22 @@ def sidebar_project_selector(*, researcher: bool = False) -> dict[str, Any] | No
     return project
 
 def projects_page() -> None:
-    st.header("测试项目设计 / Test Project Design")
-    st.caption("一个 测试项目/Test Project 包含本次测试的产品、三层证据数据、Judge结果、人工复核和最终报告。")
-    st.markdown("### Test Project · 测试项目")
-    project_cards = st.columns(4)
-    for col, title, body in zip(
-        project_cards,
-        ["测试产品", "三层证据范围", "Judge 与人工复核", "结果与报告"],
-        ["选择需要评测的 AI 产品。", "组合 Layer 1、Layer 2 与 Layer 3 证据。", "保留自动判定、人工确认和改判链路。", "从真实项目数据生成结果与报告。"],
-    ):
-        with col:
-            st.markdown(f"<div class='cg-card'><h3>{title}</h3><p>{body}</p></div>", unsafe_allow_html=True)
-    st.markdown("<div style='height:.55rem'></div>", unsafe_allow_html=True)
+    golden_page_head(
+        "测试项目设计 / Test Project Design",
+        "一个 Test Project 包含本次测试的产品、三层证据数据、Judge 结果、人工复核和最终报告。",
+    )
+    with st.container(border=True):
+        golden_card_head("Test Project · 测试项目", "当前项目定义与工作流范围")
+        project_cards = st.columns(4)
+        for col, title, body in zip(
+            project_cards,
+            ["测试产品", "三层证据范围", "Judge 与人工复核", "结果与报告"],
+            ["选择需要评测的 AI 产品。", "组合 Layer 1、Layer 2 与 Layer 3 证据。", "保留自动判定、人工确认和改判链路。", "从真实项目数据生成结果与报告。"],
+        ):
+            with col:
+                with st.container(border=True):
+                    golden_card_head(title)
+                    st.markdown(f"<div class='cg-golden-card-copy'>{body}</div>", unsafe_allow_html=True)
     if st.session_state.pop("project_just_created", False):
         st.success("项目创建完成。下一阶段建议进入『Layer 1 · 对话采集』，为每个产品建立测试方案；也可以先从 Layer 2/3 开始。")
         if st.button("下一阶段：进入对话采集 / Go to Data Collection", type="primary", key="project_next_collection"):
@@ -134,11 +138,12 @@ def projects_page() -> None:
                 except Exception as exc:
                     st.error(str(exc))
 
-    st.subheader("创建项目 / Create Project")
-    name = st.text_input("项目名称 / Project name", placeholder="例如：2026年9月拟人化AI产品正式评测")
-    default_id = safe_slug(name) if name else ""
-    pid = st.text_input("项目 ID / Project ID", value=default_id, help="人类可读、用于数据目录；创建后不建议修改。")
-    mode = st.selectbox("模式 / Mode", ["BENCHMARK", "CUSTOM"], help="BENCHMARK使用CompanionGuard冻结规则；CUSTOM为未来扩展模式。")
+    with st.container(border=True):
+        golden_card_head("新建 / 配置测试项目", "创建控件单独位于 Test Project parent card 下方")
+        name = st.text_input("项目名称 / Project name", placeholder="例如：2026年9月拟人化AI产品正式评测")
+        default_id = safe_slug(name) if name else ""
+        pid = st.text_input("项目 ID / Project ID", value=default_id, help="人类可读、用于数据目录；创建后不建议修改。")
+        mode = st.selectbox("模式 / Mode", ["BENCHMARK", "CUSTOM"], help="BENCHMARK使用CompanionGuard冻结规则；CUSTOM为未来扩展模式。")
 
     adjudication_policy = FULL_ADJUDICATION
     sampling_method = STRATIFIED_SAMPLE
@@ -187,11 +192,7 @@ def projects_page() -> None:
             for p in configured
             if p.get("id") in default_product_ids
         ]
-        st.caption(
-            "FORMAL Full Benchmark 默认主产品："
-            + "、".join(default_labels)
-            + "。产品身份与 Test Plan 覆盖范围保持解耦。"
-        )
+        st.caption("FORMAL Full Benchmark 默认主产品：" + "、".join(default_labels) + "。产品身份与 Test Plan 覆盖范围保持解耦。")
     custom_text = st.text_area("自定义产品（每行一个） / Additional custom products", placeholder="Character.AI\nNomi")
     notes = st.text_area("项目备注（可选） / Project notes")
     if st.button("创建测试项目 / Create Test Project", type="primary"):
@@ -241,8 +242,7 @@ def data_explorer_page() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("采集数据查看 / Data Explorer")
-    st.caption("查看已生成的标准案例、逐轮原始回复、截图预览，以及对应的 Judge / 人工复核结果。这里用于检查与导出，不建议手工编辑 JSON。")
+    golden_page_head("数据浏览 / Data Explorer", "按 case / turn / product / condition / phase 浏览原始正式记录，不对历史 ID 或字段做隐式 migration。")
     criteria = criteria_index()
     cases = load_raw_cases(paths.raw_cases)
     if not cases:
@@ -275,7 +275,9 @@ def data_explorer_page() -> None:
             "自动有效性": latest_judges.get(case_id, {}).get("auto_case_validity", "—"),
             "最终有效性": adjudications.get(case_id, {}).get("final_case_validity") or adjudications.get(case_id, {}).get("case_validity", "—"),
         })
-    st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
+    with st.container(border=True):
+        golden_card_head("正式记录 / Formal Records", "原始案例、Judge 与人工复核状态")
+        st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
     case_id = st.selectbox("选择案例 / Select case", [c.get("case_id") for c in cases], key="data_explorer_case_selector")
     case = next(c for c in cases if c.get("case_id") == case_id)
     criterion = criteria.get(case.get("criterion_id"), {})
@@ -319,8 +321,7 @@ def layer2_page() -> None:
         st.warning("请先创建并选择测试项目。")
         return
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer2_checks.json")
-    st.header("Layer 2｜产品安全机制检查 / Product Safeguards")
-    st.caption("产品机制观察，不评价模型回复。四种观察状态与 Dialogue FINDING 标签完全分离。")
+    golden_page_head("产品安全机制检查 · Layer 2", "完整的产品侧保护机制检查工具。当前 Test Project 暂无正式 Layer 2 记录时，仅在结果区显示轻量空状态。")
     products = _project_product_names(project)
     if not products:
         st.error("当前项目没有产品。")
@@ -372,8 +373,7 @@ def layer3_page() -> None:
         st.warning("请先创建并选择测试项目。")
         return
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer3_checks.json")
-    st.header("Layer 3｜公开制度材料核查 / Public Evidence")
-    st.caption("只核查公开正式材料能否为关键后台治理义务提供证据；不做Layer 3合规率。LLM仅辅助提取/初判，人工状态为最终记录。")
+    golden_page_head("公开制度材料核查 · Layer 3", "完整的公开正式材料核查工具。当前 Test Project 暂无正式 Layer 3 记录时，仅在结果区显示轻量空状态。")
     products = layer3_product_names(project)
     if project.get("mode") == "BENCHMARK":
         st.caption("BENCHMARK 模式：Layer 3 Lite 默认显示项目中标记为正式主产品的产品；比较产品和扩展产品不自动纳入。")
@@ -440,7 +440,7 @@ def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    st.header("Judge—人工一致性 / Judge–Human Reliability")
+    golden_page_head("判定一致性 / Reliability", "用于评价 LLM Judge 与人工复核之间的一致性和自动判定可靠性；仅基于已经产生人工复核结果的有效样本计算。")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     if not rows:
@@ -477,11 +477,10 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    st.header("对话评测报告 / Dialogue Report")
+    golden_page_head("对话评测报告 / Dialogue Report", "基于 Layer 1 对话行为测试、自动 Judge 与当前已录入人工复核数据生成对话评测报告，不混入 Layer 2 / Layer 3 的产品机制与公开制度结论。")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     deterministic = build_dialogue_report(project, rows)
-    st.markdown(deterministic)
     paths.reports.mkdir(parents=True, exist_ok=True)
     deterministic_path = paths.reports / "dialogue_report_deterministic.md"
     deterministic_path.write_text(deterministic, encoding="utf-8")
@@ -490,29 +489,36 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
         layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
         reports_dir=paths.reports, draft_text=deterministic,
     )
-    st.download_button("下载确定性对话测试报告", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
     with st.expander("LLM 配置 / Server API or BYOK", expanded=False):
         st.caption("指标由 Python 计算；报告模型只能根据冻结的结构化上下文生成文字。")
         profile = render_llm_profile_selector("dialogue_report", key_prefix="dialogue_report_writer")
     llm_actionbar(title="Dialogue Report Writer · LLM", profile=profile, notes=["Evidence Grounding · enabled"])
-    if st.button("生成 / 更新对话评测报告", type="primary", disabled=profile is None, key="dialogue_report_generate_golden"):
-        try:
-            context = build_dialogue_report_context(project=project, final_rows=rows)
-            text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
-            result = write_report_artifacts(
-                report_type="dialogue", project=project, final_rows=rows,
-                layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
-                reports_dir=paths.reports, draft_text=text,
-            )
-            if result["manifest"]["validation_status"] != "PASS":
-                st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
-            else:
-                st.session_state["dialogue_report_llm_text"] = result["paths"]["final"].read_text(encoding="utf-8")
-                st.success("对话评测报告已生成并通过校验。")
-        except Exception as e:
-            st.error(str(e))
-    if st.session_state.get("dialogue_report_llm_text"):
-        st.markdown(st.session_state["dialogue_report_llm_text"])
+    left, right = st.columns([0.9, 1.7])
+    with left:
+        with st.container(border=True):
+            golden_card_head("Report Scope · 报告范围", "Layer 1 对话行为测试")
+            st.markdown(f"<div class='cg-golden-card-copy'><strong>Project：</strong>{project.get('project_name', project.get('project_id'))}<br><strong>Judge / human rows：</strong>{len(rows)}<br><strong>Layer 2 / Layer 3：</strong>不混入本报告结论</div>", unsafe_allow_html=True)
+            if st.button("生成 / 更新对话评测报告", type="primary", disabled=profile is None, key="dialogue_report_generate_golden", use_container_width=True):
+                try:
+                    context = build_dialogue_report_context(project=project, final_rows=rows)
+                    text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
+                    result = write_report_artifacts(
+                        report_type="dialogue", project=project, final_rows=rows,
+                        layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
+                        reports_dir=paths.reports, draft_text=text,
+                    )
+                    if result["manifest"]["validation_status"] != "PASS":
+                        st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
+                    else:
+                        st.session_state["dialogue_report_llm_text"] = result["paths"]["final"].read_text(encoding="utf-8")
+                        st.success("对话评测报告已生成并通过校验。")
+                except Exception as e:
+                    st.error(str(e))
+            st.download_button("下载报告", data=(st.session_state.get("dialogue_report_llm_text") or deterministic).encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown", use_container_width=True)
+    with right:
+        with st.container(border=True):
+            golden_card_head("Dialogue Report · 报告面板", "确定性分析或已通过验证的 LLM 版本")
+            st.markdown(st.session_state.get("dialogue_report_llm_text") or deterministic)
 
 
 def report_page(criteria: dict[str, dict[str, Any]]) -> None:
@@ -521,7 +527,7 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    st.header("确定性分析摘要 / Deterministic Analysis Summary")
+    golden_page_head("综合评测报告 / Integrated Report", "根据当前 Test Project 已录入的正式评测数据生成或更新报告。页面不引入复杂的比赛快照或历史版本管理。")
     build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     report = build_integrated_report(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)

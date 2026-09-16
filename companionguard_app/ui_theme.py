@@ -95,6 +95,32 @@ def inject_theme() -> None:
         .cg-llm-actionbar .title { color:#344054; font-size:.78rem; font-weight:760; }
         .cg-llm-status { display:inline-flex; align-items:center; gap:.35rem; border:1px solid #d1fadf; background:#ecfdf3; color:#067647; border-radius:999px; padding:.22rem .5rem; font-size:.67rem; font-weight:650; }
         .cg-llm-status:before { content:""; width:6px; height:6px; border-radius:50%; background:#12b76a; }
+        .cg-golden-page-head { margin:.2rem 0 1.2rem; }
+        .cg-golden-page-head h1 { margin:0 0 .35rem; }
+        .cg-golden-page-head p { max-width:920px; margin:0; line-height:1.65; }
+        .cg-golden-kicker { color:var(--cg-brand); font-size:.68rem; font-weight:780; letter-spacing:.09em; text-transform:uppercase; }
+        .cg-golden-card-title { color:var(--cg-text); font-size:.96rem; font-weight:760; margin:0; }
+        .cg-golden-card-subtitle { color:var(--cg-muted); font-size:.74rem; margin:.22rem 0 0; line-height:1.5; }
+        .cg-golden-card-copy { color:var(--cg-muted); font-size:.82rem; line-height:1.65; }
+        .cg-golden-card-copy strong { color:var(--cg-text); }
+        .cg-golden-grid2 { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1rem; }
+        .cg-golden-grid3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.8rem; }
+        .cg-golden-statgrid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.75rem; }
+        .cg-golden-stat { background:#fff; border:1px solid var(--cg-border); border-radius:10px; padding:.85rem .95rem; }
+        .cg-golden-stat .label { color:var(--cg-muted); font-size:.7rem; font-weight:700; }
+        .cg-golden-stat .value { color:var(--cg-text); font-size:1.25rem; font-weight:780; margin:.3rem 0 .1rem; }
+        .cg-golden-stat .hint { color:var(--cg-muted); font-size:.68rem; }
+        .cg-golden-report { background:#fff; border:1px solid var(--cg-border); border-radius:12px; padding:1.35rem 1.45rem; min-height:18rem; }
+        .cg-golden-report h1,.cg-golden-report h2,.cg-golden-report h3 { margin-top:.8rem; }
+        .cg-golden-report p,.cg-golden-report li { color:#475467; line-height:1.7; font-size:.84rem; }
+        .cg-golden-empty { min-height:9rem; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; background:#fbfcfe; border:1px dashed #cfd6e1; border-radius:10px; padding:1.1rem; }
+        .cg-golden-empty strong { color:var(--cg-text); font-size:.86rem; }
+        .cg-golden-empty span { color:var(--cg-muted); font-size:.76rem; margin-top:.3rem; }
+        .cg-golden-table-note { color:var(--cg-muted); font-size:.72rem; margin:.45rem 0 .7rem; }
+        [data-testid="stVerticalBlockBorderWrapper"] { border-color:var(--cg-border); border-radius:12px; background:rgba(255,255,255,.72); }
+        [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlock"] { gap:.65rem; }
+        @media (max-width:900px) { .cg-golden-grid2,.cg-golden-grid3,.cg-golden-statgrid { grid-template-columns:1fr 1fr; } }
+        @media (max-width:620px) { .cg-golden-grid2,.cg-golden-grid3,.cg-golden-statgrid { grid-template-columns:1fr; } }
         .cg-home-wrap { max-width:1240px; margin:0 auto; background:#fff; }
         .cg-home-hero { padding:3.3rem 1.25rem 3.8rem; display:grid; grid-template-columns:1.02fr .98fr; gap:3rem; align-items:center; }
         .cg-home-hero h1 { font-size:clamp(2.4rem,5vw,3.8rem) !important; letter-spacing:-.045em; margin:.8rem 0 1rem; }
@@ -165,6 +191,33 @@ def pill(text: Any, *, tone: str = "") -> str:
 
 def empty_state(title: str, message: str) -> None:
     st.markdown(f'<div class="cg-empty"><strong>{title}</strong><br>{message}</div>', unsafe_allow_html=True)
+
+
+def golden_page_head(title: str, subtitle: str, *, kicker: str = "RESEARCH WORKBENCH") -> None:
+    """Render the Golden HTML page heading without changing application state."""
+    st.markdown(
+        f'<div class="cg-golden-page-head"><div class="cg-golden-kicker">{kicker}</div>'
+        f'<h1>{title}</h1><p>{subtitle}</p></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def golden_card_head(title: str, subtitle: str = "") -> None:
+    """Render a compact card header inside a native Streamlit bordered card."""
+    extra = f'<div class="cg-golden-card-subtitle">{subtitle}</div>' if subtitle else ""
+    st.markdown(
+        f'<div class="cg-golden-card-title">{title}</div>{extra}',
+        unsafe_allow_html=True,
+    )
+
+
+def golden_report_panel(markdown: str, *, title: str = "Report panel") -> None:
+    """Render report content in the Golden report-panel treatment."""
+    st.markdown(
+        f'<div class="cg-golden-card-title">{title}</div>'
+        f'<div class="cg-golden-report">{markdown}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def flow(items: list[str]) -> None:

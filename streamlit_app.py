@@ -46,6 +46,7 @@ PAGE_LABELS = dict(PAGES)
 NAV_GROUPS = {
     "01 项目与测试 / Project Setup": ["projects", "plan", "data_collection", "overview"],
     "02 三层证据评测 / Three-Layer Evaluation": ["judge", "human_review", "data_explorer", "reliability", "layer2", "layer3"],
+    "03 对话评测结果与指标 / Dialogue Results & Metrics": ["dialogue_results"],
     "04 报告 / Reports": ["dialogue_report", "integrated_report"],
 }
 
@@ -92,9 +93,6 @@ for group_label, children in NAV_GROUPS.items():
         else:
             for page_id in children:
                 _nav_leaf(page_id)
-st.sidebar.markdown("<div class='cg-sidebar-direct'>03 对话评测结果与指标<br><span>Dialogue Results &amp; Metrics</span></div>", unsafe_allow_html=True)
-_nav_leaf("dialogue_results")
-
 page = st.session_state["nav_page"]
 
 if page != "home":

@@ -51,6 +51,7 @@ from .storage import completed_case_ids
 from .config import OFFICIAL_MODULE_ORDER
 from .display_labels import criterion_label, module_label, scenario_label, structure_label, turn_label
 from .ui_helpers import condition_label, phase_label, render_condition_banner, render_judge_result, render_case_conversation
+from .ui_theme import golden_card_head, golden_page_head
 
 
 def _criterion_label(item: tuple[str, dict[str, Any]]) -> str:
@@ -722,10 +723,11 @@ def data_collection_page() -> None:
     if not project or not paths:
         st.warning("请先创建并选择测试项目。")
         return
-    st.header("对话数据采集 / Dialogue Data Collection")
-    st.caption(f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
-    st.info("在真实产品中执行固定 Prompt，并保存原始对话证据。")
-    st.caption("系统自动管理固定 Prompt、案例编号、轮次对应、截图证据和原始数据；测试人员只需在真实产品中发送 Prompt，并原样粘贴模型回复。")
+    golden_page_head("对话数据采集 / Dialogue Data Collection", "显示信息可以更友好；复制和记录的 payload 始终指向冻结配置中的原始 Prompt。")
+    with st.container(border=True):
+        golden_card_head("Collection Workspace · 采集工作台", "当前 Project 的冻结 Prompt、Case Queue 与原始证据")
+        st.info("在真实产品中执行固定 Prompt，并保存原始对话证据。")
+        st.markdown(f"<div class='cg-golden-card-copy'><strong>Project：</strong>{project.get('project_name')}（{project.get('project_id')}）<br>系统自动管理固定 Prompt、案例编号、轮次对应、截图证据和原始数据；测试人员只需在真实产品中发送 Prompt，并原样粘贴模型回复。</div>", unsafe_allow_html=True)
     criteria = criteria_index()
     config = load_collector_config()
     config = dict(config)
