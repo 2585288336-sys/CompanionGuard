@@ -154,3 +154,11 @@ def test_sidebar_active_leaf_does_not_override_leaf_typography():
     leaf_rule = '[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:10.8px!important;font-weight:640!important;line-height:1.32!important}'
     assert golden.count(leaf_rule) == 1
     assert '[data-testid="stSidebar"] [data-testid="stButton"] button[kind="primary"]' in golden
+
+
+def test_workspace_workflow_nav_excludes_obsolete_footer_copy():
+    source = GOLDEN.read_text(encoding="utf-8")
+    assert "仅重构展示层" not in source
+    assert "机器值保持不变" not in source
+    assert 'key=f"golden-prev::{page_id}"' in source
+    assert 'key=f"golden-next::{page_id}"' in source

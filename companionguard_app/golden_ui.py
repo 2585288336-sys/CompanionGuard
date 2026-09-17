@@ -283,19 +283,15 @@ def render_page(page_id: str) -> None:
 def _workflow_nav(page_id: str) -> None:
     ordered = [p for p in PAGE_META if p != "home"]
     idx = ordered.index(page_id)
-    st.markdown('<div class="wfnav">', unsafe_allow_html=True)
-    left, middle, right = st.columns([1, 2, 1])
+    left, right = st.columns([1, 1])
     with left:
         if idx > 0 and st.button("← Previous", key=f"golden-prev::{page_id}"):
             _set_page(ordered[idx - 1])
             st.rerun()
-    with middle:
-        st.caption("仅重构展示层 · 机器值保持不变")
     with right:
         if idx < len(ordered) - 1 and st.button("Next →", key=f"golden-next::{page_id}", type="primary"):
             _set_page(ordered[idx + 1])
             st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def run_app() -> None:
