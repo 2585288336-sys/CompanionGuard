@@ -37,6 +37,7 @@ from .storage import (
     load_judge_results,
     save_adjudication,
 )
+from .runtime_scope import RuntimeScope
 
 
 @st.cache_data(show_spinner=False)
@@ -122,15 +123,20 @@ def _run_collected_batch_cases(
             status_box.caption(f"正在判定：{index} / {total} · {case_name}")
 
         with st.spinner("正在运行 Judge..."):
-            results = run_batch_cases(
-                cases=selected_cases,
-                criteria=criteria,
-                llm_profile=llm_profile,
-                progress=progress,
-                judge_path=paths.judge_results,
-                session_id=llm_session_id(),
-                project_id=project.get("project_id"),
-            )
+            try:
+                results = run_batch_cases(
+                    cases=selected_cases,
+                    criteria=criteria,
+                    llm_profile=llm_profile,
+                    progress=progress,
+                    judge_path=paths.judge_results,
+                    session_id=llm_session_id(),
+                    project_id=project.get("project_id"),
+                    scope=RuntimeScope.PUBLISHED,
+                )
+            except Exception as exc:
+                st.error(str(exc))
+                return
         ok = sum(row.get("status") == "ok" for row in results)
         st.success(f"批量判定完成：{ok} / {len(results)} 个案例成功。")
 
@@ -195,6 +201,7 @@ def _run_collected_single_case(*, project: dict[str, Any], paths, criteria: dict
                     judge_path=paths.judge_results,
                     session_id=llm_session_id(),
                     project_id=project.get("project_id"),
+                    scope=RuntimeScope.PUBLISHED,
                 )
             st.session_state["last_judge_result"] = row
         except Exception as exc:
@@ -265,6 +272,7 @@ def _run_manual_single_case(*, project: dict[str, Any], paths, criteria: dict[st
                         case=case, criteria=criteria, llm_profile=llm_profile, persist=True,
                         judge_path=paths.judge_results, session_id=llm_session_id(),
                         project_id=project.get("project_id"),
+                        scope=RuntimeScope.PUBLISHED,
                     )
                 st.session_state["last_judge_result"] = row
             except Exception as exc:
@@ -310,14 +318,19 @@ def _run_uploaded_batch_cases(
             st.error("请先配置 Judge 模型。")
             return
         with st.spinner("正在运行 Judge..."):
-            results = run_batch_cases(
-                cases=cases,
-                criteria=criteria,
-                llm_profile=llm_profile,
-                judge_path=paths.judge_results,
-                session_id=llm_session_id(),
-                project_id=project.get("project_id"),
-            )
+            try:
+                results = run_batch_cases(
+                    cases=cases,
+                    criteria=criteria,
+                    llm_profile=llm_profile,
+                    judge_path=paths.judge_results,
+                    session_id=llm_session_id(),
+                    project_id=project.get("project_id"),
+                    scope=RuntimeScope.PUBLISHED,
+                )
+            except Exception as exc:
+                st.error(str(exc))
+                return
         ok = sum(row.get("status") == "ok" for row in results)
         st.success(f"上传数据判定完成：{ok} / {len(results)} 个案例成功。")
 
@@ -395,9 +408,13 @@ def human_review_page() -> None:
                 type="primary",
                 disabled=preview_plan["formal_judge_case_count"] == 0,
             ):
-                save_sampling_plan(preview_plan, paths.adjudication_sampling)
-                st.success("抽样方案已冻结。")
-                st.rerun()
+                try:
+                    save_sampling_plan(preview_plan, paths.adjudication_sampling, scope=RuntimeScope.PUBLISHED)
+                except Exception as exc:
+                    st.error(str(exc))
+                else:
+                    st.success("抽样方案已冻结。")
+                    st.rerun()
             if preview_plan["formal_judge_case_count"] == 0:
                 st.caption("当前还没有成功的 FORMAL Judge 结果；完成 FORMAL Judge 后再冻结抽样方案。")
         else:
@@ -537,22 +554,27 @@ def human_review_page() -> None:
         if case_validity not in validity_options:
             st.error("请明确选择案例有效性：有效或无效。")
             return
-        save_adjudication(
-            case_id=selected_id,
-            auto_label=auto,
-            human_label=human_label,
-            override_reason=override_reason,
-            review_note=review_note,
-            case_validity=case_validity,
-            auto_case_validity=auto_case_validity,
-            final_case_validity=case_validity,
-            validity_reason="",
-            validity_note=validity_note,
-            path=paths.adjudication,
-        )
-        build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=policy)
-        st.success("已保存人工复核，并更新 data/final_results.csv。")
-        st.rerun()
+        try:
+            save_adjudication(
+                case_id=selected_id,
+                auto_label=auto,
+                human_label=human_label,
+                override_reason=override_reason,
+                review_note=review_note,
+                case_validity=case_validity,
+                auto_case_validity=auto_case_validity,
+                final_case_validity=case_validity,
+                validity_reason="",
+                validity_note=validity_note,
+                path=paths.adjudication,
+                scope=RuntimeScope.PUBLISHED,
+            )
+            build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=policy, scope=RuntimeScope.PUBLISHED)
+        except Exception as exc:
+            st.error(str(exc))
+        else:
+            st.success("已保存人工复核，并更新 data/final_results.csv。")
+            st.rerun()
 
 def _pct(value: float | None) -> str:
     return "—" if value is None else f"{value * 100:.1f}%"
@@ -570,7 +592,6 @@ def results_page() -> None:
         return
     st.caption(f"当前项目：{project.get('project_name')}（{project.get('project_id')}）")
     criteria = get_criteria()
-    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     if not rows:
         st.info("还没有最终结果。请先完成至少一个案例的人工复核。")

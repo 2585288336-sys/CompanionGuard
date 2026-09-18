@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import companionguard_app.projects as projects
 from companionguard_app.data_integrity import verify_project_data
+from companionguard_app.runtime_scope import RuntimeScope
 
 
 class DataIntegrityTests(unittest.TestCase):
@@ -113,6 +114,7 @@ class DataIntegrityTests(unittest.TestCase):
                     name="Metadata test",
                     project_id="metadata-test",
                     products=[{"id": "P", "label": "P", "slug": "P"}],
+                    scope=RuntimeScope.WORKSPACE,
                 )
                 loaded = projects.get_project(created["project_id"])
 

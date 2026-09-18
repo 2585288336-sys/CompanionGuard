@@ -18,6 +18,7 @@ from .report_pipeline import write_report_artifacts
 from .service import criteria_index, run_documentary_assist, run_grounding_validator, run_report_writer
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
+from .runtime_scope import RuntimeScope
 from .collector_storage import load_raw_cases
 from .metrics import case_validity_counts, valid_case_rows
 from .display_labels import criterion_label, module_label, scenario_label
@@ -111,7 +112,7 @@ def projects_page() -> None:
             confirm = st.text_input("输入 Project ID 以确认 / Type Project ID to confirm", key="delete_project_confirm")
             if st.button("永久删除项目 / Permanently delete", disabled=confirm != delete_id, key="delete_project_btn"):
                 try:
-                    delete_project(delete_id)
+                    delete_project(delete_id, scope=RuntimeScope.PUBLISHED)
                     if st.session_state.get("active_project_id") == delete_id:
                         st.session_state.pop("active_project_id", None)
                     st.success(f"已删除 / Deleted: {delete_id}")
@@ -193,6 +194,7 @@ def projects_page() -> None:
                 human_adjudication_sample_rate=sample_rate,
                 human_adjudication_random_seed=random_seed,
                 human_adjudication_strata=strata,
+                scope=RuntimeScope.PUBLISHED,
             )
             st.session_state["active_project_id"] = project["project_id"]
             st.session_state["project_just_created"] = True
@@ -325,14 +327,18 @@ def layer2_page() -> None:
     notes = st.text_area("备注/局限 / Notes or limitation", value=prior.get("notes", ""))
     files = st.file_uploader("截图/录屏证据 / Screenshot or screen-record evidence", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"l2::{product}::{check['code']}")
     if st.button("保存 Layer 2 检查 / Save Layer 2 Check", type="primary"):
-        saved = prior.get("evidence_files", [])
-        if files:
-            saved_abs = save_audit_evidence(evidence_root=paths.layer2_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files])
-            saved = [str(Path(x).relative_to(paths.root)) for x in saved_abs]
-        row = make_audit_row(project_id=project["project_id"], product=product, check_code=check["code"], status=status, evidence_summary=evidence_summary, notes=notes, evidence_files=saved, metadata={"regulation": check.get("regulation"), "check_name_zh": check.get("name_zh"), "test_date": date.today().isoformat(), "app_version": app_version, "operating_system": operating_system})
-        upsert_jsonl(paths.layer2_records, row, key_fields=("product", "check_code"))
-        st.success("Layer 2 检查已保存。")
-        st.rerun()
+        try:
+            saved = prior.get("evidence_files", [])
+            if files:
+                saved_abs = save_audit_evidence(evidence_root=paths.layer2_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files], scope=RuntimeScope.PUBLISHED)
+                saved = [str(Path(x).relative_to(paths.root)) for x in saved_abs]
+            row = make_audit_row(project_id=project["project_id"], product=product, check_code=check["code"], status=status, evidence_summary=evidence_summary, notes=notes, evidence_files=saved, metadata={"regulation": check.get("regulation"), "check_name_zh": check.get("name_zh"), "test_date": date.today().isoformat(), "app_version": app_version, "operating_system": operating_system})
+            upsert_jsonl(paths.layer2_records, row, key_fields=("product", "check_code"), scope=RuntimeScope.PUBLISHED)
+        except Exception as exc:
+            st.error(str(exc))
+        else:
+            st.success("Layer 2 检查已保存。")
+            st.rerun()
 
     records = load_jsonl(paths.layer2_records)
     if records:
@@ -373,7 +379,7 @@ def layer3_page() -> None:
         else:
             try:
                 with st.spinner("Extracting public evidence..."):
-                    st.session_state[assist_key] = run_documentary_assist(check=check, source_text=source_text, llm_profile=llm_profile, session_id=llm_session_id(), project_id=project.get("project_id"))
+                    st.session_state[assist_key] = run_documentary_assist(check=check, source_text=source_text, llm_profile=llm_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=RuntimeScope.PUBLISHED)
             except Exception as e:
                 st.error(str(e))
     assist = st.session_state.get(assist_key)
@@ -391,14 +397,18 @@ def layer3_page() -> None:
     notes = st.text_area("局限/人工复核备注 / Limitation or review note", value=prior.get("notes", ""))
     files = st.file_uploader("公开材料/截图（可选） / Supporting document", type=["png", "jpg", "jpeg", "webp", "pdf", "txt", "md"], accept_multiple_files=True, key=f"l3::{product}::{check['code']}")
     if st.button("保存 Layer 3 核查 / Save Layer 3 Audit", type="primary"):
-        saved = prior.get("evidence_files", [])
-        if files:
-            saved_abs = save_audit_evidence(evidence_root=paths.layer3_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files])
-            saved = [str(Path(x).relative_to(paths.root)) for x in saved_abs]
-        row = make_audit_row(project_id=project["project_id"], product=product, check_code=check["code"], status=status, evidence_summary=evidence_summary, notes=notes, source=source, source_date=source_date, evidence_files=saved, metadata={"regulation": check.get("regulation"), "check_name_zh": check.get("name_zh"), "ai_assist": assist or None})
-        upsert_jsonl(paths.layer3_records, row, key_fields=("product", "check_code"))
-        st.success("Layer 3 核查已保存；人工最终状态为权威记录。")
-        st.rerun()
+        try:
+            saved = prior.get("evidence_files", [])
+            if files:
+                saved_abs = save_audit_evidence(evidence_root=paths.layer3_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files], scope=RuntimeScope.PUBLISHED)
+                saved = [str(Path(x).relative_to(paths.root)) for x in saved_abs]
+            row = make_audit_row(project_id=project["project_id"], product=product, check_code=check["code"], status=status, evidence_summary=evidence_summary, notes=notes, source=source, source_date=source_date, evidence_files=saved, metadata={"regulation": check.get("regulation"), "check_name_zh": check.get("name_zh"), "ai_assist": assist or None})
+            upsert_jsonl(paths.layer3_records, row, key_fields=("product", "check_code"), scope=RuntimeScope.PUBLISHED)
+        except Exception as exc:
+            st.error(str(exc))
+        else:
+            st.success("Layer 3 核查已保存；人工最终状态为权威记录。")
+            st.rerun()
 
     records = load_jsonl(paths.layer3_records)
     if records:
@@ -418,7 +428,6 @@ def reliability_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
     rows = load_final_results(paths.final_results)
     if not rows:
         st.info("还没有同时完成 LLM Judge 与人工复核的结果。")
@@ -454,20 +463,15 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
+    deterministic_path = paths.reports / "dialogue_report_deterministic.md"
+    if not deterministic_path.exists():
+        st.info("当前项目尚未生成已保存的对话评测报告；只读 Published 页面不会在浏览时创建报告。")
+        return
+    deterministic = deterministic_path.read_text(encoding="utf-8")
     rows = load_final_results(paths.final_results)
-    deterministic = build_dialogue_report(project, rows)
     with st.container():
         st.markdown('<span class="report-document-marker" aria-hidden="true"></span>', unsafe_allow_html=True)
         st.markdown(deterministic)
-    paths.reports.mkdir(parents=True, exist_ok=True)
-    deterministic_path = paths.reports / "dialogue_report_deterministic.md"
-    deterministic_path.write_text(deterministic, encoding="utf-8")
-    write_report_artifacts(
-        report_type="dialogue", project=project, final_rows=rows,
-        layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
-        reports_dir=paths.reports, draft_text=deterministic,
-    )
     st.download_button("下载确定性对话测试报告", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
     st.markdown(
         '<div class="report-action-heading"><div class="report-action-eyebrow">LLM REPORT WRITER</div><div class="report-action-title">可选：LLM 撰写对话测试报告</div></div>',
@@ -479,11 +483,11 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
         if st.button("生成 LLM 对话测试报告", disabled=profile is None):
             try:
                 context = build_dialogue_report_context(project=project, final_rows=rows)
-                text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
+                text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=RuntimeScope.PUBLISHED)
                 result = write_report_artifacts(
                     report_type="dialogue", project=project, final_rows=rows,
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
-                    reports_dir=paths.reports, draft_text=text,
+                    reports_dir=paths.reports, draft_text=text, scope=RuntimeScope.PUBLISHED,
                 )
                 if result["manifest"]["validation_status"] != "PASS":
                     st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
@@ -501,20 +505,17 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=adjudication_policy(project))
+    output = paths.reports / "final_report.md"
+    if not output.exists():
+        output = paths.reports / "integrated_report.md"
+    if not output.exists():
+        st.info("当前项目尚未生成已保存的综合评测报告；只读 Published 页面不会在浏览时创建报告。")
+        return
+    report = output.read_text(encoding="utf-8")
     rows = load_final_results(paths.final_results)
-    report = build_integrated_report(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
     with st.container():
         st.markdown('<span class="report-document-marker" aria-hidden="true"></span>', unsafe_allow_html=True)
         st.markdown(report)
-    paths.reports.mkdir(parents=True, exist_ok=True)
-    output = paths.reports / "integrated_report.md"
-    output.write_text(report, encoding="utf-8")
-    write_report_artifacts(
-        report_type="integrated", project=project, final_rows=rows,
-        layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
-        reports_dir=paths.reports, draft_text=report, writer_prompt_version="1.0",
-    )
     st.download_button("下载综合测试报告（.md）", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
     st.markdown(
         '<div class="report-action-heading"><div class="report-action-eyebrow">LLM REPORT WRITER</div><div class="report-action-title">生成 LLM 综合测试报告</div><div class="report-action-subtitle">Generate LLM Integrated Report</div></div>',
@@ -527,13 +528,13 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
         if st.button("生成并验证 LLM 综合测试报告", disabled=profile is None or grounding_profile is None):
             try:
                 context = build_integrated_report_context(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
-                text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"))
-                grounding = run_grounding_validator(draft_report=text, report_context=context, llm_profile=grounding_profile, session_id=llm_session_id(), project_id=project.get("project_id"))
+                text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=RuntimeScope.PUBLISHED)
+                grounding = run_grounding_validator(draft_report=text, report_context=context, llm_profile=grounding_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=RuntimeScope.PUBLISHED)
                 result = write_report_artifacts(
                     report_type="integrated", project=project, final_rows=rows,
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
                     reports_dir=paths.reports, draft_text=text,
-                    grounding_validator=lambda draft, report_context: grounding,
+                    grounding_validator=lambda draft, report_context: grounding, scope=RuntimeScope.PUBLISHED,
                 )
                 if result["manifest"]["validation_status"] != "PASS":
                     st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")

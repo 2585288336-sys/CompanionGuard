@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .runtime_scope import RuntimeScope, assert_writable_scope
+
 FULL_ADJUDICATION = "FULL_ADJUDICATION"
 SAMPLED_ADJUDICATION = "SAMPLED_ADJUDICATION"
 RANDOM_SAMPLE = "RANDOM_SAMPLE"
@@ -95,7 +97,13 @@ def load_sampling_plan(path: Path) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def save_sampling_plan(plan: dict[str, Any], path: Path) -> None:
+def save_sampling_plan(
+    plan: dict[str, Any],
+    path: Path,
+    *,
+    scope: RuntimeScope | str | None = None,
+) -> None:
+    assert_writable_scope(scope)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
 

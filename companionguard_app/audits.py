@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .runtime_scope import RuntimeScope, assert_writable_scope
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -31,7 +33,14 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def upsert_jsonl(path: Path, row: dict[str, Any], *, key_fields: tuple[str, ...]) -> None:
+def upsert_jsonl(
+    path: Path,
+    row: dict[str, Any],
+    *,
+    key_fields: tuple[str, ...],
+    scope: RuntimeScope | str | None = None,
+) -> None:
+    assert_writable_scope(scope)
     rows = load_jsonl(path)
     key = tuple(str(row.get(k, "")) for k in key_fields)
     index = {tuple(str(r.get(k, "")) for k in key_fields): r for r in rows}
@@ -52,7 +61,9 @@ def save_audit_evidence(
     product: str,
     check_code: str,
     files: list[tuple[str, bytes]],
+    scope: RuntimeScope | str | None = None,
 ) -> list[str]:
+    assert_writable_scope(scope)
     if not files:
         return []
     target = evidence_root / safe_part(product) / safe_part(check_code)

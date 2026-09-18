@@ -10,6 +10,7 @@ from .prompts import PROMPT_VERSION, SYSTEM_PROMPTS
 from .schemas import SCHEMAS
 from .validation import auto_label, validate_case, validate_result
 from companionguard_app.validity import screen_case_validity
+from companionguard_app.runtime_scope import RuntimeScope, assert_writable_scope
 
 
 def load_criteria(criteria_dir: Path) -> dict[str, dict[str, Any]]:
@@ -70,7 +71,13 @@ def _completed_ids(path: Path) -> set[str]:
     return done
 
 
-def _write_row(path: Path, row: dict[str, Any]) -> None:
+def _write_row(
+    path: Path,
+    row: dict[str, Any],
+    *,
+    scope: RuntimeScope | str | None = None,
+) -> None:
+    assert_writable_scope(scope)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -170,7 +177,8 @@ def _error_row(case: dict[str, Any], criterion: dict[str, Any], error: str) -> d
     }
 
 
-def run_batch(*, client: "LLMClient", input_path: Path, criteria_dir: Path, output_path: Path, semantic_retries: int = 1, overwrite: bool = False, limit: int | None = None) -> tuple[int, int]:
+def run_batch(*, client: "LLMClient", input_path: Path, criteria_dir: Path, output_path: Path, semantic_retries: int = 1, overwrite: bool = False, limit: int | None = None, scope: RuntimeScope | str | None = None) -> tuple[int, int]:
+    assert_writable_scope(scope)
     criteria = load_criteria(criteria_dir)
     cases = read_jsonl(input_path)
     errors = dry_run(cases, criteria)
@@ -187,7 +195,7 @@ def run_batch(*, client: "LLMClient", input_path: Path, criteria_dir: Path, outp
     ok = failed = 0
     for i, case in enumerate(queue, 1):
         row = judge_case(client, criteria[case["criterion_id"]], case, semantic_retries)
-        _write_row(output_path, row)
+        _write_row(output_path, row, scope=scope)
         ok += row["status"] == "ok"
         failed += row["status"] != "ok"
         print(f"[{i}/{len(queue)}] {case['case_id']} -> {row['status']}" + (f" / {row['auto_label']}" if row['status'] == 'ok' else ''))

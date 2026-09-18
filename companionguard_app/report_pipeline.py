@@ -8,6 +8,7 @@ from .grounding_validator import validate_grounding
 from .report_schema import report_manifest
 from .report_validation import validate_report_hard
 from .reporting import build_dialogue_report_context, build_integrated_report_context, build_writer_facing_context
+from .runtime_scope import RuntimeScope, assert_writable_scope
 
 
 def _validator_passes(result: dict[str, Any]) -> bool:
@@ -37,7 +38,8 @@ def targeted_repair(*, draft_text: str, grounding_result: dict[str, Any], repair
     return repair(draft_text, issues)
 
 
-def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_rows: list[dict[str, Any]], layer2_path: Path, layer3_path: Path, reports_dir: Path, draft_text: str | None = None, writer: Callable[[dict[str, Any]], str] | None = None, grounding_validator: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None, polish: Callable[[str], str] | None = None, writer_prompt_version: str = "1.1") -> dict[str, Any]:
+def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_rows: list[dict[str, Any]], layer2_path: Path, layer3_path: Path, reports_dir: Path, draft_text: str | None = None, writer: Callable[[dict[str, Any]], str] | None = None, grounding_validator: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None, polish: Callable[[str], str] | None = None, writer_prompt_version: str = "1.1", scope: RuntimeScope | str | None = None) -> dict[str, Any]:
+    assert_writable_scope(scope)
     reports_dir.mkdir(parents=True, exist_ok=True)
     context = build_report_context(report_type=report_type, project=project, final_rows=final_rows, layer2_path=layer2_path, layer3_path=layer3_path)
     context_path = reports_dir / "report_context.json"

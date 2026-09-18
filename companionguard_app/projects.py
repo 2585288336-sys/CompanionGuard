@@ -10,7 +10,7 @@ from typing import Any
 
 from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE
 from .config import DATA_DIR, PROJECT_ROOT
-from .runtime_scope import RuntimeScope, resolve_project_root
+from .runtime_scope import RuntimeScope, assert_writable_scope, resolve_project_root
 from .versioning import APP_VERSION, DATA_SCHEMA_VERSION, current_code_commit
 
 PROJECTS_DIR = DATA_DIR / "projects"
@@ -149,7 +149,9 @@ def create_project(
     human_adjudication_sample_rate: float = 0.25,
     human_adjudication_random_seed: int = 20260915,
     human_adjudication_strata: list[str] | None = None,
+    scope: RuntimeScope | str | None = None,
 ) -> dict[str, Any]:
+    assert_writable_scope(scope)
     pid = safe_slug(project_id)
     if not name.strip():
         raise ValueError("Project name cannot be empty.")
@@ -191,7 +193,12 @@ def create_project(
     return project
 
 
-def update_project(project: dict[str, Any]) -> dict[str, Any]:
+def update_project(
+    project: dict[str, Any],
+    *,
+    scope: RuntimeScope | str | None = None,
+) -> dict[str, Any]:
+    assert_writable_scope(scope)
     pid = project.get("project_id")
     if not pid:
         raise ValueError("project_id is required")
@@ -204,12 +211,17 @@ def update_project(project: dict[str, Any]) -> dict[str, Any]:
 
 
 
-def delete_project(project_id: str) -> None:
+def delete_project(
+    project_id: str,
+    *,
+    scope: RuntimeScope | str | None = None,
+) -> None:
     """Permanently delete one project-scoped data directory.
 
     This intentionally operates only under data/projects/<project_id>; source
     code and criteria are never touched. The UI requires typed confirmation.
     """
+    assert_writable_scope(scope)
     paths = project_paths(project_id)
     if not paths.root.exists():
         raise FileNotFoundError(f"Project does not exist: {project_id}")

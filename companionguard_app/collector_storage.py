@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .config import COLLECTION_QUEUES_PATH, COLLECTION_SESSIONS_PATH, EVIDENCE_DIR, PROJECT_ROOT, RAW_CASES_PATH
+from .runtime_scope import RuntimeScope, assert_writable_scope
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -24,7 +25,13 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
+def _write_jsonl(
+    path: Path,
+    rows: Iterable[dict[str, Any]],
+    *,
+    scope: RuntimeScope | str | None = None,
+) -> None:
+    assert_writable_scope(scope)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         for row in rows:
@@ -39,11 +46,17 @@ def collection_session_index(path: Path = COLLECTION_SESSIONS_PATH) -> dict[str,
     return {row["session_id"]: row for row in load_collection_sessions(path) if row.get("session_id")}
 
 
-def upsert_collection_session(session: dict[str, Any], path: Path = COLLECTION_SESSIONS_PATH) -> None:
+def upsert_collection_session(
+    session: dict[str, Any],
+    path: Path = COLLECTION_SESSIONS_PATH,
+    *,
+    scope: RuntimeScope | str | None = None,
+) -> None:
+    assert_writable_scope(scope)
     sessions = collection_session_index(path)
     sessions[session["session_id"]] = session
     ordered = sorted(sessions.values(), key=lambda x: (x.get("created_at", ""), x.get("session_id", "")))
-    _write_jsonl(path, ordered)
+    _write_jsonl(path, ordered, scope=scope)
 
 
 def get_collection_session(session_id: str, path: Path = COLLECTION_SESSIONS_PATH) -> dict[str, Any] | None:
@@ -62,11 +75,17 @@ def collection_queue_index(path: Path = COLLECTION_QUEUES_PATH) -> dict[str, dic
     return {row["queue_id"]: row for row in load_collection_queues(path) if row.get("queue_id")}
 
 
-def upsert_collection_queue(queue: dict[str, Any], path: Path = COLLECTION_QUEUES_PATH) -> None:
+def upsert_collection_queue(
+    queue: dict[str, Any],
+    path: Path = COLLECTION_QUEUES_PATH,
+    *,
+    scope: RuntimeScope | str | None = None,
+) -> None:
+    assert_writable_scope(scope)
     queues = collection_queue_index(path)
     queues[queue["queue_id"]] = queue
     ordered = sorted(queues.values(), key=lambda x: (x.get("created_at", ""), x.get("queue_id", "")))
-    _write_jsonl(path, ordered)
+    _write_jsonl(path, ordered, scope=scope)
 
 
 def get_collection_queue(queue_id: str, path: Path = COLLECTION_QUEUES_PATH) -> dict[str, Any] | None:
@@ -93,7 +112,9 @@ def update_queue_item_status(
     status: str,
     session_id: str | None = None,
     path: Path = COLLECTION_QUEUES_PATH,
+    scope: RuntimeScope | str | None = None,
 ) -> dict[str, Any]:
+    assert_writable_scope(scope)
     queues = collection_queue_index(path)
     queue = queues.get(queue_id)
     if queue is None:
@@ -116,7 +137,7 @@ def update_queue_item_status(
     if queue.get("items") and all(i.get("status") == "COMPLETE" for i in queue["items"]):
         queue["queue_status"] = "COMPLETE"
         queue["completed_at"] = queue["updated_at"]
-    upsert_collection_queue(queue, path=path)
+    upsert_collection_queue(queue, path=path, scope=scope)
     return queue
 
 
@@ -183,7 +204,13 @@ def raw_case_ids(path: Path = RAW_CASES_PATH) -> set[str]:
     return {row["case_id"] for row in load_raw_cases(path) if row.get("case_id")}
 
 
-def append_raw_case(case: dict[str, Any], path: Path = RAW_CASES_PATH) -> None:
+def append_raw_case(
+    case: dict[str, Any],
+    path: Path = RAW_CASES_PATH,
+    *,
+    scope: RuntimeScope | str | None = None,
+) -> None:
+    assert_writable_scope(scope)
     if case.get("collection_status") != "COMPLETE":
         raise ValueError("Only COMPLETE cases may be written to raw_cases.jsonl.")
     if case.get("case_id") in raw_case_ids(path):
@@ -204,7 +231,9 @@ def save_evidence_files(
     response_turn: str,
     files: list[tuple[str, bytes]],
     evidence_dir: Path = EVIDENCE_DIR,
+    scope: RuntimeScope | str | None = None,
 ) -> list[str]:
+    assert_writable_scope(scope)
     if not files:
         return []
     case_dir = evidence_dir / _safe_file_part(case_id)

@@ -8,6 +8,7 @@ from typing import Any
 
 from .adjudication import FULL_ADJUDICATION, SAMPLED_ADJUDICATION
 from .config import ADJUDICATION_PATH, CASE_VALIDITIES, DATA_DIR, FINAL_RESULTS_PATH, JUDGE_RESULTS_PATH
+from .runtime_scope import RuntimeScope, assert_writable_scope
 
 ADJUDICATION_FIELDS = [
     "case_id",
@@ -26,12 +27,19 @@ ADJUDICATION_FIELDS = [
 ]
 
 
-def ensure_data_dir() -> None:
+def ensure_data_dir(*, scope: RuntimeScope | str | None = None) -> None:
+    assert_writable_scope(scope)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def append_judge_result(row: dict[str, Any], path: Path = JUDGE_RESULTS_PATH) -> None:
-    ensure_data_dir()
+def append_judge_result(
+    row: dict[str, Any],
+    path: Path = JUDGE_RESULTS_PATH,
+    *,
+    scope: RuntimeScope | str | None = None,
+) -> None:
+    assert_writable_scope(scope)
+    ensure_data_dir(scope=scope)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
@@ -78,8 +86,10 @@ def save_adjudication(
     validity_reason: str = "",
     validity_note: str = "",
     path: Path = ADJUDICATION_PATH,
+    scope: RuntimeScope | str | None = None,
 ) -> None:
-    ensure_data_dir()
+    assert_writable_scope(scope)
+    ensure_data_dir(scope=scope)
     final_case_validity = final_case_validity or case_validity
     if auto_case_validity not in CASE_VALIDITIES:
         raise ValueError(f"Unsupported auto case validity: {auto_case_validity}")
@@ -143,8 +153,10 @@ def build_final_results(
     adjudication_path: Path = ADJUDICATION_PATH,
     output_path: Path = FINAL_RESULTS_PATH,
     policy: str = FULL_ADJUDICATION,
+    scope: RuntimeScope | str | None = None,
 ) -> list[dict[str, Any]]:
-    ensure_data_dir()
+    assert_writable_scope(scope)
+    ensure_data_dir(scope=scope)
     adjudications = {r["case_id"]: r for r in load_adjudications(adjudication_path)}
     final_rows: list[dict[str, Any]] = []
 

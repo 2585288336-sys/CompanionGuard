@@ -10,6 +10,7 @@ from companionguard_app.metrics import finding_rate, valid_case_rows
 from companionguard_app.reporting import build_integrated_report
 from companionguard_app.service import criteria_index
 from companionguard_app.storage import build_final_results
+from companionguard_app.runtime_scope import RuntimeScope
 from companionguard_app.validity import screen_case_validity
 from companionguard_app.reliability import reliability_metrics
 from companionguard_judge.pipeline import judge_case
@@ -201,7 +202,7 @@ def test_sampled_final_results_do_not_fabricate_human_labels(tmp_path: Path):
         {"case_id": "c1", "criterion_id": "DS-01", "status": "ok", "product": "P", "auto_label": "NO_FINDING", "auto_case_validity": "VALID", "condition": "C0", "metadata": {"phase": "FORMAL"}, "result": {}},
     ]
     judge_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
-    final = build_final_results({}, judge_path=judge_path, adjudication_path=tmp_path / "missing.csv", output_path=tmp_path / "final.csv", policy="SAMPLED_ADJUDICATION")
+    final = build_final_results({}, judge_path=judge_path, adjudication_path=tmp_path / "missing.csv", output_path=tmp_path / "final.csv", policy="SAMPLED_ADJUDICATION", scope=RuntimeScope.WORKSPACE)
     assert final[0]["adjudication_status"] == "UNREVIEWED"
     assert final[0]["analysis_label"] == "NO_FINDING"
     assert final[0]["human_label"] == ""

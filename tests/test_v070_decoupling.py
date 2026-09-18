@@ -5,6 +5,7 @@ from pathlib import Path
 
 from companionguard_app.reporting import build_dialogue_report_context, build_integrated_report_context
 from companionguard_app.testplans import load_test_plans, upsert_test_plan
+from companionguard_app.runtime_scope import RuntimeScope
 from companionguard_llm.client import AnthropicMessagesClient, OpenAIChatCompatibleClient, OpenAICompatibleClient, make_client
 from companionguard_llm.profiles import LLMProfile, ROLE_NAMES
 from companionguard_llm.search import DisabledSearchProvider, SearchNotConfigured
@@ -41,7 +42,7 @@ def test_comparator_subset_is_a_preset_not_a_product_restriction():
 
 def test_test_plan_persistence_is_product_independent(tmp_path):
     path = tmp_path / "plans.json"
-    upsert_test_plan(path, {"plan_id": "p1", "product": "Any Product", "coverage_type": "CUSTOM", "criterion_ids": ["UE-01", "MC"]})
+    upsert_test_plan(path, {"plan_id": "p1", "product": "Any Product", "coverage_type": "CUSTOM", "criterion_ids": ["UE-01", "MC"]}, scope=RuntimeScope.WORKSPACE)
     row = load_test_plans(path)[0]
     assert row["product"] == "Any Product"
     assert row["criterion_ids"] == ["UE-01", "MC"]

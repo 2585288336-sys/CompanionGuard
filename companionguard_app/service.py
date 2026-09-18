@@ -10,6 +10,7 @@ from companionguard_llm.profiles import LLMProfile
 
 from .config import CRITERIA_DIR, LLM_USAGE_PATH, PROMPTS_DIR
 from .reporting import build_writer_facing_context
+from .runtime_scope import RuntimeScope, assert_writable_scope
 from .storage import append_judge_result, completed_case_ids
 
 
@@ -50,7 +51,9 @@ def run_single_case(
     judge_path: Path | None = None,
     session_id: str | None = None,
     project_id: str | None = None,
+    scope: RuntimeScope | str | None = None,
 ) -> dict[str, Any]:
+    assert_writable_scope(scope)
     criterion = criteria.get(case.get("criterion_id"))
     if criterion is None:
         raise ValueError(f"未知criterion_id: {case.get('criterion_id')}")
@@ -66,7 +69,10 @@ def run_single_case(
     row = judge_case(client, criterion, case, semantic_retries=1)
     _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=row.get("usage"))
     if persist:
-        append_judge_result(row, target_judge_path) if target_judge_path is not None else append_judge_result(row)
+        if target_judge_path is not None:
+            append_judge_result(row, target_judge_path, scope=scope)
+        else:
+            append_judge_result(row, scope=scope)
     return row
 
 
@@ -80,7 +86,9 @@ def run_batch_cases(
     judge_path: Path | None = None,
     session_id: str | None = None,
     project_id: str | None = None,
+    scope: RuntimeScope | str | None = None,
 ) -> list[dict[str, Any]]:
+    assert_writable_scope(scope)
     ids = [c.get("case_id") for c in cases]
     duplicates = sorted({x for x in ids if x and ids.count(x) > 1})
     if duplicates:
@@ -98,7 +106,10 @@ def run_batch_cases(
         _before_call(llm_profile, session_id=session_id)
         criterion = criteria[case["criterion_id"]]
         row = judge_case(client, criterion, case, semantic_retries=1)
-        append_judge_result(row, judge_path) if judge_path is not None else append_judge_result(row)
+        if judge_path is not None:
+            append_judge_result(row, judge_path, scope=scope)
+        else:
+            append_judge_result(row, scope=scope)
         _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=row.get("usage"))
         results.append(row)
         if progress:
@@ -113,8 +124,10 @@ def run_documentary_assist(
     llm_profile: LLMProfile,
     session_id: str | None = None,
     project_id: str | None = None,
+    scope: RuntimeScope | str | None = None,
 ) -> dict[str, Any]:
     """Layer 3 evidence extraction assist. Human review remains authoritative."""
+    assert_writable_scope(scope)
     if not source_text.strip():
         raise ValueError("Source text cannot be empty.")
     schema = {
@@ -159,7 +172,9 @@ def run_report_writer(
     session_id: str | None = None,
     project_id: str | None = None,
     prompt_version: str = "1.1",
+    scope: RuntimeScope | str | None = None,
 ) -> str:
+    assert_writable_scope(scope)
     if role not in {"dialogue_report", "integrated_report"}:
         raise ValueError("Unsupported report writer role")
     if prompt_version == "1.1":
@@ -186,7 +201,9 @@ def run_grounding_validator(
     *, draft_report: str, report_context: dict[str, Any], llm_profile: LLMProfile,
     session_id: str | None = None, project_id: str | None = None,
     prompt_version: str = "1.1",
+    scope: RuntimeScope | str | None = None,
 ) -> dict[str, Any]:
+    assert_writable_scope(scope)
     if llm_profile.role != "grounding_validator":
         raise ValueError("grounding validator requires the grounding_validator role")
     if prompt_version == "1.1":
@@ -226,7 +243,9 @@ def run_academic_polish(
     *, report_text: str, report_context: dict[str, Any], llm_profile: LLMProfile,
     session_id: str | None = None, project_id: str | None = None,
     prompt_version: str = "1.1",
+    scope: RuntimeScope | str | None = None,
 ) -> str:
+    assert_writable_scope(scope)
     if llm_profile.role != "academic_polish":
         raise ValueError("academic polish requires the academic_polish role")
     prompt_path = PROMPTS_DIR / "reporting" / ("academic_polish_v1.1.md" if prompt_version == "1.1" else "academic_polish.md")

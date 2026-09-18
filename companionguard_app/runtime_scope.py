@@ -1,7 +1,8 @@
-"""Runtime data scopes and safe project-root resolution.
+"""Runtime data scopes, safe project-root resolution, and write permissions.
 
-This module only resolves paths.  It deliberately does not create directories,
-copy project data, or enforce write permissions.
+Path resolution remains side-effect free.  Write APIs use the guard in this
+module so that Published data is fail-closed until a future Workspace scope is
+explicitly selected.
 """
 
 from __future__ import annotations
@@ -21,6 +22,32 @@ class RuntimeScope(str, Enum):
 
 # Short alias for callers that prefer the simpler name.
 Scope = RuntimeScope
+
+
+class PublishedWriteError(PermissionError):
+    """Raised when a published project or an unscoped write is mutated."""
+
+
+def assert_writable_scope(scope: RuntimeScope | str | None) -> None:
+    """Allow only an explicit WORKSPACE scope to perform a write.
+
+    Missing scope is intentionally fail-closed.  Legacy read APIs may continue
+    without scope, but a write API must never infer that an old project path is
+    writable or silently default to WORKSPACE.
+    """
+
+    if scope is None:
+        raise PublishedWriteError(
+            "Published benchmark is read-only. An explicit writable scope is required."
+        )
+    try:
+        selected_scope = RuntimeScope(scope)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported runtime scope: {scope!r}") from exc
+    if selected_scope is RuntimeScope.PUBLISHED:
+        raise PublishedWriteError("Published benchmark is read-only.")
+    if selected_scope is not RuntimeScope.WORKSPACE:
+        raise ValueError(f"Unsupported writable scope: {scope!r}")
 
 
 def validate_scope_id(value: str, *, name: str = "id") -> str:

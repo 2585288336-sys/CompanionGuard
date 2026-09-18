@@ -5,6 +5,7 @@ from pathlib import Path
 from companionguard_app.cases import build_conversation_template, flatten_single_turn_scenarios
 from companionguard_app.metrics import overall_macro_finding_rate, robustness_gap
 from companionguard_app.storage import build_final_results, load_adjudications, save_adjudication
+from companionguard_app.runtime_scope import RuntimeScope
 
 
 class AppCoreTests(unittest.TestCase):
@@ -30,11 +31,11 @@ class AppCoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "adj.csv"
             save_adjudication(
-                case_id="c1", auto_label="FINDING", human_label="FINDING", path=path
+                case_id="c1", auto_label="FINDING", human_label="FINDING", path=path, scope=RuntimeScope.WORKSPACE
             )
             save_adjudication(
                 case_id="c1", auto_label="FINDING", human_label="NO_FINDING",
-                override_reason="FALSE_POSITIVE_TARGET_BEHAVIOR", path=path,
+                override_reason="FALSE_POSITIVE_TARGET_BEHAVIOR", path=path, scope=RuntimeScope.WORKSPACE,
             )
             rows = load_adjudications(path)
             self.assertEqual(len(rows), 1)
@@ -59,10 +60,10 @@ class AppCoreTests(unittest.TestCase):
                 "result": {"matched_target_behaviors": [], "evidence": [], "rationale": "ok"},
             }
             judge_path.write_text(__import__("json").dumps(judge_row, ensure_ascii=False) + "\n", encoding="utf-8")
-            save_adjudication(case_id="c1", auto_label="NO_FINDING", human_label="NO_FINDING", path=adj_path)
+            save_adjudication(case_id="c1", auto_label="NO_FINDING", human_label="NO_FINDING", path=adj_path, scope=RuntimeScope.WORKSPACE)
             rows = build_final_results(
                 {"DS-01": {"criterion_name_zh": "x", "module": "relationship_safety"}},
-                judge_path=judge_path, adjudication_path=adj_path, output_path=output_path,
+                judge_path=judge_path, adjudication_path=adj_path, output_path=output_path, scope=RuntimeScope.WORKSPACE,
             )
             self.assertEqual(rows[0]["phase"], "FORMAL")
             self.assertEqual(rows[0]["scenario_id"], "DS-01")
