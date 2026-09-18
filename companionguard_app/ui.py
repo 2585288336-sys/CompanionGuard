@@ -26,7 +26,7 @@ from .collector_storage import get_raw_case, load_raw_cases
 from .config import OVERRIDE_REASONS
 from .display_labels import HUMAN_VALIDITY_OPTIONS, criterion_label, human_validity_index, module_label, scenario_label
 from .metrics import case_validity_counts, label_counts, module_finding_rates, overall_macro_finding_rate, robustness_gap, valid_case_rows
-from .platform_ui import active_project, active_paths
+from .platform_ui import active_project, active_paths, ensure_active_workspace_for_write
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .service import criteria_index, run_batch_cases, run_single_case
 from .ui_helpers import condition_label, phase_label, render_case_conversation, render_case_validity, render_criterion_context, render_judge_result
@@ -124,15 +124,16 @@ def _run_collected_batch_cases(
 
         with st.spinner("正在运行 Judge..."):
             try:
+                runtime_context = ensure_active_workspace_for_write()
                 results = run_batch_cases(
                     cases=selected_cases,
                     criteria=criteria,
                     llm_profile=llm_profile,
                     progress=progress,
-                    judge_path=paths.judge_results,
+                    judge_path=runtime_context.paths.judge_results,
                     session_id=llm_session_id(),
                     project_id=project.get("project_id"),
-                    scope=RuntimeScope.PUBLISHED,
+                    scope=RuntimeScope.WORKSPACE,
                 )
             except Exception as exc:
                 st.error(str(exc))
@@ -192,16 +193,17 @@ def _run_collected_single_case(*, project: dict[str, Any], paths, criteria: dict
             st.error("请先配置 Judge 模型。")
             return
         try:
+            runtime_context = ensure_active_workspace_for_write()
             with st.spinner("正在运行冻结测试项目对应的 Judge..."):
                 row = run_single_case(
                     case=case,
                     criteria=criteria,
                     llm_profile=llm_profile,
                     persist=True,
-                    judge_path=paths.judge_results,
+                    judge_path=runtime_context.paths.judge_results,
                     session_id=llm_session_id(),
                     project_id=project.get("project_id"),
-                    scope=RuntimeScope.PUBLISHED,
+                    scope=RuntimeScope.WORKSPACE,
                 )
             st.session_state["last_judge_result"] = row
         except Exception as exc:
@@ -268,11 +270,12 @@ def _run_manual_single_case(*, project: dict[str, Any], paths, criteria: dict[st
                     metadata={"source": "streamlit_single_ad_hoc"},
                 )
                 with st.spinner("正在运行冻结测试项目对应的 Judge..."):
+                    runtime_context = ensure_active_workspace_for_write()
                     row = run_single_case(
                         case=case, criteria=criteria, llm_profile=llm_profile, persist=True,
-                        judge_path=paths.judge_results, session_id=llm_session_id(),
+                        judge_path=runtime_context.paths.judge_results, session_id=llm_session_id(),
                         project_id=project.get("project_id"),
-                        scope=RuntimeScope.PUBLISHED,
+                        scope=RuntimeScope.WORKSPACE,
                     )
                 st.session_state["last_judge_result"] = row
             except Exception as exc:
@@ -319,14 +322,15 @@ def _run_uploaded_batch_cases(
             return
         with st.spinner("正在运行 Judge..."):
             try:
+                runtime_context = ensure_active_workspace_for_write()
                 results = run_batch_cases(
                     cases=cases,
                     criteria=criteria,
                     llm_profile=llm_profile,
-                    judge_path=paths.judge_results,
+                    judge_path=runtime_context.paths.judge_results,
                     session_id=llm_session_id(),
                     project_id=project.get("project_id"),
-                    scope=RuntimeScope.PUBLISHED,
+                    scope=RuntimeScope.WORKSPACE,
                 )
             except Exception as exc:
                 st.error(str(exc))
@@ -409,7 +413,8 @@ def human_review_page() -> None:
                 disabled=preview_plan["formal_judge_case_count"] == 0,
             ):
                 try:
-                    save_sampling_plan(preview_plan, paths.adjudication_sampling, scope=RuntimeScope.PUBLISHED)
+                    runtime_context = ensure_active_workspace_for_write()
+                    save_sampling_plan(preview_plan, runtime_context.paths.adjudication_sampling, scope=RuntimeScope.WORKSPACE)
                 except Exception as exc:
                     st.error(str(exc))
                 else:
@@ -555,6 +560,7 @@ def human_review_page() -> None:
             st.error("请明确选择案例有效性：有效或无效。")
             return
         try:
+            runtime_context = ensure_active_workspace_for_write()
             save_adjudication(
                 case_id=selected_id,
                 auto_label=auto,
@@ -566,10 +572,10 @@ def human_review_page() -> None:
                 final_case_validity=case_validity,
                 validity_reason="",
                 validity_note=validity_note,
-                path=paths.adjudication,
-                scope=RuntimeScope.PUBLISHED,
+                path=runtime_context.paths.adjudication,
+                scope=RuntimeScope.WORKSPACE,
             )
-            build_final_results(criteria, judge_path=paths.judge_results, adjudication_path=paths.adjudication, output_path=paths.final_results, policy=policy, scope=RuntimeScope.PUBLISHED)
+            build_final_results(criteria, judge_path=runtime_context.paths.judge_results, adjudication_path=runtime_context.paths.adjudication, output_path=runtime_context.paths.final_results, policy=policy, scope=RuntimeScope.WORKSPACE)
         except Exception as exc:
             st.error(str(exc))
         else:

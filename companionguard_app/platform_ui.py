@@ -11,7 +11,7 @@ import streamlit as st
 from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE, adjudication_policy
 from .audits import load_json, load_jsonl, make_audit_row, save_audit_evidence, upsert_jsonl
 from .collector import load_collector_config
-from .projects import create_project, delete_project, get_project, list_projects, project_paths, safe_slug
+from .projects import create_project, delete_project, get_project, list_projects, safe_slug
 from .reliability import LABELS, reliability_metrics
 from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
 from .report_pipeline import write_report_artifacts
@@ -19,6 +19,7 @@ from .service import criteria_index, run_documentary_assist, run_grounding_valid
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
 from .runtime_scope import RuntimeScope
+from .runtime_workspace import RuntimeContext, ensure_active_workspace, get_runtime_context
 from .collector_storage import load_raw_cases
 from .metrics import case_validity_counts, valid_case_rows
 from .display_labels import criterion_label, module_label, scenario_label
@@ -31,13 +32,36 @@ def active_project_id() -> str | None:
 
 
 def active_project() -> dict[str, Any] | None:
-    pid = active_project_id()
-    return get_project(pid) if pid else None
+    context = active_runtime_context()
+    if context is None:
+        return None
+    try:
+        value = json.loads(context.paths.manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return get_project(context.published_project_id) if context.scope is RuntimeScope.PUBLISHED else None
+    return value if isinstance(value, dict) else None
 
 
 def active_paths():
+    context = active_runtime_context()
+    return context.paths if context else None
+
+
+def active_runtime_context() -> RuntimeContext | None:
     pid = active_project_id()
-    return project_paths(pid) if pid else None
+    return get_runtime_context(pid) if pid else None
+
+
+def active_scope() -> RuntimeScope | None:
+    context = active_runtime_context()
+    return context.scope if context else None
+
+
+def ensure_active_workspace_for_write() -> RuntimeContext:
+    context = active_runtime_context()
+    if context is None:
+        raise ValueError("请先选择测试项目，再开始评测操作。")
+    return ensure_active_workspace(context.published_project_id)
 
 
 def _configured_products() -> list[dict[str, Any]]:
@@ -328,12 +352,17 @@ def layer2_page() -> None:
     files = st.file_uploader("截图/录屏证据 / Screenshot or screen-record evidence", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"l2::{product}::{check['code']}")
     if st.button("保存 Layer 2 检查 / Save Layer 2 Check", type="primary"):
         try:
+            context = ensure_active_workspace_for_write()
+            project = active_project()
+            paths = context.paths
+            if not project:
+                raise ValueError("Workspace project manifest is unavailable.")
             saved = prior.get("evidence_files", [])
             if files:
-                saved_abs = save_audit_evidence(evidence_root=paths.layer2_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files], scope=RuntimeScope.PUBLISHED)
+                saved_abs = save_audit_evidence(evidence_root=paths.layer2_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files], scope=context.scope)
                 saved = [str(Path(x).relative_to(paths.root)) for x in saved_abs]
             row = make_audit_row(project_id=project["project_id"], product=product, check_code=check["code"], status=status, evidence_summary=evidence_summary, notes=notes, evidence_files=saved, metadata={"regulation": check.get("regulation"), "check_name_zh": check.get("name_zh"), "test_date": date.today().isoformat(), "app_version": app_version, "operating_system": operating_system})
-            upsert_jsonl(paths.layer2_records, row, key_fields=("product", "check_code"), scope=RuntimeScope.PUBLISHED)
+            upsert_jsonl(paths.layer2_records, row, key_fields=("product", "check_code"), scope=context.scope)
         except Exception as exc:
             st.error(str(exc))
         else:
@@ -378,8 +407,9 @@ def layer3_page() -> None:
             st.error("请配置 Layer 3 Evidence Assistant LLM。")
         else:
             try:
+                context = ensure_active_workspace_for_write()
                 with st.spinner("Extracting public evidence..."):
-                    st.session_state[assist_key] = run_documentary_assist(check=check, source_text=source_text, llm_profile=llm_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=RuntimeScope.PUBLISHED)
+                    st.session_state[assist_key] = run_documentary_assist(check=check, source_text=source_text, llm_profile=llm_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=context.scope)
             except Exception as e:
                 st.error(str(e))
     assist = st.session_state.get(assist_key)
@@ -398,12 +428,17 @@ def layer3_page() -> None:
     files = st.file_uploader("公开材料/截图（可选） / Supporting document", type=["png", "jpg", "jpeg", "webp", "pdf", "txt", "md"], accept_multiple_files=True, key=f"l3::{product}::{check['code']}")
     if st.button("保存 Layer 3 核查 / Save Layer 3 Audit", type="primary"):
         try:
+            context = ensure_active_workspace_for_write()
+            project = active_project()
+            paths = context.paths
+            if not project:
+                raise ValueError("Workspace project manifest is unavailable.")
             saved = prior.get("evidence_files", [])
             if files:
-                saved_abs = save_audit_evidence(evidence_root=paths.layer3_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files], scope=RuntimeScope.PUBLISHED)
+                saved_abs = save_audit_evidence(evidence_root=paths.layer3_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files], scope=context.scope)
                 saved = [str(Path(x).relative_to(paths.root)) for x in saved_abs]
             row = make_audit_row(project_id=project["project_id"], product=product, check_code=check["code"], status=status, evidence_summary=evidence_summary, notes=notes, source=source, source_date=source_date, evidence_files=saved, metadata={"regulation": check.get("regulation"), "check_name_zh": check.get("name_zh"), "ai_assist": assist or None})
-            upsert_jsonl(paths.layer3_records, row, key_fields=("product", "check_code"), scope=RuntimeScope.PUBLISHED)
+            upsert_jsonl(paths.layer3_records, row, key_fields=("product", "check_code"), scope=context.scope)
         except Exception as exc:
             st.error(str(exc))
         else:
@@ -464,15 +499,17 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
         st.warning("请先选择测试项目。")
         return
     deterministic_path = paths.reports / "dialogue_report_deterministic.md"
-    if not deterministic_path.exists():
+    deterministic = None
+    if deterministic_path.exists():
+        deterministic = deterministic_path.read_text(encoding="utf-8")
+    else:
         st.info("当前项目尚未生成已保存的对话评测报告；只读 Published 页面不会在浏览时创建报告。")
-        return
-    deterministic = deterministic_path.read_text(encoding="utf-8")
     rows = load_final_results(paths.final_results)
-    with st.container():
-        st.markdown('<span class="report-document-marker" aria-hidden="true"></span>', unsafe_allow_html=True)
-        st.markdown(deterministic)
-    st.download_button("下载确定性对话测试报告", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
+    if deterministic is not None:
+        with st.container():
+            st.markdown('<span class="report-document-marker" aria-hidden="true"></span>', unsafe_allow_html=True)
+            st.markdown(deterministic)
+        st.download_button("下载确定性对话测试报告", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
     st.markdown(
         '<div class="report-action-heading"><div class="report-action-eyebrow">LLM REPORT WRITER</div><div class="report-action-title">可选：LLM 撰写对话测试报告</div></div>',
         unsafe_allow_html=True,
@@ -482,12 +519,16 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
         profile = render_llm_profile_selector("dialogue_report", key_prefix="dialogue_report_writer")
         if st.button("生成 LLM 对话测试报告", disabled=profile is None):
             try:
+                runtime_context = ensure_active_workspace_for_write()
+                project = active_project()
+                paths = runtime_context.paths
+                rows = load_final_results(paths.final_results)
                 context = build_dialogue_report_context(project=project, final_rows=rows)
-                text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=RuntimeScope.PUBLISHED)
+                text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope)
                 result = write_report_artifacts(
                     report_type="dialogue", project=project, final_rows=rows,
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
-                    reports_dir=paths.reports, draft_text=text, scope=RuntimeScope.PUBLISHED,
+                    reports_dir=paths.reports, draft_text=text, scope=runtime_context.scope,
                 )
                 if result["manifest"]["validation_status"] != "PASS":
                     st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
@@ -508,15 +549,17 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     output = paths.reports / "final_report.md"
     if not output.exists():
         output = paths.reports / "integrated_report.md"
-    if not output.exists():
+    report = None
+    if output.exists():
+        report = output.read_text(encoding="utf-8")
+    else:
         st.info("当前项目尚未生成已保存的综合评测报告；只读 Published 页面不会在浏览时创建报告。")
-        return
-    report = output.read_text(encoding="utf-8")
     rows = load_final_results(paths.final_results)
-    with st.container():
-        st.markdown('<span class="report-document-marker" aria-hidden="true"></span>', unsafe_allow_html=True)
-        st.markdown(report)
-    st.download_button("下载综合测试报告（.md）", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
+    if report is not None:
+        with st.container():
+            st.markdown('<span class="report-document-marker" aria-hidden="true"></span>', unsafe_allow_html=True)
+            st.markdown(report)
+        st.download_button("下载综合测试报告（.md）", data=report.encode("utf-8"), file_name=f"{project['project_id']}_integrated_report.md", mime="text/markdown")
     st.markdown(
         '<div class="report-action-heading"><div class="report-action-eyebrow">LLM REPORT WRITER</div><div class="report-action-title">生成 LLM 综合测试报告</div><div class="report-action-subtitle">Generate LLM Integrated Report</div></div>',
         unsafe_allow_html=True,
@@ -527,14 +570,18 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
         grounding_profile = render_llm_profile_selector("grounding_validator", key_prefix="integrated_report_grounding")
         if st.button("生成并验证 LLM 综合测试报告", disabled=profile is None or grounding_profile is None):
             try:
+                runtime_context = ensure_active_workspace_for_write()
+                project = active_project()
+                paths = runtime_context.paths
+                rows = load_final_results(paths.final_results)
                 context = build_integrated_report_context(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
-                text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=RuntimeScope.PUBLISHED)
-                grounding = run_grounding_validator(draft_report=text, report_context=context, llm_profile=grounding_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=RuntimeScope.PUBLISHED)
+                text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope)
+                grounding = run_grounding_validator(draft_report=text, report_context=context, llm_profile=grounding_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope)
                 result = write_report_artifacts(
                     report_type="integrated", project=project, final_rows=rows,
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
                     reports_dir=paths.reports, draft_text=text,
-                    grounding_validator=lambda draft, report_context: grounding, scope=RuntimeScope.PUBLISHED,
+                    grounding_validator=lambda draft, report_context: grounding, scope=runtime_context.scope,
                 )
                 if result["manifest"]["validation_status"] != "PASS":
                     st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")

@@ -13,3 +13,4 @@ data/evidence/
 
 # v0.6 project-scoped runtime data
 data/projects/
+data/runtime_sessions/
