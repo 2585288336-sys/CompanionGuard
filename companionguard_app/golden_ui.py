@@ -25,6 +25,7 @@ from .platform_ui import (
     active_project,
     active_runtime_context,
 )
+from .project_export import ProjectExportError, build_project_package
 from .projects import list_projects
 from .ui import get_criteria, human_review_page, results_page, run_test_page
 
@@ -258,6 +259,22 @@ def current_project_overview_page() -> None:
     else:
         st.info("请选择一个测试项目。")
     st.markdown("</div></div>", unsafe_allow_html=True)
+    context = active_runtime_context()
+    if context is not None and context.paths.root.is_dir():
+        try:
+            package = build_project_package(context)
+        except ProjectExportError as exc:
+            st.warning(f"当前项目暂时无法导出 / Project package unavailable: {exc}")
+        else:
+            label = "当前临时工作区项目包" if context.is_workspace else "官方发布版项目包"
+            st.download_button(
+                f"下载项目完整数据 / Download Project Package · {label}",
+                data=package.data,
+                file_name=package.filename,
+                mime="application/zip",
+                key="download-project-package",
+                help="只导出当前活动项目中已经存在的数据，不会创建工作区或修改项目。",
+            )
 
 
 def render_page(page_id: str) -> None:
