@@ -10,6 +10,7 @@ from typing import Any
 
 from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE
 from .config import DATA_DIR, PROJECT_ROOT
+from .runtime_scope import RuntimeScope, resolve_project_root
 from .versioning import APP_VERSION, DATA_SCHEMA_VERSION, current_code_commit
 
 PROJECTS_DIR = DATA_DIR / "projects"
@@ -47,6 +48,49 @@ class ProjectPaths:
 
 def project_paths(project_id: str) -> ProjectPaths:
     root = PROJECTS_DIR / safe_slug(project_id)
+    return ProjectPaths(
+        project_id=project_id,
+        root=root,
+        manifest=root / "project.json",
+        raw_cases=root / "raw_cases.jsonl",
+        collection_sessions=root / "collection_sessions.jsonl",
+        collection_queues=root / "collection_queues.jsonl",
+        dialogue_evidence=root / "evidence" / "dialogue",
+        judge_results=root / "judge_results.jsonl",
+        adjudication=root / "human_adjudication.csv",
+        final_results=root / "final_results.csv",
+        adjudication_sampling=root / "adjudication_sampling.json",
+        layer2_records=root / "layer2_product_safeguards.jsonl",
+        layer2_evidence=root / "evidence" / "layer2",
+        layer3_records=root / "layer3_public_evidence.jsonl",
+        layer3_evidence=root / "evidence" / "layer3",
+        reports=root / "reports",
+        test_plans=root / "test_plans.json",
+    )
+
+
+def scoped_project_paths(
+    project_id: str,
+    *,
+    scope: RuntimeScope | str = RuntimeScope.PUBLISHED,
+    session_id: str | None = None,
+    sandbox_id: str | None = None,
+    data_root: Path | None = None,
+) -> ProjectPaths:
+    """Build project paths for an explicit published or workspace scope.
+
+    The legacy ``project_paths(project_id)`` function above is intentionally
+    unchanged.  This helper is the opt-in foundation for future scope-aware
+    callers; it only resolves paths and never creates directories or files.
+    """
+
+    root = resolve_project_root(
+        project_id,
+        scope=scope,
+        session_id=session_id,
+        sandbox_id=sandbox_id,
+        data_root=data_root,
+    )
     return ProjectPaths(
         project_id=project_id,
         root=root,
