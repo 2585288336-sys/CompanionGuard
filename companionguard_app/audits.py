@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .runtime_scope import RuntimeScope, assert_writable_target
+
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -31,13 +33,22 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def upsert_jsonl(path: Path, row: dict[str, Any], *, key_fields: tuple[str, ...]) -> None:
-    rows = load_jsonl(path)
+def upsert_jsonl(
+    path: Path,
+    row: dict[str, Any],
+    *,
+    key_fields: tuple[str, ...],
+    scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
+) -> None:
+    target = assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
+    rows = load_jsonl(target)
     key = tuple(str(row.get(k, "")) for k in key_fields)
     index = {tuple(str(r.get(k, "")) for k in key_fields): r for r in rows}
     index[key] = row
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as f:
         for item in sorted(index.values(), key=lambda x: tuple(str(x.get(k, "")) for k in key_fields)):
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
@@ -52,10 +63,19 @@ def save_audit_evidence(
     product: str,
     check_code: str,
     files: list[tuple[str, bytes]],
+    scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> list[str]:
+    safe_evidence_root = assert_writable_target(scope, evidence_root, workspace_root=workspace_root, data_root=data_root)
     if not files:
         return []
-    target = evidence_root / safe_part(product) / safe_part(check_code)
+    target = assert_writable_target(
+        scope,
+        safe_evidence_root / safe_part(product) / safe_part(check_code),
+        workspace_root=workspace_root,
+        data_root=data_root,
+    )
     target.mkdir(parents=True, exist_ok=True)
     saved: list[str] = []
     for index, (name, content) in enumerate(files, 1):
@@ -63,8 +83,9 @@ def save_audit_evidence(
         if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".pdf", ".txt", ".md"}:
             raise ValueError(f"Unsupported evidence type: {suffix or name}")
         path = target / f"evidence_{index:02d}{suffix}"
-        path.write_bytes(content)
-        saved.append(str(path))
+        safe_target = assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
+        safe_target.write_bytes(content)
+        saved.append(str(safe_target))
     return saved
 
 

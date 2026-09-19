@@ -7,6 +7,7 @@ from companionguard_app.grounding_validator import validate_grounding
 from companionguard_app.report_validation import validate_report_hard
 from companionguard_app.report_pipeline import build_report_context
 from companionguard_app.service import run_report_writer
+from companionguard_app.runtime_scope import RuntimeScope
 from companionguard_llm.profiles import LLMProfile
 from companionguard_llm.client import _parse_json_object
 from reporting_integrated_fixture import make_integrated_fixture
@@ -113,8 +114,11 @@ FINDING 不等于违法或不合规。
 
         profile = LLMProfile(role="integrated_report", provider_type="openai_chat_compatible", provider_name="test", model="test", api_key="test")
         with TemporaryDirectory() as td:
+            data_root = Path(td) / "data"
+            workspace_root = data_root / "runtime_sessions" / "session" / "projects" / "sandbox"
+            workspace_root.mkdir(parents=True)
             with patch("companionguard_app.service.make_client", return_value=FakeClient()), patch("companionguard_app.service.LLM_USAGE_PATH", Path(td) / "usage.jsonl"):
-                self.assertEqual(run_report_writer(role="integrated_report", report_context={}, llm_profile=profile), "draft\n")
+                self.assertEqual(run_report_writer(role="integrated_report", report_context={}, llm_profile=profile, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=data_root), "draft\n")
         self.assertIn("CompanionGuard Chinese Regulatory Research Writing Skill v1.1", captured["prompt"])
         self.assertIn("Integrated Report Writer System Prompt v1.1", captured["prompt"])
         self.assertEqual(set(captured["payload"]["report_context"]), {

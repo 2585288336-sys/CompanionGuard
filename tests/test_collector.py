@@ -28,6 +28,7 @@ from companionguard_app.collector_storage import (
     upsert_collection_queue,
     upsert_collection_session,
 )
+from companionguard_app.runtime_scope import RuntimeScope
 from companionguard_app.service import criteria_index
 from companionguard_judge.pipeline import dry_run
 
@@ -207,18 +208,21 @@ class CollectorTests(unittest.TestCase):
             run_numbers=[1], condition_filter=["C0", "C1", "C2"],
         )
         with tempfile.TemporaryDirectory() as td:
-            queue_path = Path(td) / "queues.jsonl"
-            session_path = Path(td) / "sessions.jsonl"
-            raw_path = Path(td) / "raw.jsonl"
+            data_root = Path(td)
+            workspace_root = data_root / "runtime_sessions" / "session" / "projects" / "sandbox"
+            workspace_root.mkdir(parents=True)
+            queue_path = workspace_root / "queues.jsonl"
+            session_path = workspace_root / "sessions.jsonl"
+            raw_path = workspace_root / "raw.jsonl"
             qid = make_queue_id(product_slug="P", phase="FORMAL", collection_date="2026-09-15", path=queue_path)
             queue = create_collection_queue(
                 queue_id=qid, queue_name="test queue", product_id="P", product_name="P", product_slug="P",
                 product_role="", phase="FORMAL", collection_date="2026-09-15", items=items,
             )
-            upsert_collection_queue(queue, path=queue_path)
+            upsert_collection_queue(queue, path=queue_path, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=data_root)
             first = items[0]
             queue = update_queue_item_status(
-                queue_id=qid, case_id=first["case_id"], status="IN_PROGRESS", session_id=first["case_id"], path=queue_path,
+                queue_id=qid, case_id=first["case_id"], status="IN_PROGRESS", session_id=first["case_id"], path=queue_path, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=data_root,
             )
             self.assertEqual(queue["items"][0]["status"], "IN_PROGRESS")
             restored = get_collection_queue(qid, path=queue_path)
@@ -256,26 +260,32 @@ class CollectorTests(unittest.TestCase):
         )
         session = save_step_response(session, step_index=0, response="first raw response")
         with tempfile.TemporaryDirectory() as td:
-            sessions_path = Path(td) / "sessions.jsonl"
-            raw_path = Path(td) / "raw.jsonl"
-            upsert_collection_session(session, path=sessions_path)
+            data_root = Path(td)
+            workspace_root = data_root / "runtime_sessions" / "session" / "projects" / "sandbox"
+            workspace_root.mkdir(parents=True)
+            sessions_path = workspace_root / "sessions.jsonl"
+            raw_path = workspace_root / "raw.jsonl"
+            upsert_collection_session(session, path=sessions_path, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=data_root)
             restored = get_collection_session(session["session_id"], path=sessions_path)
             self.assertEqual(restored["steps"][0]["response"], "first raw response")
             restored = save_step_response(restored, step_index=1, response="second raw response")
             case = build_raw_case(restored, criterion)
-            append_raw_case(case, path=raw_path)
+            append_raw_case(case, path=raw_path, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=data_root)
             self.assertEqual(load_raw_cases(raw_path)[0]["case_id"], case["case_id"])
             with self.assertRaises(ValueError):
-                append_raw_case(case, path=raw_path)
+                append_raw_case(case, path=raw_path, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=data_root)
 
     def test_evidence_is_stored_under_case_id(self):
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td) / "evidence"
+            data_root = Path(td)
+            workspace_root = data_root / "runtime_sessions" / "session" / "projects" / "sandbox"
+            workspace_root.mkdir(parents=True)
+            root = workspace_root / "evidence"
             paths = save_evidence_files(
                 case_id="MoMood_DS-01_C0_FORMAL_run01",
                 response_turn="A4",
                 files=[("screen.png", b"not-a-real-png-but-storage-is-byte-preserving")],
-                evidence_dir=root,
+                evidence_dir=root, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=data_root,
             )
             self.assertEqual(len(paths), 1)
             self.assertTrue((root / "MoMood_DS-01_C0_FORMAL_run01" / "A4_01.png").exists())

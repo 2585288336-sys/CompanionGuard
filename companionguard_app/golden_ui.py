@@ -22,8 +22,11 @@ from .platform_ui import (
     projects_page,
     reliability_page,
     report_page,
+    active_project,
+    active_runtime_context,
 )
-from .projects import get_project, list_projects
+from .project_export import ProjectExportError, build_project_package
+from .projects import list_projects
 from .ui import get_criteria, human_review_page, results_page, run_test_page
 
 
@@ -182,10 +185,15 @@ def _project_selector() -> dict[str, Any] | None:
     if active_id not in ids:
         active_id = ids[0]
         st.session_state["active_project_id"] = active_id
-    active = get_project(active_id)
+    active = active_project()
     project_name = str((active or {}).get("project_name") or "CompanionGuard Formal Full Benchmark 2026-09")
+    runtime_context = active_runtime_context()
+    if runtime_context and runtime_context.is_workspace:
+        scope_html = '<span class="pill amber">临时评测工作区 · 当前会话</span><div class="project-note">你的评测修改仅保存在本次临时工作区，不会修改官方数据。</div>'
+    else:
+        scope_html = '<span class="pill blue">官方发布版 · 只读</span>'
     st.sidebar.markdown(
-        f'<div class="projectbox"><div class="k">Test Project · 测试项目</div><div class="v">{escape(project_name)}</div><div style="display:flex;gap:6px;align-items:center;justify-content:space-between"><span class="pill blue">FORMAL</span><span class="btn" style="padding:5px 8px;font-size:10px">切换项目</span></div><div class="project-note"><b>Compatibility target</b><br>formal-collection-freeze-20260915-products<br><br><b>Schema</b><br>Data v1.0 · no migration expected</div></div>',
+        f'<div class="projectbox"><div class="k">Test Project · 测试项目</div><div class="v">{escape(project_name)}</div><div style="display:flex;gap:6px;align-items:center;justify-content:space-between"><span class="pill blue">FORMAL</span><span class="btn" style="padding:5px 8px;font-size:10px">切换项目</span></div><div class="project-note"><b>Compatibility target</b><br>formal-collection-freeze-20260915-products<br><br><b>Schema</b><br>Data v1.0 · no migration expected<br><br>{scope_html}</div></div>',
         unsafe_allow_html=True,
     )
     with st.sidebar.container():
@@ -243,7 +251,7 @@ def render_workspace_head(page_id: str) -> None:
 
 
 def current_project_overview_page() -> None:
-    project = get_project(st.session_state.get("active_project_id"))
+    project = active_project()
     st.markdown('<div class="card"><div class="cardhead"><span class="workspace-pill blue">FORMAL</span></div><div class="cardbody">', unsafe_allow_html=True)
     if project:
         st.markdown(f"**{project.get('project_name', 'CompanionGuard Formal Full Benchmark 2026-09')}**  \nProject ID: `{project.get('project_id')}`", unsafe_allow_html=True)
@@ -251,6 +259,23 @@ def current_project_overview_page() -> None:
     else:
         st.info("请选择一个测试项目。")
     st.markdown("</div></div>", unsafe_allow_html=True)
+    context = active_runtime_context()
+    if context is not None and context.paths.root.is_dir():
+        try:
+            package = build_project_package(context)
+        except ProjectExportError as exc:
+            st.warning(f"当前项目暂时无法导出 / Project package unavailable: {exc}")
+        else:
+            label = "当前临时工作区项目包" if context.is_workspace else "官方发布版项目包"
+            st.caption("导出包包含当前项目的完整研究数据与证据材料，可能包含你输入的敏感内容；对外分享前请自行审阅。\n\nExports may contain user-provided sensitive research content. Review before external sharing.")
+            st.download_button(
+                f"下载项目完整数据 / Download Project Package · {label}",
+                data=package.data,
+                file_name=package.filename,
+                mime="application/zip",
+                key="download-project-package",
+                help="只导出当前活动项目中已经存在的数据，不会创建工作区或修改项目。",
+            )
 
 
 def render_page(page_id: str) -> None:

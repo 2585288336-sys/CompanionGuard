@@ -1,0 +1,7 @@
+{
+  "attempted": false,
+  "status": "NOT_TRIGGERED",
+  "reason": "No targeted repair was requested in this run.",
+  "source_grounding_status": "PASS",
+  "issue_count": 0
+}

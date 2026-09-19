@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import companionguard_app.projects as projects
 from companionguard_app.data_integrity import verify_project_data
+from companionguard_app.runtime_scope import RuntimeScope
 
 
 class DataIntegrityTests(unittest.TestCase):
@@ -107,14 +108,18 @@ class DataIntegrityTests(unittest.TestCase):
 
     def test_new_project_metadata_is_loader_compatible(self):
         with tempfile.TemporaryDirectory() as td:
-            projects_root = Path(td) / "projects"
-            with patch.object(projects, "PROJECTS_DIR", projects_root):
+            data_root = Path(td)
+            workspace_root = data_root / "runtime_sessions" / "session" / "projects" / "sandbox"
+            with patch.object(projects, "PROJECTS_DIR", data_root / "projects"):
                 created = projects.create_project(
                     name="Metadata test",
                     project_id="metadata-test",
                     products=[{"id": "P", "label": "P", "slug": "P"}],
+                    scope=RuntimeScope.WORKSPACE,
+                    workspace_root=workspace_root,
+                    data_root=data_root,
                 )
-                loaded = projects.get_project(created["project_id"])
+                loaded = json.loads((workspace_root / "project.json").read_text(encoding="utf-8"))
 
             self.assertIsNotNone(loaded)
             self.assertEqual(loaded["data_schema_version"], "1.0")

@@ -5,19 +5,24 @@ from pathlib import Path
 
 from companionguard_app.reporting import build_dialogue_report_context, build_integrated_report_context
 from companionguard_app.testplans import load_test_plans, upsert_test_plan
+from companionguard_app.runtime_scope import RuntimeScope
 from companionguard_llm.client import AnthropicMessagesClient, OpenAIChatCompatibleClient, OpenAICompatibleClient, make_client
 from companionguard_llm.profiles import LLMProfile, ROLE_NAMES
 from companionguard_llm.search import DisabledSearchProvider, SearchNotConfigured
 
 
-def test_four_llm_roles_are_independent_profiles():
-    assert set(ROLE_NAMES) == {"judge", "dialogue_report", "evidence", "integrated_report", "grounding_validator", "academic_polish"}
-    profiles = [
-        LLMProfile(role=role, provider_type="openai_chat_compatible", provider_name=f"P-{role}", model=f"M-{role}", api_key="secret", base_url="https://example.invalid/v1")
+def test_llm_roles_are_independent_profiles():
+    expected_roles = {"judge", "dialogue_report", "evidence", "integrated_report", "grounding_validator", "academic_polish"}
+    assert set(ROLE_NAMES) == expected_roles
+    profiles = {
+        role: LLMProfile(role=role, provider_type="openai_chat_compatible", provider_name=f"P-{role}", model=f"M-{role}", api_key="secret", base_url="https://example.invalid/v1")
         for role in ROLE_NAMES
-    ]
-    assert len({p.model for p in profiles}) == 4
-    assert all("api_key" not in p.public_metadata() for p in profiles)
+    }
+    assert set(profiles) == expected_roles
+    assert len({profile.model for profile in profiles.values()}) == len(expected_roles)
+    assert len({id(profile) for profile in profiles.values()}) == len(expected_roles)
+    assert all(profile.role == role for role, profile in profiles.items())
+    assert all("api_key" not in profile.public_metadata() for profile in profiles.values())
 
 
 def test_provider_registry_supports_multiple_protocols_without_business_logic_changes():
@@ -40,8 +45,10 @@ def test_comparator_subset_is_a_preset_not_a_product_restriction():
 
 
 def test_test_plan_persistence_is_product_independent(tmp_path):
-    path = tmp_path / "plans.json"
-    upsert_test_plan(path, {"plan_id": "p1", "product": "Any Product", "coverage_type": "CUSTOM", "criterion_ids": ["UE-01", "MC"]})
+    workspace_root = tmp_path / "runtime_sessions" / "session" / "projects" / "sandbox"
+    workspace_root.mkdir(parents=True)
+    path = workspace_root / "plans.json"
+    upsert_test_plan(path, {"plan_id": "p1", "product": "Any Product", "coverage_type": "CUSTOM", "criterion_ids": ["UE-01", "MC"]}, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=tmp_path)
     row = load_test_plans(path)[0]
     assert row["product"] == "Any Product"
     assert row["criterion_ids"] == ["UE-01", "MC"]

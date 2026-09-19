@@ -6,6 +6,7 @@ from pathlib import Path
 from companionguard_llm.client import make_client
 from companionguard_llm.profiles import LLMProfile
 from .pipeline import dry_run, load_criteria, read_jsonl, run_batch
+from companionguard_app.runtime_scope import RuntimeScope
 
 
 def parser() -> argparse.ArgumentParser:
@@ -13,6 +14,7 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--input", required=True, help="Input cases JSONL")
     p.add_argument("--criteria-dir", default="criteria")
     p.add_argument("--output", default="outputs/judge_results.jsonl")
+    p.add_argument("--workspace-root", help="Validated runtime Workspace root for project-local writes")
     p.add_argument("--provider-type", choices=["openai_responses", "openai_chat_compatible", "anthropic"], default=os.environ.get("COMPANIONGUARD_JUDGE_PROVIDER_TYPE", "openai_responses"))
     p.add_argument("--provider-name", default=os.environ.get("COMPANIONGUARD_JUDGE_PROVIDER_NAME", "LLM Provider"))
     p.add_argument("--base-url", default=os.environ.get("COMPANIONGUARD_JUDGE_BASE_URL") or os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
@@ -45,7 +47,7 @@ def main() -> int:
         return 2
     profile = LLMProfile(role="judge", provider_type=args.provider_type, provider_name=args.provider_name, model=args.model, api_key=api_key, base_url=args.base_url, reasoning_effort=args.reasoning_effort, temperature=args.temperature, access_mode="SERVER")
     try:
-        ok, failed = run_batch(client=make_client(profile), input_path=input_path, criteria_dir=criteria_dir, output_path=Path(args.output), semantic_retries=args.semantic_retries, overwrite=args.overwrite, limit=args.limit)
+        ok, failed = run_batch(client=make_client(profile), input_path=input_path, criteria_dir=criteria_dir, output_path=Path(args.output), semantic_retries=args.semantic_retries, overwrite=args.overwrite, limit=args.limit, scope=RuntimeScope.WORKSPACE, workspace_root=Path(args.workspace_root) if args.workspace_root else None)
     except ValueError as e:
         print(e); return 2
     print(f"Done: ok={ok}, error={failed}")
