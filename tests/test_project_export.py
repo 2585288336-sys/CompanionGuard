@@ -52,6 +52,7 @@ def test_published_export_is_read_only_and_contains_existing_project_files(tmp_p
     assert prefix + "reports/dialogue.md" in names
     assert prefix + "EXPORT_MANIFEST.json" in names
     assert prefix + "SHA256SUMS.txt" in names
+    assert prefix + "llm_usage.jsonl" not in names
     assert manifest["export_scope"] == "PUBLISHED"
     assert manifest["source_type"] == "official_published"
     assert manifest["file_count"] == len(before)
@@ -65,6 +66,10 @@ def test_workspace_export_uses_only_current_workspace_and_excludes_runtime_manif
     state = {}
     context = ensure_workspace("published", state=state, data_root=tmp_path)
     context.paths.raw_cases.write_text(json.dumps({"case_id": "case-1", "value": "workspace"}) + "\n", encoding="utf-8")
+    context.paths.root.joinpath("llm_usage.jsonl").write_text(
+        json.dumps({"role": "integrated_report", "provider": "fake", "model": "fake-model"}) + "\n",
+        encoding="utf-8",
+    )
     package = build_project_package(context)
     archive, members = _archive_files(package.data)
     prefix = "CompanionGuard-Project-published/"
@@ -75,6 +80,8 @@ def test_workspace_export_uses_only_current_workspace_and_excludes_runtime_manif
     assert prefix + ".workspace_manifest.json" not in archive.namelist()
     assert b"workspace" in members[prefix + "raw_cases.jsonl"]
     assert b"official" not in members[prefix + "raw_cases.jsonl"]
+    assert prefix + "llm_usage.jsonl" in archive.namelist()
+    assert b"fake-model" in members[prefix + "llm_usage.jsonl"]
     assert '"ephemeral_workspace": true' in manifest_text
     assert context.session_id not in manifest_text
     assert context.sandbox_id not in manifest_text

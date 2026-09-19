@@ -409,7 +409,7 @@ def layer3_page() -> None:
             try:
                 context = ensure_active_workspace_for_write()
                 with st.spinner("Extracting public evidence..."):
-                    st.session_state[assist_key] = run_documentary_assist(check=check, source_text=source_text, llm_profile=llm_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=context.scope)
+                    st.session_state[assist_key] = run_documentary_assist(check=check, source_text=source_text, llm_profile=llm_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=context.scope, workspace_root=context.paths.root)
             except Exception as e:
                 st.error(str(e))
     assist = st.session_state.get(assist_key)
@@ -524,7 +524,7 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
                 paths = runtime_context.paths
                 rows = load_final_results(paths.final_results)
                 context = build_dialogue_report_context(project=project, final_rows=rows)
-                text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope)
+                text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root)
                 result = write_report_artifacts(
                     report_type="dialogue", project=project, final_rows=rows,
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
@@ -576,8 +576,8 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
                 paths = runtime_context.paths
                 rows = load_final_results(paths.final_results)
                 context = build_integrated_report_context(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
-                text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope)
-                grounding = run_grounding_validator(draft_report=text, report_context=context, llm_profile=grounding_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope)
+                text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root)
+                grounding = run_grounding_validator(draft_report=text, report_context=context, llm_profile=grounding_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root)
                 result = write_report_artifacts(
                     report_type="integrated", project=project, final_rows=rows,
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,

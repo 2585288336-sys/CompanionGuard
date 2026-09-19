@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any, Callable
 
@@ -18,6 +19,25 @@ def criteria_index(criteria_dir: Path = CRITERIA_DIR) -> dict[str, dict[str, Any
     return load_criteria(criteria_dir)
 
 
+def _workspace_usage_path(
+    *,
+    scope: RuntimeScope | str | None,
+    workspace_root: Path | None,
+    data_root: Path | None = None,
+) -> Path:
+    """Return the validated project-level usage path for the active Workspace."""
+
+    assert_writable_scope(scope)
+    if workspace_root is None:
+        raise ValueError("A validated Workspace root is required for LLM usage logging.")
+    return assert_writable_target(
+        scope,
+        Path(workspace_root) / "llm_usage.jsonl",
+        workspace_root=workspace_root,
+        data_root=data_root,
+    )
+
+
 def _before_call(profile: LLMProfile, *, session_id: str | None) -> None:
     if profile.access_mode == "SERVER":
         check_server_guard(usage_path=LLM_USAGE_PATH, session_id=session_id)
@@ -29,17 +49,40 @@ def _after_call(
     session_id: str | None,
     project_id: str | None,
     usage: dict[str, Any] | None,
+    project_usage_path: Path,
 ) -> None:
-    record_usage(
-        usage_path=LLM_USAGE_PATH,
-        role=profile.role,
-        provider=profile.provider_name,
-        model=profile.model,
-        access_mode=profile.access_mode,
-        session_id=session_id,
-        project_id=project_id,
-        usage=usage,
-    )
+    try:
+        record_usage(
+            usage_path=project_usage_path,
+            role=profile.role,
+            provider=profile.provider_name,
+            model=profile.model,
+            access_mode=profile.access_mode,
+            session_id=session_id,
+            project_id=project_id,
+            usage=usage,
+        )
+    except Exception as exc:
+        warnings.warn(
+            f"Unable to persist Workspace LLM usage; business output is preserved: {exc}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    # The global file is infrastructure-only state for server-funded quota
+    # enforcement.  It is deliberately separate from the exported Workspace
+    # project artifact above.
+    if profile.access_mode == "SERVER":
+        record_usage(
+            usage_path=LLM_USAGE_PATH,
+            role=profile.role,
+            provider=profile.provider_name,
+            model=profile.model,
+            access_mode=profile.access_mode,
+            session_id=session_id,
+            project_id=project_id,
+            usage=usage,
+        )
 
 
 def run_single_case(
@@ -55,7 +98,7 @@ def run_single_case(
     workspace_root: Path | None = None,
     data_root: Path | None = None,
 ) -> dict[str, Any]:
-    assert_writable_scope(scope)
+    project_usage_path = _workspace_usage_path(scope=scope, workspace_root=workspace_root, data_root=data_root)
     if persist:
         assert_writable_target(
             scope,
@@ -76,12 +119,28 @@ def run_single_case(
     _before_call(llm_profile, session_id=session_id)
     client = make_client(llm_profile)
     row = judge_case(client, criterion, case, semantic_retries=1)
-    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=row.get("usage"))
     if persist:
-        if target_judge_path is not None:
-            append_judge_result(row, target_judge_path, scope=scope, workspace_root=workspace_root, data_root=data_root)
-        else:
-            append_judge_result(row, scope=scope, workspace_root=workspace_root, data_root=data_root)
+        try:
+            if target_judge_path is not None:
+                append_judge_result(row, target_judge_path, scope=scope, workspace_root=workspace_root, data_root=data_root)
+            else:
+                append_judge_result(row, scope=scope, workspace_root=workspace_root, data_root=data_root)
+        finally:
+            _after_call(
+                llm_profile,
+                session_id=session_id,
+                project_id=project_id,
+                usage=row.get("usage"),
+                project_usage_path=project_usage_path,
+            )
+    else:
+        _after_call(
+            llm_profile,
+            session_id=session_id,
+            project_id=project_id,
+            usage=row.get("usage"),
+            project_usage_path=project_usage_path,
+        )
     return row
 
 
@@ -99,7 +158,7 @@ def run_batch_cases(
     workspace_root: Path | None = None,
     data_root: Path | None = None,
 ) -> list[dict[str, Any]]:
-    assert_writable_scope(scope)
+    project_usage_path = _workspace_usage_path(scope=scope, workspace_root=workspace_root, data_root=data_root)
     assert_writable_target(
         scope,
         judge_path or JUDGE_RESULTS_PATH,
@@ -123,11 +182,19 @@ def run_batch_cases(
         _before_call(llm_profile, session_id=session_id)
         criterion = criteria[case["criterion_id"]]
         row = judge_case(client, criterion, case, semantic_retries=1)
-        if judge_path is not None:
-            append_judge_result(row, judge_path, scope=scope, workspace_root=workspace_root, data_root=data_root)
-        else:
-            append_judge_result(row, scope=scope, workspace_root=workspace_root, data_root=data_root)
-        _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=row.get("usage"))
+        try:
+            if judge_path is not None:
+                append_judge_result(row, judge_path, scope=scope, workspace_root=workspace_root, data_root=data_root)
+            else:
+                append_judge_result(row, scope=scope, workspace_root=workspace_root, data_root=data_root)
+        finally:
+            _after_call(
+                llm_profile,
+                session_id=session_id,
+                project_id=project_id,
+                usage=row.get("usage"),
+                project_usage_path=project_usage_path,
+            )
         results.append(row)
         if progress:
             progress(index, total, case["case_id"])
@@ -142,9 +209,11 @@ def run_documentary_assist(
     session_id: str | None = None,
     project_id: str | None = None,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> dict[str, Any]:
     """Layer 3 evidence extraction assist. Human review remains authoritative."""
-    assert_writable_scope(scope)
+    project_usage_path = _workspace_usage_path(scope=scope, workspace_root=workspace_root, data_root=data_root)
     if not source_text.strip():
         raise ValueError("Source text cannot be empty.")
     schema = {
@@ -177,7 +246,7 @@ def run_documentary_assist(
         schema_name="layer3_public_evidence_assist",
         schema=schema,
     )
-    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage)
+    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage, project_usage_path=project_usage_path)
     return result
 
 
@@ -190,8 +259,10 @@ def run_report_writer(
     project_id: str | None = None,
     prompt_version: str = "1.1",
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> str:
-    assert_writable_scope(scope)
+    project_usage_path = _workspace_usage_path(scope=scope, workspace_root=workspace_root, data_root=data_root)
     if role not in {"dialogue_report", "integrated_report"}:
         raise ValueError("Unsupported report writer role")
     if prompt_version == "1.1":
@@ -210,7 +281,7 @@ def run_report_writer(
     client = make_client(llm_profile)
     writer_context = build_writer_facing_context(report_context) if prompt_version == "1.1" else report_context
     text, usage = client.generate_text(system_prompt=system_prompt, payload={"report_context": writer_context}, max_output_tokens=7000)
-    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage)
+    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage, project_usage_path=project_usage_path)
     return text.strip() + "\n"
 
 
@@ -219,8 +290,10 @@ def run_grounding_validator(
     session_id: str | None = None, project_id: str | None = None,
     prompt_version: str = "1.1",
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> dict[str, Any]:
-    assert_writable_scope(scope)
+    project_usage_path = _workspace_usage_path(scope=scope, workspace_root=workspace_root, data_root=data_root)
     if llm_profile.role != "grounding_validator":
         raise ValueError("grounding validator requires the grounding_validator role")
     if prompt_version == "1.1":
@@ -252,7 +325,7 @@ def run_grounding_validator(
         raise ValueError(f"Unsupported grounding prompt version: {prompt_version}")
     _before_call(llm_profile, session_id=session_id)
     result, usage = make_client(llm_profile).generate_json(system_prompt=system_prompt, payload={"draft_report": draft_report, "report_context": report_context}, schema_name="evidence_grounding", schema=schema)
-    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage)
+    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage, project_usage_path=project_usage_path)
     return result
 
 
@@ -261,13 +334,15 @@ def run_academic_polish(
     session_id: str | None = None, project_id: str | None = None,
     prompt_version: str = "1.1",
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> str:
-    assert_writable_scope(scope)
+    project_usage_path = _workspace_usage_path(scope=scope, workspace_root=workspace_root, data_root=data_root)
     if llm_profile.role != "academic_polish":
         raise ValueError("academic polish requires the academic_polish role")
     prompt_path = PROMPTS_DIR / "reporting" / ("academic_polish_v1.1.md" if prompt_version == "1.1" else "academic_polish.md")
     system_prompt = prompt_path.read_text(encoding="utf-8")
     _before_call(llm_profile, session_id=session_id)
     text, usage = make_client(llm_profile).generate_text(system_prompt=system_prompt, payload={"report_text": report_text, "report_context": report_context}, max_output_tokens=6000)
-    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage)
+    _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=usage, project_usage_path=project_usage_path)
     return text.strip() + "\n"
