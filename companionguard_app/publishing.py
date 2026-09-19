@@ -25,6 +25,8 @@ from .runtime_scope import RuntimeScope, validate_scope_id
 
 DEPLOYMENT_MANIFEST = "deployment_manifest.json"
 RUNTIME_MANIFEST = ".published_runtime_manifest.json"
+PROMOTION_MARKER_VERSION = "1"
+PROMOTION_PHASES = frozenset({"PREPARED", "OLD_MOVED", "NEW_INSTALLED"})
 MANIFEST_VERSION = "1.0"
 CONTENT_HASH_ALGORITHM = "SHA-256"
 
@@ -459,26 +461,274 @@ def stage_snapshot(
         raise
 
 
-def atomic_promote(staged_root: str | Path, destination_root: str | Path) -> None:
+def promotion_marker_path(destination_root: str | Path) -> Path:
+    """Return the sibling transaction marker for a controlled destination."""
+
+    destination = Path(destination_root)
+    if not destination.name or destination.name in {".", ".."} or "/" in destination.name or "\\" in destination.name:
+        raise PublishingError("Destination name is not safe for promotion")
+    return destination.parent / f".{destination.name}.promotion.json"
+
+
+def _transaction_relative(parent: Path, path: Path, *, label: str) -> str:
+    try:
+        relative = path.relative_to(parent)
+    except ValueError as exc:
+        raise PublishingError(f"Promotion {label} escaped its destination parent") from exc
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts or "\\" in str(relative):
+        raise PublishingError(f"Promotion {label} is unsafe")
+    return relative.as_posix()
+
+
+def _transaction_path(parent: Path, value: object, *, label: str) -> Path:
+    if not isinstance(value, str) or not value.strip():
+        raise PublishingError(f"Promotion {label} is missing")
+    relative = Path(value)
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts or "\\" in value:
+        raise PublishingError(f"Promotion {label} is unsafe")
+    candidate = parent / relative
+    if candidate.relative_to(parent) != relative:
+        raise PublishingError(f"Promotion {label} is unsafe")
+    return candidate
+
+
+def _atomic_write_json(path: Path, value: Mapping[str, Any]) -> None:
+    """Persist a small transaction marker with durable replace semantics."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.tmp-",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            json.dump(dict(value), handle, ensure_ascii=False, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        try:
+            directory_fd = os.open(path.parent, os.O_RDONLY)
+        except OSError:
+            directory_fd = None
+        if directory_fd is not None:
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+    except Exception:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+
+
+def _promotion_marker(
+    destination: Path,
+    staged: Path,
+    backup: Path | None,
+    *,
+    destination_existed: bool,
+    intended_manifest: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    marker: dict[str, Any] = {
+        "transaction_format_version": PROMOTION_MARKER_VERSION,
+        "destination_name": destination.name,
+        "staged_name": _transaction_relative(destination.parent, staged, label="staged path"),
+        "backup_name": None if backup is None else _transaction_relative(destination.parent, backup, label="backup path"),
+        "destination_existed": destination_existed,
+        "phase": "PREPARED",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if intended_manifest is not None:
+        marker["intended_published_version"] = intended_manifest.get("published_version")
+        marker["intended_source_snapshot_hash"] = intended_manifest.get("source_snapshot_hash")
+    return marker
+
+
+def _read_promotion_marker(destination: Path) -> tuple[Path, dict[str, Any]]:
+    marker_path = promotion_marker_path(destination)
+    if marker_path.is_symlink() or not marker_path.is_file():
+        raise PublishingError("Promotion marker is not a regular file")
+    value = _read_json(marker_path, "promotion marker")
+    if not isinstance(value, dict):
+        raise PublishingError("Promotion marker must contain an object")
+    if value.get("transaction_format_version") != PROMOTION_MARKER_VERSION:
+        raise PublishingError("Unsupported promotion marker format")
+    if value.get("destination_name") != destination.name:
+        raise PublishingError("Promotion marker destination does not match")
+    if value.get("phase") not in PROMOTION_PHASES:
+        raise PublishingError("Promotion marker phase is invalid")
+    if not isinstance(value.get("destination_existed"), bool):
+        raise PublishingError("Promotion marker destination_existed is invalid")
+    _transaction_path(destination.parent, value.get("staged_name"), label="staged path")
+    backup_name = value.get("backup_name")
+    if backup_name is not None:
+        _transaction_path(destination.parent, backup_name, label="backup path")
+    return marker_path, value
+
+
+def _remove_promotion_path(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink(missing_ok=True)
+    elif path.is_dir():
+        shutil.rmtree(path)
+
+
+def _valid_intended_snapshot(path: Path, manifest: Mapping[str, Any] | None) -> bool:
+    if manifest is None or not path.is_dir() or path.is_symlink():
+        return False
+    try:
+        verify_manifest_content(path, manifest)
+    except (OSError, PublishingError):
+        return False
+    return True
+
+
+def _valid_backup_snapshot(path: Path, destination_name: str) -> bool:
+    """Validate the identity of an old snapshot without assuming its version."""
+
+    if not path.is_dir() or path.is_symlink():
+        return False
+    deployment_manifest = path / DEPLOYMENT_MANIFEST
+    if deployment_manifest.is_file():
+        try:
+            old_manifest = load_deployment_manifest(path)
+            return old_manifest is not None and verify_manifest_content(path, old_manifest) is None
+        except (OSError, PublishingError):
+            return False
+    runtime_metadata = path / RUNTIME_MANIFEST
+    project_file = path / "project.json"
+    if not runtime_metadata.is_file() or not project_file.is_file():
+        return False
+    try:
+        metadata = _read_json(runtime_metadata, RUNTIME_MANIFEST)
+        project = _read_json(project_file, "project.json")
+    except PublishingError:
+        return False
+    if not isinstance(metadata, dict) or not isinstance(project, dict):
+        return False
+    if metadata.get("project_id") != destination_name or project.get("project_id") != destination_name:
+        return False
+    if not isinstance(metadata.get("published_version"), str) or not isinstance(metadata.get("source_snapshot_hash"), str):
+        return False
+    try:
+        _inventory(path, reject_forbidden=False)
+    except (OSError, PublishingError):
+        return False
+    return True
+
+
+def _finish_recovered_promotion(marker_path: Path, staged: Path, backup: Path | None) -> None:
+    if staged.exists():
+        _remove_promotion_path(staged)
+    if backup is not None and backup.exists():
+        _remove_promotion_path(backup)
+    marker_path.unlink(missing_ok=True)
+
+
+def recover_interrupted_promotion(
+    destination_root: str | Path,
+    *,
+    intended_manifest: Mapping[str, Any] | None = None,
+) -> bool:
+    """Resolve one interrupted sibling transaction, or fail closed.
+
+    The marker phase is only a hint.  The actual destination, staged copy, and
+    backup are validated before any artifact is removed.
+    """
+
+    destination = Path(destination_root)
+    marker_path = promotion_marker_path(destination)
+    if not marker_path.exists():
+        return False
+    marker_path, marker = _read_promotion_marker(destination)
+    staged = _transaction_path(destination.parent, marker["staged_name"], label="staged path")
+    backup_name = marker.get("backup_name")
+    backup = None if backup_name is None else _transaction_path(destination.parent, backup_name, label="backup path")
+    destination_valid = _valid_intended_snapshot(destination, intended_manifest)
+    backup_valid = backup is not None and backup.exists() and _valid_backup_snapshot(backup, destination.name)
+
+    if destination.exists() and backup is not None and backup.exists():
+        if destination_valid:
+            _finish_recovered_promotion(marker_path, staged, backup)
+            return True
+        if backup_valid:
+            _remove_promotion_path(destination)
+            backup.replace(destination)
+            _finish_recovered_promotion(marker_path, staged, None)
+            return True
+        raise PublishingError("Promotion transaction is ambiguous: destination and backup are not both healthy")
+
+    if not destination.exists() and backup is not None and backup.exists():
+        if not backup_valid:
+            raise PublishingError("Promotion transaction is ambiguous: backup snapshot is not healthy")
+        backup.replace(destination)
+        _finish_recovered_promotion(marker_path, staged, None)
+        return True
+
+    if destination.exists():
+        if destination_valid:
+            _finish_recovered_promotion(marker_path, staged, None)
+            return True
+        raise PublishingError("Promotion transaction is ambiguous: destination is not healthy and backup is missing")
+
+    if not marker["destination_existed"] and _valid_intended_snapshot(staged, intended_manifest):
+        staged.replace(destination)
+        if not _valid_intended_snapshot(destination, intended_manifest):
+            raise PublishingError("Recovered staged snapshot failed validation")
+        _finish_recovered_promotion(marker_path, staged, None)
+        return True
+
+    raise PublishingError("Promotion transaction is unresolved; preserving all artifacts")
+
+
+def atomic_promote(
+    staged_root: str | Path,
+    destination_root: str | Path,
+    *,
+    intended_manifest: Mapping[str, Any] | None = None,
+) -> None:
+    """Promote a validated directory with a recoverable sibling transaction."""
+
     staged = Path(staged_root)
     destination = Path(destination_root)
     if not staged.is_dir():
         raise PublishingError("Staged snapshot does not exist")
+    if staged.is_symlink() or destination.is_symlink():
+        raise PublishingError("Promotion does not allow symlink roots")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    backup: Path | None = None
-    if destination.exists():
-        backup = destination.parent / f".{destination.name}.backup-{uuid.uuid4().hex}"
+    _transaction_relative(destination.parent, staged, label="staged path")
+    if staged == destination:
+        raise PublishingError("Staged snapshot and destination must be different")
+    recover_interrupted_promotion(destination, intended_manifest=intended_manifest)
+    if intended_manifest is not None:
+        verify_manifest_content(staged, intended_manifest)
+
+    destination_existed = destination.exists()
+    backup = destination.parent / f".{destination.name}.backup-{uuid.uuid4().hex}" if destination_existed else None
+    marker = _promotion_marker(
+        destination,
+        staged,
+        backup,
+        destination_existed=destination_existed,
+        intended_manifest=intended_manifest,
+    )
+    marker_path = promotion_marker_path(destination)
+    _atomic_write_json(marker_path, marker)
+    if destination_existed:
         destination.replace(backup)
-    try:
-        staged.replace(destination)
-    except Exception:
-        if destination.exists():
-            shutil.rmtree(destination, ignore_errors=True)
-        if backup is not None and backup.exists():
-            backup.replace(destination)
-        raise
-    if backup is not None:
-        shutil.rmtree(backup, ignore_errors=True)
+        marker["phase"] = "OLD_MOVED"
+        _atomic_write_json(marker_path, marker)
+    staged.replace(destination)
+    marker["phase"] = "NEW_INSTALLED"
+    _atomic_write_json(marker_path, marker)
+    if intended_manifest is not None:
+        verify_manifest_content(destination, intended_manifest)
+    _finish_recovered_promotion(marker_path, staged, backup)
 
 
 def publish_snapshot(
@@ -512,10 +762,8 @@ def publish_snapshot(
             pass
         raise
     try:
-        atomic_promote(staged, destination)
+        atomic_promote(staged, destination, intended_manifest=manifest)
     except Exception:
-        if staged.exists():
-            shutil.rmtree(staged, ignore_errors=True)
         raise
     try:
         staging_parent.rmdir()

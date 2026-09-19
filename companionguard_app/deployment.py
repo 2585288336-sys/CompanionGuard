@@ -14,6 +14,8 @@ from .publishing import (
     PublishingError,
     atomic_promote,
     load_deployment_manifest,
+    promotion_marker_path,
+    recover_interrupted_promotion,
     verify_manifest_content,
     _copy_file_stream,
 )
@@ -145,9 +147,10 @@ def _materialize_versioned_runtime(seed_root: Path, runtime_root: Path, manifest
             encoding="utf-8",
         )
         verify_manifest_content(temp_root, manifest)
-        atomic_promote(temp_root, runtime_root)
+        atomic_promote(temp_root, runtime_root, intended_manifest=manifest)
     except Exception:
-        shutil.rmtree(temp_root, ignore_errors=True)
+        if not promotion_marker_path(runtime_root).exists():
+            shutil.rmtree(temp_root, ignore_errors=True)
         raise
 
 
@@ -180,13 +183,20 @@ def ensure_deployment_project(
             str(expected["source_snapshot_hash"]),
         )
         cacheable_root = Path(project_root).resolve() == PROJECT_ROOT.resolve()
-        if current == expected and runtime_root.is_dir() and cacheable_root and cache_key in _VERIFIED_RUNTIME_KEYS:
+        try:
+            recovered = recover_interrupted_promotion(runtime_root, intended_manifest=manifest)
+        except (OSError, PublishingError) as exc:
+            raise RuntimeError(f"Unable to recover Published runtime promotion: {exc}") from exc
+        if recovered:
+            current = _read_runtime_metadata(runtime_root) if runtime_root.is_dir() else None
+        if current == expected and runtime_root.is_dir() and cacheable_root and cache_key in _VERIFIED_RUNTIME_KEYS and not recovered:
             return False
         try:
             _manifest_files(manifest)
             verify_manifest_content(seed_root, manifest)
         except (OSError, PublishingError) as exc:
             raise RuntimeError(f"Unable to validate Published deployment seed: {exc}") from exc
+        current = _read_runtime_metadata(runtime_root) if runtime_root.is_dir() else None
         if current == expected and runtime_root.is_dir() and verify_published_runtime_integrity(runtime_root, manifest)["valid"]:
             if cacheable_root:
                 _VERIFIED_RUNTIME_KEYS.add(cache_key)
