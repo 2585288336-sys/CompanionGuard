@@ -26,7 +26,7 @@ from .platform_ui import (
     active_runtime_context,
 )
 from .project_export import ProjectExportError, build_project_package
-from .projects import list_projects
+from .projects import list_projects, project_data_snapshot
 from .ui import get_criteria, human_review_page, results_page, run_test_page
 
 
@@ -61,6 +61,40 @@ NAV_LABELS: dict[str, tuple[str, str, int]] = {
     "results": ("对话评测结果与指标", "Dialogue Results & Metrics", 3),
     "dialogue_report": ("对话评测报告", "Dialogue Report", 3),
     "report": ("综合评测报告", "Integrated Report", 3),
+}
+
+# The shell's sidebar order is a presentation concern.  Workflow navigation
+# uses an explicit route contract so a page insertion cannot silently change
+# the destination of Previous/Next.
+WORKFLOW_NEXT: dict[str, str] = {
+    "testdesign": "plan",
+    "plan": "collector",
+    "collector": "overview",
+    "overview": "testdesign",
+    "judge": "review",
+    "review": "explorer",
+    "explorer": "reliability",
+    "reliability": "layer2",
+    "layer2": "layer3",
+    "layer3": "results",
+    "results": "dialogue_report",
+    "dialogue_report": "report",
+}
+
+WORKFLOW_PREVIOUS: dict[str, str] = {
+    "testdesign": "overview",
+    "plan": "testdesign",
+    "collector": "plan",
+    "overview": "collector",
+    "judge": "overview",
+    "review": "judge",
+    "explorer": "review",
+    "reliability": "explorer",
+    "layer2": "reliability",
+    "layer3": "layer2",
+    "results": "layer3",
+    "dialogue_report": "results",
+    "report": "dialogue_report",
 }
 
 
@@ -114,6 +148,7 @@ GOLDEN_CSS = r'''<style>
 .workspace-head h1{font-size:25px!important;font-weight:780!important;color:#101828}.workspace-head p{font-size:12.5px!important;font-weight:550!important;color:#667085!important}.crumb{font-size:12px!important;font-weight:550!important;color:#667085}.crumb b{font-weight:600!important;color:#667085}.navgroup-toggle .zh{font-size:13.5px!important;font-weight:800!important;line-height:1.3!important;color:#344054!important}.navgroup-toggle .en{font-size:10.5px!important;font-weight:500!important;color:#98a2b3!important}.navlayer-toggle{padding-left:16px!important}.navlayer-toggle .zh{font-size:12.4px!important;font-weight:750!important;color:#475467!important}.navlayer-toggle .en{font-size:10px!important;font-weight:500!important;color:#98a2b3!important}.report-document-marker{display:none}.report-document-marker~*{}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] h1{font-size:25px!important;font-weight:750!important;line-height:1.25!important;color:#101828!important;margin:0 0 16px!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] h2{font-size:20px!important;font-weight:720!important;line-height:1.3!important;color:#1d2939!important;margin:24px 0 10px!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] h3{font-size:16px!important;font-weight:700!important;line-height:1.35!important;color:#344054!important;margin:18px 0 8px!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] p,[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] li{font-size:13px!important;line-height:1.75!important;color:#475467!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] small{font-size:11px!important;color:#667085!important}
 [data-testid="stSidebar"] [data-testid="stButton"] button{font-size:11.4px!important}.report-action-heading{margin:18px 0 8px}.report-action-eyebrow{font-size:10.5px!important;line-height:1.2!important;letter-spacing:.08em!important;color:#667085!important;font-weight:600!important;text-transform:uppercase}.report-action-title{font-size:15px!important;font-weight:750!important;line-height:1.35!important;color:#3156d9!important}.report-action-subtitle{font-size:11.5px!important;line-height:1.35!important;color:#667085!important;font-weight:550!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] h1{font-size:25px!important;font-weight:750!important;line-height:1.25!important;color:#101828!important;margin:0 0 16px!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] h2{font-size:20px!important;font-weight:720!important;line-height:1.3!important;color:#1d2939!important;margin:24px 0 10px!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] h3{font-size:16px!important;font-weight:700!important;line-height:1.35!important;color:#344054!important;margin:18px 0 8px!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] p,[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] li{font-size:13px!important;line-height:1.75!important;color:#475467!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] small{font-size:11px!important;color:#667085!important}.workspace-bar{margin:-28px -32px -12px!important}[data-testid="stSidebar"] [data-testid="stButton"] button{font-size:10.8px!important;font-weight:640!important;line-height:1.32!important}
 .workspace-head h1{font-size:25px!important;font-weight:780!important;color:#101828}.workspace-head p{font-size:12.5px!important;font-weight:550!important;color:#667085!important}.crumb{font-size:12px!important;font-weight:550!important;color:#667085}.crumb b{font-weight:600!important;color:#667085}.navgroup-toggle .zh{font-size:13.5px!important;font-weight:800!important;line-height:1.3!important;color:#344054!important}.navgroup-toggle .en{font-size:10.5px!important;font-weight:500!important;color:#98a2b3!important}.navlayer-toggle{padding-left:16px!important}.navlayer-toggle .zh{font-size:12.4px!important;font-weight:750!important;color:#475467!important}.navlayer-toggle .en{font-size:10px!important;font-weight:500!important;color:#98a2b3!important}.report-document-marker{display:none}.report-document-marker~*{}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] h1{font-size:25px!important;font-weight:750!important;line-height:1.25!important;color:#101828!important;margin:0 0 16px!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] h2{font-size:20px!important;font-weight:720!important;line-height:1.3!important;color:#1d2939!important;margin:24px 0 10px!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] h3{font-size:16px!important;font-weight:700!important;line-height:1.35!important;color:#344054!important;margin:18px 0 8px!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] p,[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] li{font-size:13px!important;line-height:1.75!important;color:#475467!important}[data-testid="stVerticalBlock"]:has(.report-document-marker) [data-testid="stMarkdownContainer"] small{font-size:11px!important;color:#667085!important}
+.overview-snapshot{margin:18px 0 4px}.overview-snapshot-title{font-size:15px;font-weight:750;color:#1d2939;margin-bottom:10px}.overview-snapshot-title span{font-size:11px;font-weight:550;color:#98a2b3;margin-left:6px}.overview-metric-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:10px}.overview-metric-row:last-child{grid-template-columns:repeat(3,minmax(0,1fr));max-width:75%}.overview-metric{background:#fff;border:1px solid #e4e7ec;border-radius:9px;padding:11px 12px;min-width:0}.overview-metric-value{font-size:20px;line-height:1.1;font-weight:780;color:#3156d9}.overview-metric-zh{font-size:11px;line-height:1.35;font-weight:700;color:#344054;margin-top:6px}.overview-metric-en{font-size:9.5px;line-height:1.25;color:#98a2b3;margin-top:2px}@media(max-width:760px){.overview-metric-row,.overview-metric-row:last-child{grid-template-columns:repeat(2,minmax(0,1fr));max-width:none}}
 </style>'''
 
 
@@ -250,6 +285,35 @@ def render_workspace_head(page_id: str) -> None:
     )
 
 
+def _render_project_data_snapshot(context: Any) -> None:
+    counts = project_data_snapshot(context.paths)
+    metrics = (
+        ("原始测试样本", "Raw Cases", counts["raw_cases"]),
+        ("Judge 结果", "Judge Results", counts["judge_results"]),
+        ("人工复核", "Human Review", counts["human_review"]),
+        ("最终结果", "Final Results", counts["final_results"]),
+        ("测试计划", "Test Plans", counts["test_plans"]),
+        ("证据文件", "Evidence", counts["evidence"]),
+        ("报告文件", "Reports", counts["reports"]),
+    )
+    rows = []
+    for index in (0, 4):
+        cells = "".join(
+            f'<div class="overview-metric"><div class="overview-metric-value">{value}</div>'
+            f'<div class="overview-metric-zh">{escape(zh)}</div>'
+            f'<div class="overview-metric-en">{escape(en)}</div></div>'
+            for zh, en, value in metrics[index:index + (4 if index == 0 else 3)]
+        )
+        rows.append(f'<div class="overview-metric-row">{cells}</div>')
+    st.markdown(
+        '<section class="overview-snapshot"><div class="overview-snapshot-title">'
+        '项目数据概览 <span>Project Data Snapshot</span></div>'
+        + "".join(rows)
+        + "</section>",
+        unsafe_allow_html=True,
+    )
+
+
 def current_project_overview_page() -> None:
     project = active_project()
     st.markdown('<div class="card"><div class="cardhead"><span class="workspace-pill blue">FORMAL</span></div><div class="cardbody">', unsafe_allow_html=True)
@@ -261,6 +325,7 @@ def current_project_overview_page() -> None:
     st.markdown("</div></div>", unsafe_allow_html=True)
     context = active_runtime_context()
     if context is not None and context.paths.root.is_dir():
+        _render_project_data_snapshot(context)
         try:
             package = build_project_package(context)
         except ProjectExportError as exc:
@@ -306,16 +371,16 @@ def render_page(page_id: str) -> None:
 
 
 def _workflow_nav(page_id: str) -> None:
-    ordered = [p for p in PAGE_META if p != "home"]
-    idx = ordered.index(page_id)
     left, right = st.columns([1, 1])
     with left:
-        if idx > 0 and st.button("← Previous", key=f"golden-prev::{page_id}"):
-            _set_page(ordered[idx - 1])
+        previous_page = WORKFLOW_PREVIOUS.get(page_id)
+        if previous_page and st.button("← Previous", key=f"golden-prev::{page_id}"):
+            _set_page(previous_page)
             st.rerun()
     with right:
-        if idx < len(ordered) - 1 and st.button("Next →", key=f"golden-next::{page_id}", type="primary"):
-            _set_page(ordered[idx + 1])
+        next_page = WORKFLOW_NEXT.get(page_id)
+        if next_page and st.button("Next →", key=f"golden-next::{page_id}", type="primary"):
+            _set_page(next_page)
             st.rerun()
 
 
