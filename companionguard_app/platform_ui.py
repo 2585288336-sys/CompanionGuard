@@ -11,7 +11,7 @@ import streamlit as st
 from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE, adjudication_policy
 from .audits import load_json, load_jsonl, make_audit_row, save_audit_evidence, upsert_jsonl
 from .collector import load_collector_config
-from .projects import create_project, delete_project, get_project, list_projects, safe_slug
+from .projects import PRIMARY_PRODUCT_ROLE, add_project_product, create_project, delete_project, get_project, list_projects, safe_slug, update_project
 from .reliability import LABELS, reliability_metrics
 from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
 from .report_pipeline import write_report_artifacts
@@ -226,6 +226,46 @@ def projects_page() -> None:
             st.rerun()
         except Exception as e:
             st.error(str(e))
+
+    project = active_project()
+    if project:
+        _render_evaluated_products(project)
+
+
+def _render_evaluated_products(project: dict[str, Any]) -> None:
+    """Render the add-only product registration section for the active project."""
+
+    st.subheader("评测产品 / Evaluated Products")
+    st.caption("产品追加只写入当前 Workspace；如果当前是 Published，首次保存会自动创建本次会话的临时 Workspace。")
+    products = project.get("products") or []
+    st.dataframe(
+        [
+            {
+                "产品 ID / Product ID": item.get("id", ""),
+                "显示名称 / Display name": item.get("label") or item.get("name") or item.get("id", ""),
+                "角色 / Role": item.get("role", ""),
+            }
+            for item in products
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+    roles = sorted({PRIMARY_PRODUCT_ROLE, *(str(item.get("role") or "").strip() for item in products if str(item.get("role") or "").strip())})
+    with st.form(f"add_evaluated_product::{project.get('project_id')}"):
+        product_id = st.text_input("产品 ID / Product ID", help="唯一 canonical key；只允许字母、数字、'.'、'_'、'-'。")
+        display_name = st.text_input("显示名称 / Display name")
+        role = st.selectbox("角色 / Role", roles)
+        submitted = st.form_submit_button("追加评测产品 / Add Evaluated Product", type="primary")
+    if submitted:
+        try:
+            updated = add_project_product(project, product_id=product_id, display_name=display_name, role=role)
+            context = ensure_active_workspace_for_write()
+            update_project(updated, scope=RuntimeScope.WORKSPACE, workspace_root=context.paths.root)
+        except Exception as exc:
+            st.error(str(exc))
+        else:
+            st.success(f"已追加产品 / Added: {display_name.strip()}")
+            st.rerun()
 
 
 def _project_product_names(project: dict[str, Any]) -> list[str]:

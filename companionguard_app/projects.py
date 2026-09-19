@@ -11,10 +11,12 @@ from typing import Any
 
 from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE
 from .config import DATA_DIR, PROJECT_ROOT
-from .runtime_scope import RuntimeScope, assert_writable_scope, assert_writable_target, resolve_project_root
+from .runtime_scope import RuntimeScope, assert_writable_scope, assert_writable_target, resolve_project_root, validate_scope_id
 from .versioning import APP_VERSION, DATA_SCHEMA_VERSION, current_code_commit
 
 PROJECTS_DIR = DATA_DIR / "projects"
+PRIMARY_PRODUCT_ROLE = "Primary anthropomorphic AI product"
+_PRODUCT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def utc_now_iso() -> str:
@@ -24,6 +26,52 @@ def utc_now_iso() -> str:
 def safe_slug(value: str) -> str:
     value = re.sub(r"[^\w.-]+", "-", value.strip(), flags=re.UNICODE).strip("-_.")
     return value or "project"
+
+
+def validate_product_id(value: str) -> str:
+    """Return a trimmed, path-safe canonical product identifier."""
+
+    product_id = value.strip() if isinstance(value, str) else ""
+    validate_scope_id(product_id, name="product_id")
+    if not _PRODUCT_ID_RE.fullmatch(product_id):
+        raise ValueError("product_id must use letters, numbers, '.', '_' or '-' only")
+    return product_id
+
+
+def add_project_product(
+    project: dict[str, Any],
+    *,
+    product_id: str,
+    display_name: str,
+    role: str,
+) -> dict[str, Any]:
+    """Return a copy of ``project`` with one new product appended.
+
+    Product registration is intentionally add-only.  Persistence remains the
+    responsibility of ``update_project`` so callers can bind the write to the
+    active Workspace scope.
+    """
+
+    canonical_id = validate_product_id(product_id)
+    label = display_name.strip() if isinstance(display_name, str) else ""
+    if not label:
+        raise ValueError("display_name is required")
+    selected_role = role.strip() if isinstance(role, str) else ""
+    existing_products = list(project.get("products") or [])
+    if any(str(item.get("id") or "").strip() == canonical_id for item in existing_products):
+        raise ValueError(f"Product ID already exists: {canonical_id}")
+    valid_roles = {
+        PRIMARY_PRODUCT_ROLE,
+        *(str(item.get("role") or "").strip() for item in existing_products if str(item.get("role") or "").strip()),
+    }
+    if selected_role not in valid_roles:
+        raise ValueError("role must use an existing project role or the primary product role")
+    updated = dict(project)
+    updated["products"] = [
+        *existing_products,
+        {"id": canonical_id, "label": label, "slug": canonical_id, "role": selected_role},
+    ]
+    return updated
 
 
 @dataclass(frozen=True)
