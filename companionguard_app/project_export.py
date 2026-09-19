@@ -62,6 +62,7 @@ _ALLOWED_ROOT_FILES = {
     "judge_results.jsonl",
     "human_adjudication.csv",
     "final_results.csv",
+    "adjudication_sampling.json",
     "test_plans.json",
     "layer2_product_safeguards.jsonl",
     "layer3_public_evidence.jsonl",

@@ -70,6 +70,10 @@ def test_workspace_export_uses_only_current_workspace_and_excludes_runtime_manif
         json.dumps({"role": "integrated_report", "provider": "fake", "model": "fake-model"}) + "\n",
         encoding="utf-8",
     )
+    context.paths.adjudication_sampling.write_text(
+        json.dumps({"project_id": "published", "selected_case_ids": ["case-1"]}) + "\n",
+        encoding="utf-8",
+    )
     package = build_project_package(context)
     archive, members = _archive_files(package.data)
     prefix = "CompanionGuard-Project-published/"
@@ -81,12 +85,41 @@ def test_workspace_export_uses_only_current_workspace_and_excludes_runtime_manif
     assert b"workspace" in members[prefix + "raw_cases.jsonl"]
     assert b"official" not in members[prefix + "raw_cases.jsonl"]
     assert prefix + "llm_usage.jsonl" in archive.namelist()
+    assert prefix + "adjudication_sampling.json" in archive.namelist()
     assert b"fake-model" in members[prefix + "llm_usage.jsonl"]
     assert '"ephemeral_workspace": true' in manifest_text
     assert context.session_id not in manifest_text
     assert context.sandbox_id not in manifest_text
     assert str(tmp_path) not in manifest_text
     assert json.loads((source / "raw_cases.jsonl").read_text(encoding="utf-8"))["value"] == "official"
+
+
+def test_sampling_plan_is_exported_with_manifest_and_checksum(tmp_path):
+    root = _fixture_project(tmp_path, "published")
+    sampling = b'{"project_id":"published","selected_case_ids":["case-1"]}\n'
+    (root / "adjudication_sampling.json").write_bytes(sampling)
+
+    package = build_project_package(get_runtime_context("published", state={}, data_root=tmp_path))
+    archive, members = _archive_files(package.data)
+    prefix = "CompanionGuard-Project-published/"
+    relative = prefix + "adjudication_sampling.json"
+    manifest = json.loads(members[prefix + "EXPORT_MANIFEST.json"])
+    checksums = {
+        path: digest
+        for digest, path in (line.split("  ", 1) for line in members[prefix + "SHA256SUMS.txt"].decode().splitlines())
+    }
+
+    assert relative in archive.namelist()
+    data_members = [name for name in archive.namelist() if name not in {prefix + "EXPORT_MANIFEST.json", prefix + "SHA256SUMS.txt"}]
+    assert manifest["file_count"] == len(data_members)
+    assert checksums[relative] == hashlib.sha256(sampling).hexdigest()
+
+
+def test_export_succeeds_without_sampling_plan(tmp_path):
+    _fixture_project(tmp_path, "published")
+    package = build_project_package(get_runtime_context("published", state={}, data_root=tmp_path))
+    archive, _ = _archive_files(package.data)
+    assert "CompanionGuard-Project-published/adjudication_sampling.json" not in archive.namelist()
 
 
 def test_another_session_exports_published_data_not_this_session_workspace(tmp_path):
@@ -181,6 +214,7 @@ def test_non_credential_text_and_placeholders_are_exportable(tmp_path, filename,
         ("reports/secret.md", "DEEPSEEK_API_KEY=<synthetic-non-placeholder-value>", "credential_assignment"),
         ("reports/bearer.md", "Authorization: Bearer synthetic-token-value", "authorization_bearer"),
         ("reports/key.txt", "-----BEGIN PRIVATE KEY-----", "private_key_header"),
+        ("adjudication_sampling.json", "DEEPSEEK_API_KEY=synthetic-token-value", "credential_assignment"),
     ],
 )
 def test_high_confidence_credentials_block_export_without_echoing_value(tmp_path, filename, content, rule):
