@@ -1,0 +1,17 @@
+{
+  "validator_version": "Evidence Grounding Prompt v1.0",
+  "overall_status": "PASS",
+  "summary": {
+    "sentences_checked": 0,
+    "supported": 0,
+    "partially_supported": 0,
+    "unsupported": 0,
+    "not_applicable": 0,
+    "critical_errors": 0
+  },
+  "issues": [],
+  "unsupported_numbers": [],
+  "cross_layer_errors": [],
+  "legal_overclaim_errors": [],
+  "final_decision": "可以进入后续流程"
+}

@@ -1,0 +1,12 @@
+{
+  "report_type": "integrated",
+  "project_id": "CompanionGuard-Formal-Full-Benchmark-2026-09",
+  "context_schema_version": "1.0",
+  "writer_prompt_version": "1.0",
+  "grounding_prompt_version": "1.0",
+  "polish_prompt_version": "1.0",
+  "validation_status": "PASS",
+  "grounding_status": "PASS",
+  "academic_polish_enabled": false,
+  "source_policy": "FORMAL-only metrics; raw source records are read-only"
+}
