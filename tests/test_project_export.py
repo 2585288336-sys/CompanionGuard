@@ -7,7 +7,7 @@ import zipfile
 
 import pytest
 
-from companionguard_app.project_export import build_project_package
+from companionguard_app.project_export import ProjectExportError, build_project_package
 from companionguard_app.runtime_scope import RuntimeScope
 from companionguard_app.runtime_workspace import ensure_workspace, get_runtime_context
 
@@ -23,7 +23,6 @@ def _fixture_project(data_root, project_id: str, *, value: str = "official"):
     (root / "raw_cases.jsonl").write_text(json.dumps({"case_id": "case-1", "value": value}) + "\n", encoding="utf-8")
     (root / "evidence" / "dialogue" / "screen.png").write_bytes(b"evidence bytes")
     (root / "reports" / "dialogue.md").write_text("report", encoding="utf-8")
-    (root / "custom_artifact.json").write_text(json.dumps({"value": value}), encoding="utf-8")
     return root
 
 
@@ -55,6 +54,7 @@ def test_published_export_is_read_only_and_contains_existing_project_files(tmp_p
     assert prefix + "llm_usage.jsonl" not in names
     assert manifest["export_scope"] == "PUBLISHED"
     assert manifest["source_type"] == "official_published"
+    assert manifest["privacy_behavior"].startswith("Project content is exported as-is;")
     assert manifest["file_count"] == len(before)
     assert all("session_id" not in line and "sandbox_id" not in line for line in members[prefix + "EXPORT_MANIFEST.json"].decode().splitlines())
     after = {path.relative_to(source): hashlib.sha256(path.read_bytes()).hexdigest() for path in source.rglob("*") if path.is_file()}
@@ -132,12 +132,86 @@ def test_export_excludes_infrastructure_and_secret_like_files(tmp_path, filename
     assert f"CompanionGuard-Project-published/{filename}" not in archive.namelist()
 
 
-def test_export_skips_symlinks_without_following_them(tmp_path):
+@pytest.mark.parametrize(
+    "relative",
+    [
+        ".streamlit/secrets.toml",
+        "reports/.env",
+        "reports/.workspace_manifest.json",
+        "temporary/promotion.json",
+    ],
+)
+def test_export_excludes_nested_infrastructure_artifacts(tmp_path, relative):
+    root = _fixture_project(tmp_path, "published")
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("infrastructure", encoding="utf-8")
+
+    package = build_project_package(get_runtime_context("published", state={}, data_root=tmp_path))
+    archive, _ = _archive_files(package.data)
+    assert f"CompanionGuard-Project-published/{relative}" not in archive.namelist()
+
+
+def test_unknown_project_artifact_fails_closed(tmp_path):
+    root = _fixture_project(tmp_path, "published")
+    (root / "unexpected_internal_state.json").write_text("internal", encoding="utf-8")
+
+    with pytest.raises(ProjectExportError, match="Unclassified export artifact: unexpected_internal_state.json"):
+        build_project_package(get_runtime_context("published", state={}, data_root=tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("filename", "content"),
+    [
+        ("reports/normal.md", "The system should never expose an API key."),
+        ("reports/placeholder.md", "DEEPSEEK_API_KEY=<API_KEY>"),
+    ],
+)
+def test_non_credential_text_and_placeholders_are_exportable(tmp_path, filename, content):
+    root = _fixture_project(tmp_path, "published")
+    (root / filename).write_text(content, encoding="utf-8")
+
+    package = build_project_package(get_runtime_context("published", state={}, data_root=tmp_path))
+    assert package.data
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "rule"),
+    [
+        ("reports/secret.md", "DEEPSEEK_API_KEY=<synthetic-non-placeholder-value>", "credential_assignment"),
+        ("reports/bearer.md", "Authorization: Bearer synthetic-token-value", "authorization_bearer"),
+        ("reports/key.txt", "-----BEGIN PRIVATE KEY-----", "private_key_header"),
+    ],
+)
+def test_high_confidence_credentials_block_export_without_echoing_value(tmp_path, filename, content, rule):
+    root = _fixture_project(tmp_path, "published")
+    (root / filename).write_text(content, encoding="utf-8")
+
+    with pytest.raises(ProjectExportError) as error:
+        build_project_package(get_runtime_context("published", state={}, data_root=tmp_path))
+
+    message = str(error.value)
+    assert rule in message
+    assert "synthetic-non-placeholder-value" not in message
+    assert "synthetic-token-value" not in message
+
+
+def test_binary_evidence_is_exported_without_text_scanning(tmp_path):
+    root = _fixture_project(tmp_path, "published")
+    (root / "evidence" / "dialogue" / "screen.jpg").write_bytes(b"not text")
+
+    package = build_project_package(get_runtime_context("published", state={}, data_root=tmp_path))
+    archive, _ = _archive_files(package.data)
+    assert "CompanionGuard-Project-published/evidence/dialogue/screen.jpg" in archive.namelist()
+
+
+def test_export_rejects_symlink_instead_of_building_partial_package(tmp_path):
     root = _fixture_project(tmp_path, "published")
     outside = tmp_path / "outside.txt"
     outside.write_text("outside", encoding="utf-8")
     (root / "evidence" / "dialogue" / "outside-link.txt").symlink_to(outside)
-    package = build_project_package(get_runtime_context("published", state={}, data_root=tmp_path))
-    archive, _ = _archive_files(package.data)
-    assert "CompanionGuard-Project-published/evidence/dialogue/outside-link.txt" not in archive.namelist()
-    assert all(str(tmp_path) not in name for name in archive.namelist())
+
+    with pytest.raises(ProjectExportError, match="Symlink is not allowed in export") as error:
+        build_project_package(get_runtime_context("published", state={}, data_root=tmp_path))
+
+    assert str(tmp_path) not in str(error.value)

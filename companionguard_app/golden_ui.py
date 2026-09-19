@@ -267,6 +267,7 @@ def current_project_overview_page() -> None:
             st.warning(f"当前项目暂时无法导出 / Project package unavailable: {exc}")
         else:
             label = "当前临时工作区项目包" if context.is_workspace else "官方发布版项目包"
+            st.caption("导出包包含当前项目的完整研究数据与证据材料，可能包含你输入的敏感内容；对外分享前请自行审阅。\n\nExports may contain user-provided sensitive research content. Review before external sharing.")
             st.download_button(
                 f"下载项目完整数据 / Download Project Package · {label}",
                 data=package.data,
