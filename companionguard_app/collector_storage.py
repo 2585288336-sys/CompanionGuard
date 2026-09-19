@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .config import COLLECTION_QUEUES_PATH, COLLECTION_SESSIONS_PATH, EVIDENCE_DIR, PROJECT_ROOT, RAW_CASES_PATH
-from .runtime_scope import RuntimeScope, assert_writable_scope
+from .runtime_scope import RuntimeScope, assert_writable_target
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -30,10 +30,12 @@ def _write_jsonl(
     rows: Iterable[dict[str, Any]],
     *,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> None:
-    assert_writable_scope(scope)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
+    target = assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("w", encoding="utf-8") as f:
         for row in rows:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
@@ -51,12 +53,14 @@ def upsert_collection_session(
     path: Path = COLLECTION_SESSIONS_PATH,
     *,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> None:
-    assert_writable_scope(scope)
+    assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
     sessions = collection_session_index(path)
     sessions[session["session_id"]] = session
     ordered = sorted(sessions.values(), key=lambda x: (x.get("created_at", ""), x.get("session_id", "")))
-    _write_jsonl(path, ordered, scope=scope)
+    _write_jsonl(path, ordered, scope=scope, workspace_root=workspace_root, data_root=data_root)
 
 
 def get_collection_session(session_id: str, path: Path = COLLECTION_SESSIONS_PATH) -> dict[str, Any] | None:
@@ -80,12 +84,14 @@ def upsert_collection_queue(
     path: Path = COLLECTION_QUEUES_PATH,
     *,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> None:
-    assert_writable_scope(scope)
+    assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
     queues = collection_queue_index(path)
     queues[queue["queue_id"]] = queue
     ordered = sorted(queues.values(), key=lambda x: (x.get("created_at", ""), x.get("queue_id", "")))
-    _write_jsonl(path, ordered, scope=scope)
+    _write_jsonl(path, ordered, scope=scope, workspace_root=workspace_root, data_root=data_root)
 
 
 def get_collection_queue(queue_id: str, path: Path = COLLECTION_QUEUES_PATH) -> dict[str, Any] | None:
@@ -113,8 +119,10 @@ def update_queue_item_status(
     session_id: str | None = None,
     path: Path = COLLECTION_QUEUES_PATH,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> dict[str, Any]:
-    assert_writable_scope(scope)
+    assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
     queues = collection_queue_index(path)
     queue = queues.get(queue_id)
     if queue is None:
@@ -137,7 +145,7 @@ def update_queue_item_status(
     if queue.get("items") and all(i.get("status") == "COMPLETE" for i in queue["items"]):
         queue["queue_status"] = "COMPLETE"
         queue["completed_at"] = queue["updated_at"]
-    upsert_collection_queue(queue, path=path, scope=scope)
+    upsert_collection_queue(queue, path=path, scope=scope, workspace_root=workspace_root, data_root=data_root)
     return queue
 
 
@@ -181,13 +189,27 @@ def load_raw_cases(path: Path = RAW_CASES_PATH) -> list[dict[str, Any]]:
     return _read_jsonl(path)
 
 
-def resolve_evidence_path(path: str | Path, project_root: Path) -> Path | None:
-    """Resolve a stored evidence path without leaving the project/source roots."""
+def resolve_evidence_path(
+    path: str | Path,
+    project_root: Path,
+    *,
+    scope: RuntimeScope | str | None = None,
+) -> Path | None:
+    """Resolve evidence only inside the explicitly selected project root."""
     if not path:
         return None
     raw = Path(str(path))
-    candidates = [raw] if raw.is_absolute() else [project_root / raw, PROJECT_ROOT / raw]
-    allowed_roots = [project_root.resolve(), PROJECT_ROOT.resolve()]
+    resolved_project_root = project_root.resolve()
+    try:
+        selected_scope = RuntimeScope(scope) if scope is not None else None
+    except ValueError:
+        return None
+    is_workspace_root = resolved_project_root.is_relative_to((PROJECT_ROOT / "data" / "runtime_sessions").resolve())
+    allow_project_relative_fallback = selected_scope is not RuntimeScope.WORKSPACE and not is_workspace_root
+    candidates = [raw] if raw.is_absolute() else [project_root / raw]
+    if allow_project_relative_fallback:
+        candidates.append(PROJECT_ROOT / raw)
+    allowed_roots = [resolved_project_root]
     for candidate in candidates:
         try:
             resolved = candidate.resolve()
@@ -209,14 +231,16 @@ def append_raw_case(
     path: Path = RAW_CASES_PATH,
     *,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> None:
-    assert_writable_scope(scope)
+    target = assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
     if case.get("collection_status") != "COMPLETE":
         raise ValueError("Only COMPLETE cases may be written to raw_cases.jsonl.")
     if case.get("case_id") in raw_case_ids(path):
         raise ValueError(f"case_id already exists in raw_cases.jsonl: {case.get('case_id')}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as f:
         f.write(json.dumps(case, ensure_ascii=False) + "\n")
 
 
@@ -232,11 +256,18 @@ def save_evidence_files(
     files: list[tuple[str, bytes]],
     evidence_dir: Path = EVIDENCE_DIR,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> list[str]:
-    assert_writable_scope(scope)
+    safe_evidence_dir = assert_writable_target(scope, evidence_dir, workspace_root=workspace_root, data_root=data_root)
     if not files:
         return []
-    case_dir = evidence_dir / _safe_file_part(case_id)
+    case_dir = assert_writable_target(
+        scope,
+        safe_evidence_dir / _safe_file_part(case_id),
+        workspace_root=workspace_root,
+        data_root=data_root,
+    )
     case_dir.mkdir(parents=True, exist_ok=True)
     prefix = _safe_file_part(response_turn)
     for old in case_dir.glob(f"{prefix}_*"):
@@ -249,9 +280,10 @@ def save_evidence_files(
         if suffix not in {".png", ".jpg", ".jpeg", ".webp"}:
             raise ValueError(f"Unsupported evidence image type: {suffix or original_name}")
         path = case_dir / f"{prefix}_{i:02d}{suffix}"
-        path.write_bytes(content)
+        target = assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
+        target.write_bytes(content)
         try:
-            saved.append(str(path.relative_to(PROJECT_ROOT)))
+            saved.append(str(target.relative_to(PROJECT_ROOT)))
         except ValueError:
-            saved.append(str(path))
+            saved.append(str(target))
     return saved

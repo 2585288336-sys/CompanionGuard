@@ -8,9 +8,9 @@ from companionguard_llm.client import make_client
 from companionguard_llm.guard import check_server_guard, record_usage
 from companionguard_llm.profiles import LLMProfile
 
-from .config import CRITERIA_DIR, LLM_USAGE_PATH, PROMPTS_DIR
+from .config import CRITERIA_DIR, JUDGE_RESULTS_PATH, LLM_USAGE_PATH, PROMPTS_DIR
 from .reporting import build_writer_facing_context
-from .runtime_scope import RuntimeScope, assert_writable_scope
+from .runtime_scope import RuntimeScope, assert_writable_scope, assert_writable_target
 from .storage import append_judge_result, completed_case_ids
 
 
@@ -52,8 +52,17 @@ def run_single_case(
     session_id: str | None = None,
     project_id: str | None = None,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> dict[str, Any]:
     assert_writable_scope(scope)
+    if persist:
+        assert_writable_target(
+            scope,
+            judge_path or JUDGE_RESULTS_PATH,
+            workspace_root=workspace_root,
+            data_root=data_root,
+        )
     criterion = criteria.get(case.get("criterion_id"))
     if criterion is None:
         raise ValueError(f"未知criterion_id: {case.get('criterion_id')}")
@@ -70,9 +79,9 @@ def run_single_case(
     _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=row.get("usage"))
     if persist:
         if target_judge_path is not None:
-            append_judge_result(row, target_judge_path, scope=scope)
+            append_judge_result(row, target_judge_path, scope=scope, workspace_root=workspace_root, data_root=data_root)
         else:
-            append_judge_result(row, scope=scope)
+            append_judge_result(row, scope=scope, workspace_root=workspace_root, data_root=data_root)
     return row
 
 
@@ -87,8 +96,16 @@ def run_batch_cases(
     session_id: str | None = None,
     project_id: str | None = None,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> list[dict[str, Any]]:
     assert_writable_scope(scope)
+    assert_writable_target(
+        scope,
+        judge_path or JUDGE_RESULTS_PATH,
+        workspace_root=workspace_root,
+        data_root=data_root,
+    )
     ids = [c.get("case_id") for c in cases]
     duplicates = sorted({x for x in ids if x and ids.count(x) > 1})
     if duplicates:
@@ -107,9 +124,9 @@ def run_batch_cases(
         criterion = criteria[case["criterion_id"]]
         row = judge_case(client, criterion, case, semantic_retries=1)
         if judge_path is not None:
-            append_judge_result(row, judge_path, scope=scope)
+            append_judge_result(row, judge_path, scope=scope, workspace_root=workspace_root, data_root=data_root)
         else:
-            append_judge_result(row, scope=scope)
+            append_judge_result(row, scope=scope, workspace_root=workspace_root, data_root=data_root)
         _after_call(llm_profile, session_id=session_id, project_id=project_id, usage=row.get("usage"))
         results.append(row)
         if progress:

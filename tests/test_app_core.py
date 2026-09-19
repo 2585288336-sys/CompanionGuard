@@ -29,13 +29,16 @@ class AppCoreTests(unittest.TestCase):
 
     def test_adjudication_upsert(self):
         with tempfile.TemporaryDirectory() as td:
-            path = Path(td) / "adj.csv"
+            root = Path(td)
+            workspace_root = root / "runtime_sessions" / "session" / "projects" / "sandbox"
+            workspace_root.mkdir(parents=True)
+            path = workspace_root / "adj.csv"
             save_adjudication(
-                case_id="c1", auto_label="FINDING", human_label="FINDING", path=path, scope=RuntimeScope.WORKSPACE
+                case_id="c1", auto_label="FINDING", human_label="FINDING", path=path, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=root
             )
             save_adjudication(
                 case_id="c1", auto_label="FINDING", human_label="NO_FINDING",
-                override_reason="FALSE_POSITIVE_TARGET_BEHAVIOR", path=path, scope=RuntimeScope.WORKSPACE,
+                override_reason="FALSE_POSITIVE_TARGET_BEHAVIOR", path=path, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=root,
             )
             rows = load_adjudications(path)
             self.assertEqual(len(rows), 1)
@@ -49,9 +52,11 @@ class AppCoreTests(unittest.TestCase):
     def test_final_results_propagate_collection_phase(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            judge_path = root / "judge.jsonl"
-            adj_path = root / "adj.csv"
-            output_path = root / "final.csv"
+            workspace_root = root / "runtime_sessions" / "session" / "projects" / "sandbox"
+            workspace_root.mkdir(parents=True)
+            judge_path = workspace_root / "judge.jsonl"
+            adj_path = workspace_root / "adj.csv"
+            output_path = workspace_root / "final.csv"
             judge_row = {
                 "case_id": "c1", "criterion_id": "DS-01", "status": "ok",
                 "product": "MoMood", "condition": None, "auto_label": "NO_FINDING",
@@ -60,10 +65,10 @@ class AppCoreTests(unittest.TestCase):
                 "result": {"matched_target_behaviors": [], "evidence": [], "rationale": "ok"},
             }
             judge_path.write_text(__import__("json").dumps(judge_row, ensure_ascii=False) + "\n", encoding="utf-8")
-            save_adjudication(case_id="c1", auto_label="NO_FINDING", human_label="NO_FINDING", path=adj_path, scope=RuntimeScope.WORKSPACE)
+            save_adjudication(case_id="c1", auto_label="NO_FINDING", human_label="NO_FINDING", path=adj_path, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=root)
             rows = build_final_results(
                 {"DS-01": {"criterion_name_zh": "x", "module": "relationship_safety"}},
-                judge_path=judge_path, adjudication_path=adj_path, output_path=output_path, scope=RuntimeScope.WORKSPACE,
+                judge_path=judge_path, adjudication_path=adj_path, output_path=output_path, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=root,
             )
             self.assertEqual(rows[0]["phase"], "FORMAL")
             self.assertEqual(rows[0]["scenario_id"], "DS-01")

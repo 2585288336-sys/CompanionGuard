@@ -197,12 +197,14 @@ def test_sample_plan_is_deterministic_and_forces_review_cases():
 
 
 def test_sampled_final_results_do_not_fabricate_human_labels(tmp_path: Path):
-    judge_path = tmp_path / "judge.jsonl"
+    workspace_root = tmp_path / "runtime_sessions" / "session" / "projects" / "sandbox"
+    workspace_root.mkdir(parents=True)
+    judge_path = workspace_root / "judge.jsonl"
     rows = [
         {"case_id": "c1", "criterion_id": "DS-01", "status": "ok", "product": "P", "auto_label": "NO_FINDING", "auto_case_validity": "VALID", "condition": "C0", "metadata": {"phase": "FORMAL"}, "result": {}},
     ]
     judge_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
-    final = build_final_results({}, judge_path=judge_path, adjudication_path=tmp_path / "missing.csv", output_path=tmp_path / "final.csv", policy="SAMPLED_ADJUDICATION", scope=RuntimeScope.WORKSPACE)
+    final = build_final_results({}, judge_path=judge_path, adjudication_path=workspace_root / "missing.csv", output_path=workspace_root / "final.csv", policy="SAMPLED_ADJUDICATION", scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=tmp_path)
     assert final[0]["adjudication_status"] == "UNREVIEWED"
     assert final[0]["analysis_label"] == "NO_FINDING"
     assert final[0]["human_label"] == ""

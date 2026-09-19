@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .runtime_scope import RuntimeScope, assert_writable_scope
+from .runtime_scope import RuntimeScope, assert_writable_target
 
 
 def _now() -> str:
@@ -23,10 +23,12 @@ def save_test_plans(
     plans: list[dict[str, Any]],
     *,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> None:
-    assert_writable_scope(scope)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(plans, ensure_ascii=False, indent=2), encoding='utf-8')
+    target = assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(plans, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
 def upsert_test_plan(
@@ -34,11 +36,13 @@ def upsert_test_plan(
     plan: dict[str, Any],
     *,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> dict[str, Any]:
-    assert_writable_scope(scope)
-    plans=load_test_plans(path); now=_now(); row=dict(plan); row.setdefault('created_at',now); row['updated_at']=now
+    target = assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
+    plans=load_test_plans(target); now=_now(); row=dict(plan); row.setdefault('created_at',now); row['updated_at']=now
     replaced=False
     for i,p in enumerate(plans):
         if p.get('plan_id')==row.get('plan_id'): plans[i]=row; replaced=True; break
     if not replaced: plans.append(row)
-    save_test_plans(path,plans,scope=scope); return row
+    save_test_plans(target,plans,scope=scope,workspace_root=workspace_root,data_root=data_root); return row

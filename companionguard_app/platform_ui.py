@@ -359,10 +359,10 @@ def layer2_page() -> None:
                 raise ValueError("Workspace project manifest is unavailable.")
             saved = prior.get("evidence_files", [])
             if files:
-                saved_abs = save_audit_evidence(evidence_root=paths.layer2_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files], scope=context.scope)
+                saved_abs = save_audit_evidence(evidence_root=paths.layer2_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files], scope=context.scope, workspace_root=paths.root)
                 saved = [str(Path(x).relative_to(paths.root)) for x in saved_abs]
             row = make_audit_row(project_id=project["project_id"], product=product, check_code=check["code"], status=status, evidence_summary=evidence_summary, notes=notes, evidence_files=saved, metadata={"regulation": check.get("regulation"), "check_name_zh": check.get("name_zh"), "test_date": date.today().isoformat(), "app_version": app_version, "operating_system": operating_system})
-            upsert_jsonl(paths.layer2_records, row, key_fields=("product", "check_code"), scope=context.scope)
+            upsert_jsonl(paths.layer2_records, row, key_fields=("product", "check_code"), scope=context.scope, workspace_root=paths.root)
         except Exception as exc:
             st.error(str(exc))
         else:
@@ -435,10 +435,10 @@ def layer3_page() -> None:
                 raise ValueError("Workspace project manifest is unavailable.")
             saved = prior.get("evidence_files", [])
             if files:
-                saved_abs = save_audit_evidence(evidence_root=paths.layer3_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files], scope=context.scope)
+                saved_abs = save_audit_evidence(evidence_root=paths.layer3_evidence, product=product, check_code=check["code"], files=[(f.name, f.getvalue()) for f in files], scope=context.scope, workspace_root=paths.root)
                 saved = [str(Path(x).relative_to(paths.root)) for x in saved_abs]
             row = make_audit_row(project_id=project["project_id"], product=product, check_code=check["code"], status=status, evidence_summary=evidence_summary, notes=notes, source=source, source_date=source_date, evidence_files=saved, metadata={"regulation": check.get("regulation"), "check_name_zh": check.get("name_zh"), "ai_assist": assist or None})
-            upsert_jsonl(paths.layer3_records, row, key_fields=("product", "check_code"), scope=context.scope)
+            upsert_jsonl(paths.layer3_records, row, key_fields=("product", "check_code"), scope=context.scope, workspace_root=paths.root)
         except Exception as exc:
             st.error(str(exc))
         else:
@@ -529,6 +529,7 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
                     report_type="dialogue", project=project, final_rows=rows,
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
                     reports_dir=paths.reports, draft_text=text, scope=runtime_context.scope,
+                    workspace_root=paths.root,
                 )
                 if result["manifest"]["validation_status"] != "PASS":
                     st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
@@ -582,6 +583,7 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
                     reports_dir=paths.reports, draft_text=text,
                     grounding_validator=lambda draft, report_context: grounding, scope=runtime_context.scope,
+                    workspace_root=paths.root,
                 )
                 if result["manifest"]["validation_status"] != "PASS":
                     st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")

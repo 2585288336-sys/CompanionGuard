@@ -28,6 +28,10 @@ class PublishedWriteError(PermissionError):
     """Raised when a published project or an unscoped write is mutated."""
 
 
+class WorkspacePathViolationError(PermissionError):
+    """Raised when a writable target is outside the current Workspace."""
+
+
 def assert_writable_scope(scope: RuntimeScope | str | None) -> None:
     """Allow only an explicit WORKSPACE scope to perform a write.
 
@@ -48,6 +52,61 @@ def assert_writable_scope(scope: RuntimeScope | str | None) -> None:
         raise PublishedWriteError("Published benchmark is read-only.")
     if selected_scope is not RuntimeScope.WORKSPACE:
         raise ValueError(f"Unsupported writable scope: {scope!r}")
+
+
+def assert_writable_target(
+    scope: RuntimeScope | str | None,
+    target_path: Path,
+    *,
+    workspace_root: Path | None,
+    data_root: Path | None = None,
+) -> Path:
+    """Validate a project-local write target against the active Workspace.
+
+    A scope value is not a path capability.  Callers must provide the
+    already-resolved Workspace root from the active runtime context, and the
+    target is resolved again immediately before the write.  This protects
+    missing targets, ``..`` traversal, symlink escapes, Published paths, and
+    paths belonging to another session or sandbox.
+    """
+
+    assert_writable_scope(scope)
+    if workspace_root is None:
+        raise WorkspacePathViolationError(
+            "A validated Workspace root is required for project-local writes."
+        )
+
+    configured_data_root = Path(data_root) if data_root is not None else DATA_DIR
+    try:
+        resolved_data_root = configured_data_root.resolve()
+        resolved_workspace_root = Path(workspace_root).resolve()
+        resolved_target = Path(target_path).resolve()
+    except OSError as exc:
+        raise WorkspacePathViolationError("Unable to resolve writable path safely.") from exc
+
+    runtime_root = (resolved_data_root / "runtime_sessions").resolve()
+    try:
+        workspace_relative = resolved_workspace_root.relative_to(runtime_root)
+    except ValueError as exc:
+        raise WorkspacePathViolationError(
+            "Workspace root must be under data/runtime_sessions."
+        ) from exc
+
+    workspace_parts = workspace_relative.parts
+    if len(workspace_parts) != 3 or workspace_parts[1] != "projects":
+        raise WorkspacePathViolationError(
+            "Workspace root must match runtime_sessions/<session>/projects/<sandbox>."
+        )
+    validate_scope_id(workspace_parts[0], name="session_id")
+    validate_scope_id(workspace_parts[2], name="sandbox_id")
+
+    try:
+        resolved_target.relative_to(resolved_workspace_root)
+    except ValueError as exc:
+        raise WorkspacePathViolationError(
+            f"Writable target is outside the active Workspace: {target_path}"
+        ) from exc
+    return resolved_target
 
 
 def validate_scope_id(value: str, *, name: str = "id") -> str:

@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from .adjudication import FULL_ADJUDICATION, SAMPLED_ADJUDICATION
-from .config import ADJUDICATION_PATH, CASE_VALIDITIES, DATA_DIR, FINAL_RESULTS_PATH, JUDGE_RESULTS_PATH
-from .runtime_scope import RuntimeScope, assert_writable_scope
+from .config import ADJUDICATION_PATH, CASE_VALIDITIES, FINAL_RESULTS_PATH, JUDGE_RESULTS_PATH
+from .runtime_scope import RuntimeScope, assert_writable_target
 
 ADJUDICATION_FIELDS = [
     "case_id",
@@ -27,9 +27,19 @@ ADJUDICATION_FIELDS = [
 ]
 
 
-def ensure_data_dir(*, scope: RuntimeScope | str | None = None) -> None:
-    assert_writable_scope(scope)
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+def ensure_data_dir(
+    *,
+    scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
+) -> None:
+    root = assert_writable_target(
+        scope,
+        workspace_root or Path("."),
+        workspace_root=workspace_root,
+        data_root=data_root,
+    )
+    root.mkdir(parents=True, exist_ok=True)
 
 
 def append_judge_result(
@@ -37,10 +47,13 @@ def append_judge_result(
     path: Path = JUDGE_RESULTS_PATH,
     *,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> None:
-    assert_writable_scope(scope)
-    ensure_data_dir(scope=scope)
-    with path.open("a", encoding="utf-8") as f:
+    target = assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
+    ensure_data_dir(scope=scope, workspace_root=workspace_root, data_root=data_root)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
@@ -87,9 +100,12 @@ def save_adjudication(
     validity_note: str = "",
     path: Path = ADJUDICATION_PATH,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> None:
-    assert_writable_scope(scope)
-    ensure_data_dir(scope=scope)
+    target = assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
+    ensure_data_dir(scope=scope, workspace_root=workspace_root, data_root=data_root)
+    target.parent.mkdir(parents=True, exist_ok=True)
     final_case_validity = final_case_validity or case_validity
     if auto_case_validity not in CASE_VALIDITIES:
         raise ValueError(f"Unsupported auto case validity: {auto_case_validity}")
@@ -117,10 +133,10 @@ def save_adjudication(
         "validity_reviewed_at": now,
     }
 
-    existing = {r["case_id"]: r for r in load_adjudications(path)}
+    existing = {r["case_id"]: r for r in load_adjudications(target)}
     existing[case_id] = row
 
-    with path.open("w", encoding="utf-8", newline="") as f:
+    with target.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=ADJUDICATION_FIELDS)
         writer.writeheader()
         writer.writerows(existing.values())
@@ -154,13 +170,17 @@ def build_final_results(
     output_path: Path = FINAL_RESULTS_PATH,
     policy: str = FULL_ADJUDICATION,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> list[dict[str, Any]]:
-    assert_writable_scope(scope)
-    ensure_data_dir(scope=scope)
-    adjudications = {r["case_id"]: r for r in load_adjudications(adjudication_path)}
+    target_judge = assert_writable_target(scope, judge_path, workspace_root=workspace_root, data_root=data_root)
+    target_adjudication = assert_writable_target(scope, adjudication_path, workspace_root=workspace_root, data_root=data_root)
+    target_output = assert_writable_target(scope, output_path, workspace_root=workspace_root, data_root=data_root)
+    ensure_data_dir(scope=scope, workspace_root=workspace_root, data_root=data_root)
+    adjudications = {r["case_id"]: r for r in load_adjudications(target_adjudication)}
     final_rows: list[dict[str, Any]] = []
 
-    for row in load_judge_results(judge_path):
+    for row in load_judge_results(target_judge):
         if row.get("status") != "ok":
             continue
         adj = adjudications.get(row.get("case_id"))
@@ -228,7 +248,8 @@ def build_final_results(
         "matched_target_behaviors", "evidence", "rationale", "judge_provider", "judge_model",
         "judge_template", "reviewed_at",
     ]
-    with output_path.open("w", encoding="utf-8", newline="") as f:
+    target_output.parent.mkdir(parents=True, exist_ok=True)
+    with target_output.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(final_rows)

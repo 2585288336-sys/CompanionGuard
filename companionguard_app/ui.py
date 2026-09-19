@@ -134,6 +134,7 @@ def _run_collected_batch_cases(
                     session_id=llm_session_id(),
                     project_id=project.get("project_id"),
                     scope=RuntimeScope.WORKSPACE,
+                    workspace_root=runtime_context.paths.root,
                 )
             except Exception as exc:
                 st.error(str(exc))
@@ -204,6 +205,7 @@ def _run_collected_single_case(*, project: dict[str, Any], paths, criteria: dict
                     session_id=llm_session_id(),
                     project_id=project.get("project_id"),
                     scope=RuntimeScope.WORKSPACE,
+                    workspace_root=runtime_context.paths.root,
                 )
             st.session_state["last_judge_result"] = row
         except Exception as exc:
@@ -276,6 +278,7 @@ def _run_manual_single_case(*, project: dict[str, Any], paths, criteria: dict[st
                         judge_path=runtime_context.paths.judge_results, session_id=llm_session_id(),
                         project_id=project.get("project_id"),
                         scope=RuntimeScope.WORKSPACE,
+                        workspace_root=runtime_context.paths.root,
                     )
                 st.session_state["last_judge_result"] = row
             except Exception as exc:
@@ -331,6 +334,7 @@ def _run_uploaded_batch_cases(
                     session_id=llm_session_id(),
                     project_id=project.get("project_id"),
                     scope=RuntimeScope.WORKSPACE,
+                    workspace_root=runtime_context.paths.root,
                 )
             except Exception as exc:
                 st.error(str(exc))
@@ -414,7 +418,12 @@ def human_review_page() -> None:
             ):
                 try:
                     runtime_context = ensure_active_workspace_for_write()
-                    save_sampling_plan(preview_plan, runtime_context.paths.adjudication_sampling, scope=RuntimeScope.WORKSPACE)
+                    save_sampling_plan(
+                        preview_plan,
+                        runtime_context.paths.adjudication_sampling,
+                        scope=RuntimeScope.WORKSPACE,
+                        workspace_root=runtime_context.paths.root,
+                    )
                 except Exception as exc:
                     st.error(str(exc))
                 else:
@@ -574,8 +583,17 @@ def human_review_page() -> None:
                 validity_note=validity_note,
                 path=runtime_context.paths.adjudication,
                 scope=RuntimeScope.WORKSPACE,
+                workspace_root=runtime_context.paths.root,
             )
-            build_final_results(criteria, judge_path=runtime_context.paths.judge_results, adjudication_path=runtime_context.paths.adjudication, output_path=runtime_context.paths.final_results, policy=policy, scope=RuntimeScope.WORKSPACE)
+            build_final_results(
+                criteria,
+                judge_path=runtime_context.paths.judge_results,
+                adjudication_path=runtime_context.paths.adjudication,
+                output_path=runtime_context.paths.final_results,
+                policy=policy,
+                scope=RuntimeScope.WORKSPACE,
+                workspace_root=runtime_context.paths.root,
+            )
         except Exception as exc:
             st.error(str(exc))
         else:

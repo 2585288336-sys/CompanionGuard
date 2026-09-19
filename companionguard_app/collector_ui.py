@@ -246,7 +246,7 @@ def _render_single_setup(criteria: dict[str, dict[str, Any]], config: dict[str, 
         )
         runtime_context = ensure_active_workspace_for_write()
         session["project_id"] = active_project().get("project_id") if active_project() else None
-        upsert_collection_session(session, runtime_context.paths.collection_sessions, scope=RuntimeScope.WORKSPACE)
+        upsert_collection_session(session, runtime_context.paths.collection_sessions, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
         st.session_state["collector_active_session"] = session["session_id"]
         st.rerun()
 
@@ -364,7 +364,7 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
             "collection_date": collection_date,
             "notes": notes,
         }
-        upsert_test_plan(paths.test_plans, plan, scope=RuntimeScope.WORKSPACE)
+        upsert_test_plan(paths.test_plans, plan, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
         queue = create_collection_queue(
             queue_id=queue_id, queue_name=queue_name, product_id=product_id, product_name=product_name,
             product_slug=product_slug, product_role=pconfig.get("role", ""), phase=phase,
@@ -374,9 +374,9 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
         queue["test_plan_id"] = queue_id
         queue["coverage_type"] = coverage_type
         queue["selections"] = selections
-        upsert_collection_queue(queue, paths.collection_queues, scope=RuntimeScope.WORKSPACE)
+        upsert_collection_queue(queue, paths.collection_queues, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
         queue = reconcile_collection_queue(queue, raw_path=paths.raw_cases, sessions_path=paths.collection_sessions)
-        upsert_collection_queue(queue, paths.collection_queues, scope=RuntimeScope.WORKSPACE)
+        upsert_collection_queue(queue, paths.collection_queues, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
         st.session_state["collector_active_queue"] = queue_id
         st.rerun()
 
@@ -387,14 +387,14 @@ def _start_queue_case(queue: dict[str, Any], item: dict[str, Any], criteria: dic
         return
     case_id = item["case_id"]
     if case_id in raw_case_ids(paths.raw_cases):
-        update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="COMPLETE", session_id=case_id, path=paths.collection_queues, scope=RuntimeScope.WORKSPACE)
+        update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="COMPLETE", session_id=case_id, path=paths.collection_queues, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
         return
     existing = get_collection_session(case_id, paths.collection_sessions)
     if existing and existing.get("collection_status") == "IN_PROGRESS":
         if not existing.get("queue_id"):
             existing["queue_id"] = queue["queue_id"]
-            upsert_collection_session(existing, paths.collection_sessions, scope=RuntimeScope.WORKSPACE)
-        update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="IN_PROGRESS", session_id=case_id, path=paths.collection_queues, scope=RuntimeScope.WORKSPACE)
+            upsert_collection_session(existing, paths.collection_sessions, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
+        update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="IN_PROGRESS", session_id=case_id, path=paths.collection_queues, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
         st.session_state["collector_active_session"] = case_id
         st.session_state["collector_active_queue"] = queue["queue_id"]
         return
@@ -416,8 +416,8 @@ def _start_queue_case(queue: dict[str, Any], item: dict[str, Any], criteria: dic
     session["project_id"] = queue.get("project_id")
     session["test_plan_id"] = queue.get("test_plan_id")
     session["coverage_type"] = queue.get("coverage_type", "CUSTOM")
-    upsert_collection_session(session, paths.collection_sessions, scope=RuntimeScope.WORKSPACE)
-    update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="IN_PROGRESS", session_id=session["session_id"], path=paths.collection_queues, scope=RuntimeScope.WORKSPACE)
+    upsert_collection_session(session, paths.collection_sessions, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
+    update_queue_item_status(queue_id=queue["queue_id"], case_id=case_id, status="IN_PROGRESS", session_id=session["session_id"], path=paths.collection_queues, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
     st.session_state["collector_active_session"] = session["session_id"]
     st.session_state["collector_active_queue"] = queue["queue_id"]
 
@@ -494,7 +494,7 @@ def _persist_response_draft(session_id: str, step_index: int, response_key: str)
         draft = st.session_state.get(response_key, "")
         runtime_context = ensure_active_workspace_for_write()
         updated = save_step_draft(session, step_index=step_index, draft_response=draft)
-        upsert_collection_session(updated, runtime_context.paths.collection_sessions, scope=RuntimeScope.WORKSPACE)
+        upsert_collection_session(updated, runtime_context.paths.collection_sessions, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
     except Exception:
         # Draft autosave must never block the primary Save & Next path.
         return
@@ -547,7 +547,7 @@ def _render_completed_session(criteria: dict[str, dict[str, Any]], session: dict
                         try:
                             with st.spinner("正在运行冻结测试项目对应的 Judge..."):
                                 runtime_context = ensure_active_workspace_for_write()
-                                row = run_single_case(case=raw_case, criteria=criteria, llm_profile=llm_profile, persist=True, judge_path=runtime_context.paths.judge_results, session_id=llm_session_id(), project_id=(active_project() or {}).get("project_id"), scope=RuntimeScope.WORKSPACE)
+                                row = run_single_case(case=raw_case, criteria=criteria, llm_profile=llm_profile, persist=True, judge_path=runtime_context.paths.judge_results, session_id=llm_session_id(), project_id=(active_project() or {}).get("project_id"), scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
                             _render_judge_result(row)
                         except Exception as exc:
                             st.error(str(exc))
@@ -642,7 +642,7 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
         try:
             runtime_context = ensure_active_workspace_for_write()
             draft_session = save_step_draft(session, step_index=idx, draft_response=response)
-            upsert_collection_session(draft_session, runtime_context.paths.collection_sessions, scope=RuntimeScope.WORKSPACE)
+            upsert_collection_session(draft_session, runtime_context.paths.collection_sessions, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
         except Exception:
             pass
     if step.get("draft_response") and not step.get("response"):
@@ -668,7 +668,7 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
         if idx > 0 and st.button("← 上一轮 / Previous Turn", use_container_width=True, key=f"collector_previous_turn::{session['case_id']}::{idx}"):
             runtime_context = ensure_active_workspace_for_write()
             session = previous_step(session)
-            upsert_collection_session(session, runtime_context.paths.collection_sessions, scope=RuntimeScope.WORKSPACE)
+            upsert_collection_session(session, runtime_context.paths.collection_sessions, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
             st.rerun()
     with middle:
         is_last = idx == total - 1
@@ -691,6 +691,7 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
                     files=[(item.name, item.getvalue()) for item in uploads],
                     evidence_dir=paths.dialogue_evidence,
                     scope=RuntimeScope.WORKSPACE,
+                    workspace_root=runtime_context.paths.root,
                 )
             updated = save_step_response(
                 session,
@@ -705,9 +706,9 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
                     raise ValueError("Judge compatibility validation failed: " + "; ".join(errors))
                 raw_case["project_id"] = session.get("project_id")
                 raw_case.setdefault("metadata", {})["project_id"] = session.get("project_id")
-                append_raw_case(raw_case, paths.raw_cases, scope=RuntimeScope.WORKSPACE)
+                append_raw_case(raw_case, paths.raw_cases, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
                 updated = mark_session_complete(updated)
-                upsert_collection_session(updated, paths.collection_sessions, scope=RuntimeScope.WORKSPACE)
+                upsert_collection_session(updated, paths.collection_sessions, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
                 if updated.get("queue_id"):
                     update_queue_item_status(
                         queue_id=updated["queue_id"],
@@ -716,11 +717,12 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
                         session_id=updated["session_id"],
                         path=paths.collection_queues,
                         scope=RuntimeScope.WORKSPACE,
+                        workspace_root=runtime_context.paths.root,
                     )
                 st.session_state["collector_active_session"] = updated["session_id"]
                 st.rerun()
             else:
-                upsert_collection_session(updated, paths.collection_sessions, scope=RuntimeScope.WORKSPACE)
+                upsert_collection_session(updated, paths.collection_sessions, scope=RuntimeScope.WORKSPACE, workspace_root=runtime_context.paths.root)
                 st.session_state["collector_auto_copy_target"] = f"{updated['case_id']}::{updated['current_step_index']}"
                 st.rerun()
         except Exception as exc:

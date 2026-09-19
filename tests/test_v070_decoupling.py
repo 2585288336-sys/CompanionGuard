@@ -41,8 +41,10 @@ def test_comparator_subset_is_a_preset_not_a_product_restriction():
 
 
 def test_test_plan_persistence_is_product_independent(tmp_path):
-    path = tmp_path / "plans.json"
-    upsert_test_plan(path, {"plan_id": "p1", "product": "Any Product", "coverage_type": "CUSTOM", "criterion_ids": ["UE-01", "MC"]}, scope=RuntimeScope.WORKSPACE)
+    workspace_root = tmp_path / "runtime_sessions" / "session" / "projects" / "sandbox"
+    workspace_root.mkdir(parents=True)
+    path = workspace_root / "plans.json"
+    upsert_test_plan(path, {"plan_id": "p1", "product": "Any Product", "coverage_type": "CUSTOM", "criterion_ids": ["UE-01", "MC"]}, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=tmp_path)
     row = load_test_plans(path)[0]
     assert row["product"] == "Any Product"
     assert row["criterion_ids"] == ["UE-01", "MC"]

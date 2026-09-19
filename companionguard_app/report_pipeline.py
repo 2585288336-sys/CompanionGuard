@@ -8,7 +8,7 @@ from .grounding_validator import validate_grounding
 from .report_schema import report_manifest
 from .report_validation import validate_report_hard
 from .reporting import build_dialogue_report_context, build_integrated_report_context, build_writer_facing_context
-from .runtime_scope import RuntimeScope, assert_writable_scope
+from .runtime_scope import RuntimeScope, assert_writable_target
 
 
 def _validator_passes(result: dict[str, Any]) -> bool:
@@ -38,20 +38,22 @@ def targeted_repair(*, draft_text: str, grounding_result: dict[str, Any], repair
     return repair(draft_text, issues)
 
 
-def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_rows: list[dict[str, Any]], layer2_path: Path, layer3_path: Path, reports_dir: Path, draft_text: str | None = None, writer: Callable[[dict[str, Any]], str] | None = None, grounding_validator: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None, polish: Callable[[str], str] | None = None, writer_prompt_version: str = "1.1", scope: RuntimeScope | str | None = None) -> dict[str, Any]:
-    assert_writable_scope(scope)
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    context = build_report_context(report_type=report_type, project=project, final_rows=final_rows, layer2_path=layer2_path, layer3_path=layer3_path)
-    context_path = reports_dir / "report_context.json"
+def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_rows: list[dict[str, Any]], layer2_path: Path, layer3_path: Path, reports_dir: Path, draft_text: str | None = None, writer: Callable[[dict[str, Any]], str] | None = None, grounding_validator: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None, polish: Callable[[str], str] | None = None, writer_prompt_version: str = "1.1", scope: RuntimeScope | str | None = None, workspace_root: Path | None = None, data_root: Path | None = None) -> dict[str, Any]:
+    target_reports_dir = assert_writable_target(scope, reports_dir, workspace_root=workspace_root, data_root=data_root)
+    target_layer2_path = assert_writable_target(scope, layer2_path, workspace_root=workspace_root, data_root=data_root)
+    target_layer3_path = assert_writable_target(scope, layer3_path, workspace_root=workspace_root, data_root=data_root)
+    target_reports_dir.mkdir(parents=True, exist_ok=True)
+    context = build_report_context(report_type=report_type, project=project, final_rows=final_rows, layer2_path=target_layer2_path, layer3_path=target_layer3_path)
+    context_path = target_reports_dir / "report_context.json"
     context_path.write_text(json.dumps(context, ensure_ascii=False, indent=2), encoding="utf-8")
-    writer_context_path = reports_dir / "writer_context.json"
+    writer_context_path = target_reports_dir / "writer_context.json"
     writer_context_path.write_text(json.dumps(build_writer_facing_context(context), ensure_ascii=False, indent=2), encoding="utf-8")
     draft = draft_text if draft_text is not None else (writer(context) if writer else "")
-    draft_path = reports_dir / "draft_report.md"
+    draft_path = target_reports_dir / "draft_report.md"
     draft_path.write_text(draft, encoding="utf-8")
     hard = validate_report_hard(report_text=draft, context=context, report_type=report_type, quality_version=writer_prompt_version)
     grounding = grounding_validator(draft, context) if grounding_validator else validate_grounding(draft_report=draft, context=context)
-    grounding_path = reports_dir / "grounding_result.json"
+    grounding_path = target_reports_dir / "grounding_result.json"
     grounding_path.write_text(json.dumps(grounding, ensure_ascii=False, indent=2), encoding="utf-8")
     targeted_repair_record = {
         "attempted": False,
@@ -60,7 +62,7 @@ def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_r
         "source_grounding_status": grounding.get("overall_status", "UNKNOWN"),
         "issue_count": len(grounding.get("issues") or []),
     }
-    targeted_repair_path = reports_dir / "targeted_repair.json"
+    targeted_repair_path = target_reports_dir / "targeted_repair.json"
     targeted_repair_path.write_text(json.dumps(targeted_repair_record, ensure_ascii=False, indent=2), encoding="utf-8")
     final_text = draft
     if hard["overall_status"] == "PASS" and _validator_passes(grounding) and polish:
@@ -69,7 +71,7 @@ def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_r
         if final_hard["overall_status"] != "PASS":
             final_text = ""
             hard = final_hard
-    final_path = reports_dir / "final_report.md"
+    final_path = target_reports_dir / "final_report.md"
     if final_text and hard["overall_status"] == "PASS" and _validator_passes(grounding):
         final_path.write_text(final_text, encoding="utf-8")
         validation_status = "PASS"
@@ -77,5 +79,5 @@ def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_r
         final_path.unlink(missing_ok=True)
         validation_status = "FAIL"
     manifest = report_manifest(report_type=report_type, project=project, validation_status=validation_status, grounding_status=grounding["overall_status"], polish_enabled=bool(polish), writer_prompt_version=writer_prompt_version)
-    (reports_dir / "report_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    (target_reports_dir / "report_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"context": context, "writer_context": build_writer_facing_context(context), "hard_validation": hard, "grounding": grounding, "targeted_repair": targeted_repair_record, "manifest": manifest, "paths": {"context": context_path, "writer_context": writer_context_path, "draft": draft_path, "grounding": grounding_path, "targeted_repair": targeted_repair_path, "final": final_path}}

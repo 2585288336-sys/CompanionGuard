@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .runtime_scope import RuntimeScope, assert_writable_scope
+from .runtime_scope import RuntimeScope, assert_writable_target
 
 FULL_ADJUDICATION = "FULL_ADJUDICATION"
 SAMPLED_ADJUDICATION = "SAMPLED_ADJUDICATION"
@@ -102,10 +102,12 @@ def save_sampling_plan(
     path: Path,
     *,
     scope: RuntimeScope | str | None = None,
+    workspace_root: Path | None = None,
+    data_root: Path | None = None,
 ) -> None:
-    assert_writable_scope(scope)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
+    target = assert_writable_target(scope, path, workspace_root=workspace_root, data_root=data_root)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def review_case_ids(

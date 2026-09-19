@@ -114,7 +114,13 @@ def test_read_after_write_is_session_local_and_published_guard_remains(tmp_path)
     published = get_runtime_context("published", state=first_state, data_root=tmp_path)
     assert published.scope is RuntimeScope.PUBLISHED
     workspace = ensure_workspace("published", state=first_state, data_root=tmp_path)
-    append_judge_result({"case_id": "workspace-case", "status": "ok"}, workspace.paths.judge_results, scope=RuntimeScope.WORKSPACE)
+    append_judge_result(
+        {"case_id": "workspace-case", "status": "ok"},
+        workspace.paths.judge_results,
+        scope=RuntimeScope.WORKSPACE,
+        workspace_root=workspace.paths.root,
+        data_root=tmp_path,
+    )
     assert load_judge_results(workspace.paths.judge_results)[0]["case_id"] == "workspace-case"
     assert load_judge_results(source / "judge_results.jsonl") == []
 
@@ -126,4 +132,3 @@ def test_read_after_write_is_session_local_and_published_guard_remains(tmp_path)
     with pytest.raises(PublishedWriteError):
         append_judge_result({"case_id": "must-not-write"}, other_session.paths.judge_results, scope=RuntimeScope.PUBLISHED)
     assert load_judge_results(source / "judge_results.jsonl") == []
-

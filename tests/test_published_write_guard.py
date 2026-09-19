@@ -30,12 +30,14 @@ def test_scope_guard_is_explicit_and_fail_closed() -> None:
 
 
 def test_judge_write_is_rejected_before_file_mutation(tmp_path) -> None:
-    path = tmp_path / "judge_results.jsonl"
+    workspace_root = tmp_path / "runtime_sessions" / "session" / "projects" / "sandbox"
+    workspace_root.mkdir(parents=True)
+    path = workspace_root / "judge_results.jsonl"
     with pytest.raises(PublishedWriteError):
         append_judge_result({"case_id": "case-1"}, path, scope=RuntimeScope.PUBLISHED)
     assert not path.exists()
 
-    append_judge_result({"case_id": "case-1"}, path, scope=RuntimeScope.WORKSPACE)
+    append_judge_result({"case_id": "case-1"}, path, scope=RuntimeScope.WORKSPACE, workspace_root=workspace_root, data_root=tmp_path)
     before = path.read_text(encoding="utf-8")
     with pytest.raises(PublishedWriteError):
         append_judge_result({"case_id": "case-2"}, path, scope=RuntimeScope.PUBLISHED)
@@ -119,9 +121,11 @@ def test_project_create_and_delete_are_guarded_before_mutation(tmp_path, monkeyp
 
 
 def test_published_reads_remain_available(tmp_path) -> None:
-    judge = tmp_path / "judge.jsonl"
-    adjudication = tmp_path / "human_adjudication.csv"
-    final = tmp_path / "final_results.csv"
+    workspace_root = tmp_path / "runtime_sessions" / "session" / "projects" / "sandbox"
+    workspace_root.mkdir(parents=True)
+    judge = workspace_root / "judge.jsonl"
+    adjudication = workspace_root / "human_adjudication.csv"
+    final = workspace_root / "final_results.csv"
     judge.write_text(json.dumps({"case_id": "case-1", "status": "ok"}) + "\n", encoding="utf-8")
     save_adjudication(
         case_id="case-1",
@@ -129,6 +133,8 @@ def test_published_reads_remain_available(tmp_path) -> None:
         human_label="NO_FINDING",
         path=adjudication,
         scope=RuntimeScope.WORKSPACE,
+        workspace_root=workspace_root,
+        data_root=tmp_path,
     )
     build_final_results(
         {},
@@ -136,6 +142,8 @@ def test_published_reads_remain_available(tmp_path) -> None:
         adjudication_path=adjudication,
         output_path=final,
         scope=RuntimeScope.WORKSPACE,
+        workspace_root=workspace_root,
+        data_root=tmp_path,
     )
     assert load_judge_results(judge)[0]["case_id"] == "case-1"
     assert load_adjudications(adjudication)[0]["case_id"] == "case-1"
@@ -155,4 +163,3 @@ def test_llm_is_not_called_before_published_guard(monkeypatch) -> None:
             llm_profile=profile,
             scope=RuntimeScope.PUBLISHED,
         )
-
