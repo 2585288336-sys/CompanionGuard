@@ -37,8 +37,10 @@ def _authoritative(tmp_path, project_id=PROJECT_ID):
         _write_jsonl(root / name, {"case_id": "case-1", "value": name})
     for name in ("human_adjudication.csv", "final_results.csv"):
         (root / name).write_text("case_id,label\ncase-1,FINDING\n", encoding="utf-8")
-    (root / "test_plans.json").write_text("{}", encoding="utf-8")
+    (root / "test_plans.json").write_text(json.dumps([{"plan_id": "plan-1"}, {"plan_id": "plan-2"}]), encoding="utf-8")
     (root / "evidence" / "dialogue" / "screen.png").write_bytes(b"evidence")
+    (root / "evidence" / "dialogue" / "nested" / "secondary.jpg").parent.mkdir(parents=True)
+    (root / "evidence" / "dialogue" / "nested" / "secondary.jpg").write_bytes(b"nested evidence")
     (root / "reports" / "report.md").write_text("report", encoding="utf-8")
     return root
 
@@ -64,6 +66,43 @@ def test_valid_authoritative_source_and_manifest_are_content_hashed(tmp_path):
     assert "source_path" not in json.dumps(manifest)
     assert "/" not in str(manifest["source_snapshot_hash"])
     assert manifest["files"]["evidence/dialogue/screen.png"]["bytes"] == len(b"evidence")
+    assert validation.record_summary == {
+        "raw_cases": 1,
+        "judge_results": 1,
+        "collection_sessions": 1,
+        "collection_queues": 1,
+        "human_adjudication": 1,
+        "final_results": 1,
+        "test_plans": 2,
+        "evidence": 2,
+        "reports": 1,
+        "layer2": 0,
+        "layer3": 0,
+    }
+
+
+def test_record_summary_counts_validated_inventory_and_nested_artifacts(tmp_path):
+    source = _authoritative(tmp_path)
+    validation = validate_authoritative_source(source, expected_project_id=PROJECT_ID)
+
+    inventory_evidence = sum(path.startswith("evidence/") for path in validation.files)
+    inventory_reports = sum(path.startswith("reports/") for path in validation.files)
+    assert validation.record_summary["evidence"] == inventory_evidence == 2
+    assert validation.record_summary["reports"] == inventory_reports == 1
+    assert validation.record_summary["test_plans"] == 2
+
+
+def test_optional_artifact_summary_is_zero_when_directories_absent_and_plans_empty(tmp_path):
+    source = _authoritative(tmp_path)
+    shutil.rmtree(source / "evidence")
+    shutil.rmtree(source / "reports")
+    (source / "test_plans.json").write_text("[]", encoding="utf-8")
+
+    validation = validate_authoritative_source(source, expected_project_id=PROJECT_ID)
+
+    assert validation.record_summary["evidence"] == 0
+    assert validation.record_summary["reports"] == 0
+    assert validation.record_summary["test_plans"] == 0
 
 
 @pytest.mark.parametrize("bad", ["", " ", "../v1", "v/1", "/tmp/v1", "v..1"])

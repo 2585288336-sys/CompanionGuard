@@ -257,6 +257,15 @@ def _validate_csv(path: Path) -> int:
     return max(0, len(rows) - 1) if rows else 0
 
 
+def _validate_test_plans(path: Path) -> int:
+    value = _read_json(path, "test_plans.json")
+    if not isinstance(value, list):
+        raise PublishingError("test_plans.json must contain a list of plan records")
+    if any(not isinstance(plan, dict) for plan in value):
+        raise PublishingError("test_plans.json plan records must be objects")
+    return len(value)
+
+
 def _validate_source_location(source: Path) -> None:
     if any(part == "runtime_sessions" for part in source.resolve().parts):
         raise PublishingError("A runtime Workspace cannot be an AUTHORITATIVE source")
@@ -297,8 +306,9 @@ def validate_authoritative_source(
         "collection_queues": _validate_jsonl(source / "collection_queues.jsonl"),
         "human_adjudication": _validate_csv(source / "human_adjudication.csv"),
         "final_results": _validate_csv(source / "final_results.csv"),
-        "evidence": sum(1 for path in source.rglob("evidence/*") if path.is_file() and not path.is_symlink()),
-        "reports": sum(1 for path in source.rglob("reports/*") if path.is_file() and not path.is_symlink()),
+        "test_plans": _validate_test_plans(source / "test_plans.json"),
+        "evidence": sum(1 for relative in files if relative.startswith("evidence/")),
+        "reports": sum(1 for relative in files if relative.startswith("reports/")),
         "layer2": _validate_jsonl(source / "layer2_product_safeguards.jsonl") if "layer2_product_safeguards.jsonl" in files else 0,
         "layer3": _validate_jsonl(source / "layer3_public_evidence.jsonl") if "layer3_public_evidence.jsonl" in files else 0,
     }
