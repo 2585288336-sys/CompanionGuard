@@ -23,6 +23,24 @@ The recovery tag and archive branch both target the Golden Recovery Commit.
 The tag is a lightweight tag. The recovery commit is also the production
 `main` target recorded during this audit.
 
+## 1.1 Current stable production recovery point (2026-09-19)
+
+The currently verified production application is protected separately from
+the previous Golden Recovery Point:
+
+| Item | Value |
+|---|---|
+| Stable production commit | `23c6e135625d4e63b4e4bebaa1725f9a9db2fb46` |
+| Stable tag | `production-stable-20260919` |
+| Archive branch | `archive/production-stable-20260919` |
+| Deployment snapshot | `2026.09.19-01` |
+| Deployment snapshot hash | `94fd426bdfe6c0f6b3096d6eace5473c010b982f86391f177cd9ad2d4300435b` |
+
+The previous protected recovery point remains available at
+`competition-production-stable-20260917` and
+`archive/competition-production-stable-20260917`, both targeting
+`2df5d7b51c78b2bd2d51f01d83e45b81a9166bf5`.
+
 ## 2. Production deployment identity
 
 | Item | Value |
