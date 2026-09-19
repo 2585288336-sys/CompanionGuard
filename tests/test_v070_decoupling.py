@@ -11,14 +11,18 @@ from companionguard_llm.profiles import LLMProfile, ROLE_NAMES
 from companionguard_llm.search import DisabledSearchProvider, SearchNotConfigured
 
 
-def test_four_llm_roles_are_independent_profiles():
-    assert set(ROLE_NAMES) == {"judge", "dialogue_report", "evidence", "integrated_report", "grounding_validator", "academic_polish"}
-    profiles = [
-        LLMProfile(role=role, provider_type="openai_chat_compatible", provider_name=f"P-{role}", model=f"M-{role}", api_key="secret", base_url="https://example.invalid/v1")
+def test_llm_roles_are_independent_profiles():
+    expected_roles = {"judge", "dialogue_report", "evidence", "integrated_report", "grounding_validator", "academic_polish"}
+    assert set(ROLE_NAMES) == expected_roles
+    profiles = {
+        role: LLMProfile(role=role, provider_type="openai_chat_compatible", provider_name=f"P-{role}", model=f"M-{role}", api_key="secret", base_url="https://example.invalid/v1")
         for role in ROLE_NAMES
-    ]
-    assert len({p.model for p in profiles}) == 4
-    assert all("api_key" not in p.public_metadata() for p in profiles)
+    }
+    assert set(profiles) == expected_roles
+    assert len({profile.model for profile in profiles.values()}) == len(expected_roles)
+    assert len({id(profile) for profile in profiles.values()}) == len(expected_roles)
+    assert all(profile.role == role for role, profile in profiles.items())
+    assert all("api_key" not in profile.public_metadata() for profile in profiles.values())
 
 
 def test_provider_registry_supports_multiple_protocols_without_business_logic_changes():
