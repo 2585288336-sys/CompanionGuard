@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import json
 import re
 import shutil
@@ -134,6 +135,28 @@ def _project_paths_at_root(project_id: str, root: Path) -> ProjectPaths:
     )
 
 
+def deduplicate_projects(projects: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return one canonical entry per project_id without deleting any source."""
+
+    by_id: dict[str, dict[str, Any]] = {}
+    for project in projects:
+        project_id = str(project.get("project_id") or "").strip()
+        if not project_id:
+            continue
+        existing = by_id.get(project_id)
+        if existing is None:
+            by_id[project_id] = project
+            continue
+        # If discovery is later extended to include multiple scopes, expose the
+        # Published identity before a Workspace copy.  The source files remain
+        # untouched; this only chooses the selector/listing representative.
+        existing_scope = str(existing.get("scope") or existing.get("source_scope") or "").upper()
+        candidate_scope = str(project.get("scope") or project.get("source_scope") or "").upper()
+        if existing_scope != "PUBLISHED" and candidate_scope == "PUBLISHED":
+            by_id[project_id] = project
+    return sorted(by_id.values(), key=lambda row: row.get("created_at", ""), reverse=True)
+
+
 def list_projects() -> list[dict[str, Any]]:
     if not PROJECTS_DIR.exists():
         return []
@@ -145,7 +168,68 @@ def list_projects() -> list[dict[str, Any]]:
             continue
         if isinstance(obj, dict):
             rows.append(obj)
-    return sorted(rows, key=lambda r: r.get("created_at", ""), reverse=True)
+    return deduplicate_projects(rows)
+
+
+def _count_jsonl_records(path: Path) -> int:
+    if not path.is_file():
+        return 0
+    count = 0
+    try:
+        with path.open(encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    value = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(value, dict):
+                    count += 1
+    except (OSError, UnicodeDecodeError):
+        return 0
+    return count
+
+
+def _count_csv_records(path: Path) -> int:
+    if not path.is_file():
+        return 0
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.reader(handle))
+    except (OSError, UnicodeDecodeError, csv.Error):
+        return 0
+    return max(0, len(rows) - 1) if rows else 0
+
+
+def _count_plan_records(path: Path) -> int:
+    if not path.is_file():
+        return 0
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return 0
+    return sum(1 for item in value if isinstance(item, dict)) if isinstance(value, list) else 0
+
+
+def _count_regular_files(root: Path) -> int:
+    if not root.is_dir() or root.is_symlink():
+        return 0
+    return sum(1 for path in root.rglob("*") if path.is_file() and not path.is_symlink())
+
+
+def project_data_snapshot(paths: ProjectPaths) -> dict[str, int]:
+    """Count read-only project artifacts from the supplied active root."""
+
+    return {
+        "raw_cases": _count_jsonl_records(paths.raw_cases),
+        "judge_results": _count_jsonl_records(paths.judge_results),
+        "human_review": _count_csv_records(paths.adjudication),
+        "final_results": _count_csv_records(paths.final_results),
+        "test_plans": _count_plan_records(paths.test_plans),
+        "evidence": _count_regular_files(paths.root / "evidence"),
+        "reports": _count_regular_files(paths.reports),
+    }
 
 
 def get_project(project_id: str) -> dict[str, Any] | None:
