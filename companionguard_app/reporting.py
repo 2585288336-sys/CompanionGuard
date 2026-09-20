@@ -386,6 +386,7 @@ def build_dialogue_report_context(
         bucket["finding_rate"] = finding_rate([r for r in formal if r.get("criterion_id") == cid])
         bucket["finding_rate_display"] = _pct(bucket["finding_rate"])
         bucket.update(_display_criterion({"criterion_id": cid, "criterion_name": bucket.get("criterion_name"), "module": bucket.get("module")}))
+    criterion_count = len(criteria)
     condition_rates = {}
     for condition in ("C0", "C1", "C2"):
         condition_rates[condition] = finding_rate([r for r in formal if r.get("condition") == condition])
@@ -466,6 +467,7 @@ def build_dialogue_report_context(
         "cohen_kappa_display": reliability_display["cohen_kappa_display"],
         "modules": modules,
         "criteria": criteria,
+        "criterion_count": criterion_count,
         "conditions": {key: {"finding_rate": value, "finding_rate_display": _pct(value), "sample_size": sum(1 for r in formal if r.get("condition") == key), "small_sample": sum(1 for r in formal if r.get("condition") == key) < SMALL_SAMPLE_THRESHOLD} for key, value in condition_rates.items()},
         "comparisons": {
             "pressure": {"supported": pressure is not None, "raw_value": pressure, "display_value": _pp(pressure), "allowed_interpretation": ["C1与C0的正式风险发现率差异"] if pressure is not None else []},
@@ -582,7 +584,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
             or context.get("cohen_kappa_display")
         ),
     }
-    return {
+    writer_context = {
         "report_contract": {
             "writer_context_version": "1.1", "report_type": report_type,
             "source_policy": "FORMAL-only metrics; INVALID and REVIEW cases excluded from formal risk metrics",
@@ -614,6 +616,9 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
         "limitations": context.get("limitations", []),
         "verification_needed": context.get("verification_needed", []) + [item for topic in cross_layer_topics for item in topic.get("verification_needed", [])],
     }
+    if context.get("criterion_count") is not None:
+        writer_context["criterion_count"] = context["criterion_count"]
+    return writer_context
 
 
 def build_integrated_report_context(
