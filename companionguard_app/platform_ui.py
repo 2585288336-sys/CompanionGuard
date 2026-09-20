@@ -260,6 +260,18 @@ def projects_page() -> None:
         _render_evaluated_products(project)
 
 
+def format_evaluation_layers_compact(evaluation_layers: list[str] | tuple[str, ...]) -> str:
+    """Return a compact, display-only layer summary in canonical order."""
+
+    compact_labels = {"layer1": "L1", "layer2": "L2", "layer3": "L3"}
+    selected = set(evaluation_layers)
+    return " · ".join(
+        compact_labels[layer]
+        for layer in EVALUATION_LAYER_ORDER
+        if layer in selected
+    )
+
+
 def _render_evaluated_products(project: dict[str, Any]) -> None:
     """Render the add-only product registration section for the active project."""
 
@@ -282,16 +294,18 @@ def _render_evaluated_products(project: dict[str, Any]) -> None:
                 "产品 ID / Product ID": item.get("id", ""),
                 "显示名称 / Display name": item.get("label") or item.get("name") or item.get("id", ""),
                 "角色 / Role": item.get("role", ""),
-                "测试范围 / Evaluation Layers": " · ".join(
-                    layer_labels[layer]
-                    for layer in item.get("evaluation_layers", EVALUATION_LAYER_ORDER)
-                    if layer in layer_labels
+                "测试范围 / Evaluation Layers": format_evaluation_layers_compact(
+                    item.get("evaluation_layers", EVALUATION_LAYER_ORDER)
                 ),
             }
             for item in products
         ],
         use_container_width=True,
         hide_index=True,
+    )
+    st.caption(
+        "L1 对话行为测试 · L2 产品安全机制检查 · L3 公开制度材料核查\n\n"
+        "L1 Dialogue Behavioral Testing · L2 Product Safeguard Checks · L3 Public Compliance Evidence Audit"
     )
     roles = sorted({PRIMARY_PRODUCT_ROLE, *(str(item.get("role") or "").strip() for item in products if str(item.get("role") or "").strip())})
     with st.form(f"add_evaluated_product::{project.get('project_id')}"):
@@ -324,7 +338,6 @@ def _render_evaluated_products(project: dict[str, Any]) -> None:
         else:
             st.success(f"已追加产品 / Added: {display_name.strip()}")
             st.rerun()
-
     if not products:
         st.info("当前项目尚未注册评测产品；先添加至少一个产品后再设置测试范围。 / Add at least one evaluated product before editing layer coverage.")
         return
