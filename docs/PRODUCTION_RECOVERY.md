@@ -41,6 +41,22 @@ The previous protected recovery point remains available at
 `archive/competition-production-stable-20260917`, both targeting
 `2df5d7b51c78b2bd2d51f01d83e45b81a9166bf5`.
 
+## 1.2 Current verified production recovery point (2026-09-20)
+
+The manually verified production application commit is protected by a
+dedicated stable tag and archive branch:
+
+| Item | Value |
+|---|---|
+| Verified production application commit | `d2e6894a5732c34894fa9cc1433edb76bc440574` |
+| Stable tag | `production-stable-20260920` |
+| Archive branch | `archive/production-stable-20260920` |
+| Deployment data snapshot | `2026.09.19-01` |
+| Deployment snapshot hash | `94fd426bdfe6c0f6b3096d6eace5473c010b982f86391f177cd9ad2d4300435b` |
+
+This is an application recovery point, not a new benchmark snapshot. Previous
+recovery points remain retained.
+
 ## 2. Production deployment identity
 
 | Item | Value |
