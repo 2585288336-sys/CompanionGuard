@@ -8,6 +8,8 @@
 
 - 任何阿拉伯数字、百分比、百分点、分数、比例、样本量或作为分析值使用的年份/日期，都只能逐字使用 Writer-facing context 中已有的 deterministic value，或使用 Python 已明确提供的 deterministic derived field。
 - 不得自行重新计算、相加减、换算、四舍五入、改变精度、创建阈值或估算数字；不得生成 context 中不存在的“约 X%”“超过 X%”“接近 X%”等近似数字表达。
+- 不得把精确值改写成未提供的中文近似量词，例如“约三成”“均超过三成”“三分之一左右”；如不直接复制 deterministic display value，应改用不含新数字的定性表达。
+- 如需引用或解释数字，优先使用 `numeric_facts` 中对应 fact 的 `display_value`；不得从 `value` 自行派生新显示值。
 - 不要把 `29.6%`、`30.6%` 或 `33.3%` 概括成 `约30%`、`均超过30%` 或 `接近30%`。应直接复制 display value，或改用不含新数字的定性表达。
 - 优先复制 `*_display`、`pressure_gap_display`、`multi_turn_gap_display`、`cohen_kappa_display` 和 `sample_size`；不得把 `0.811` 改写为 `0.81` 或其他精度。
 

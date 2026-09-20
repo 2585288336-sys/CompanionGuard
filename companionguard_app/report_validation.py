@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .numeric_tokens import allowed_numeric_token_inventory, scan_numeric_tokens
 from .report_schema import CONTEXT_SCHEMA_VERSION, REPORT_TYPES, validate_context_shape
 
 FORBIDDEN_PHRASES = {
@@ -56,12 +57,11 @@ def _context_strings(value: Any) -> list[str]:
 
 
 def _allowed_numbers(context: dict[str, Any]) -> set[str]:
-    values: set[str] = set()
-    for text in _context_strings(context):
-        for match in re.findall(r"(?<![A-Za-z])\d+(?:\.\d+)?(?:%|个百分点| pp)?", text):
-            values.add(match)
-            values.add(re.match(r"\d+(?:\.\d+)?", match).group(0))
-    return values
+    # Validate against the same deterministic projection that the Writer sees;
+    # raw source-only fields cannot silently authorize a new report literal.
+    from .reporting import build_writer_facing_context
+
+    return allowed_numeric_token_inventory(build_writer_facing_context(context))
 
 
 def _number_is_context_supported(literal: str, allowed: set[str]) -> bool:
@@ -75,19 +75,34 @@ def _numeric_sentence_excerpt(report_text: str, literal: str) -> str:
     return report_text.strip()
 
 
-def _report_numeric_literals(report_text: str) -> list[str]:
-    """Return report numbers while ignoring headings and identifier tokens."""
+def _prepared_report_numeric_text(report_text: str) -> str:
     lines = []
     for line in report_text.splitlines():
         # Section numbering such as "2.1" is structure, not an analytical claim.
-        if re.match(r"^\s*(?:#{1,6}\s*)?\d+(?:\.\d+)*\s+", line):
+        if re.match(r"^\s*(?:#{1,6}\s*)?\d+(?:\.\d+)*(?:[.)])?\s+", line):
             continue
         lines.append(line)
     text = "\n".join(lines)
     # IDs such as HR-02, L3-04, XL-CRISIS-001 and criterion/module keys are
     # identifiers, not numeric claims that need to appear in report_context.
     text = re.sub(r"\b[A-Za-z][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+\b", "", text)
-    return re.findall(r"(?<![A-Za-z0-9_.-])\d+(?:\.\d+)?(?:%|个百分点| pp)?(?![A-Za-z0-9_.-])", text)
+    return text
+
+
+def _report_numeric_tokens(report_text: str):
+    return scan_numeric_tokens(_prepared_report_numeric_text(report_text))
+
+
+def _numeric_sentence_excerpt_at(report_text: str, start: int) -> str:
+    for match in re.finditer(r"[^\n。！？!?]*(?:[。！？!?]|$)", report_text):
+        if match.start() <= start <= match.end():
+            return match.group(0).strip()
+    return report_text.strip()
+
+
+def _report_numeric_literals(report_text: str) -> list[str]:
+    """Return report numbers while ignoring headings and identifier tokens."""
+    return [token.normalized for token in _report_numeric_tokens(report_text)]
 
 
 def _quoted_spans(sentence: str) -> list[tuple[int, int]]:
@@ -256,12 +271,13 @@ def validate_report_hard(*, report_text: str, context: dict[str, Any], report_ty
 
     allowed = _allowed_numbers(context)
     numeric_text = re.sub(r"Layer\s+[123]|0[–-]100", "", report_text)
-    for literal in _report_numeric_literals(numeric_text):
+    for token in _report_numeric_tokens(numeric_text):
+        literal = token.normalized
         if not _number_is_context_supported(literal, allowed):
             issues.append({
                 "issue_type": "NUMBER_MISMATCH",
                 "value": literal,
-                "sentence_excerpt": _numeric_sentence_excerpt(report_text, literal),
+                "sentence_excerpt": _numeric_sentence_excerpt_at(numeric_text, token.start),
                 "reason": "number is not present in report_context with exact display provenance",
             })
     if re.search(r"(?:增加|减少|高于|低于)\s*\d+(?:\.\d+)?\s*个百分点", report_text):

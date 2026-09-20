@@ -28,7 +28,7 @@ from .projects import (
 from .reliability import LABELS, reliability_metrics
 from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
 from .report_pipeline import report_artifact_dir, write_report_artifacts
-from .service import criteria_index, run_documentary_assist, run_grounding_validator, run_report_writer
+from .service import criteria_index, run_documentary_assist, run_grounding_validator, run_report_targeted_repair, run_report_writer
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
 from .runtime_scope import RuntimeScope
@@ -714,6 +714,8 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
                     reports_dir=paths.reports, draft_text=writer_result["text"],
                     writer_status=writer_result["status"], writer_metadata=writer_result.get("attempts", [{}])[-1] if writer_result.get("attempts") else {}, scope=runtime_context.scope,
                     workspace_root=paths.root,
+                    hard_repair=lambda request: run_report_targeted_repair(repair_request=request, report_type="dialogue", llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=paths.root),
+                    grounding_repair=lambda request: run_report_targeted_repair(repair_request=request, report_type="dialogue", llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=paths.root),
                 )
                 if result["manifest"]["validation_status"] != "PASS":
                     st.error(f"报告生成失败：{result['manifest'].get('latest_attempt_status')}。未覆盖上一份成功报告。")
@@ -771,6 +773,8 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
                     writer_status=writer_result["status"], writer_metadata=writer_result.get("attempts", [{}])[-1] if writer_result.get("attempts") else {},
                     grounding_validator=lambda draft, report_context: run_grounding_validator(draft_report=draft, report_context=report_context, llm_profile=grounding_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root), scope=runtime_context.scope,
                     workspace_root=paths.root,
+                    hard_repair=lambda request: run_report_targeted_repair(repair_request=request, report_type="integrated", llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=paths.root),
+                    grounding_repair=lambda request: run_report_targeted_repair(repair_request=request, report_type="integrated", llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=paths.root),
                 )
                 if result["manifest"]["validation_status"] != "PASS":
                     st.error(f"报告生成失败：{result['manifest'].get('latest_attempt_status')}。未覆盖上一份成功报告。")

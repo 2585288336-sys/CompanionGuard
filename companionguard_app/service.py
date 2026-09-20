@@ -433,6 +433,66 @@ def run_report_writer(
     return result if return_metadata else result["text"]
 
 
+def run_report_targeted_repair(
+    *, repair_request: dict[str, Any], report_type: str, llm_profile: LLMProfile,
+    session_id: str | None = None, project_id: str | None = None,
+    scope: RuntimeScope | str | None = None, workspace_root: Path | None = None,
+    data_root: Path | None = None,
+) -> str:
+    """Run one explicitly bounded report repair using the existing Writer profile."""
+    if report_type not in {"dialogue", "integrated"}:
+        raise ValueError("Unsupported report repair type")
+    role = f"{report_type}_report"
+    prompt_path = PROMPTS_DIR / "reporting" / f"{role}_v1.1.md"
+    style_guide = (PROMPTS_DIR / "reporting" / "chinese_style_guide.md").read_text(encoding="utf-8")
+    skill_path = PROMPTS_DIR.parent / "skills" / "companionguard-chinese-reporting" / "SKILL.md"
+    system_prompt = (
+        skill_path.read_text(encoding="utf-8")
+        + "\n\n--- STYLE GUIDE ---\n\n"
+        + style_guide
+        + "\n\n--- ROLE PROMPT v1.1 ---\n\n"
+        + prompt_path.read_text(encoding="utf-8")
+        + "\n\n--- BOUNDED REPAIR CONTRACT ---\n\n"
+        + "只修复 repair_request.issues 指出的句子；保留所有未指出的正文。只能使用 repair_request.deterministic_context 中的事实和 numeric_facts；不得计算、四舍五入、创造阈值、改变精度或补写缺失证据。只输出修复后的完整报告正文，不输出解释。"
+    )
+    effective_profile = _effective_report_profile(llm_profile, role=role)
+    output_limit = _configured_int(role, "OUTPUT_LIMIT", REPORT_ROLE_DEFAULTS[role][1])
+    usage_path = _workspace_usage_path(scope=scope, workspace_root=workspace_root, data_root=data_root)
+    _before_call(effective_profile, session_id=session_id)
+    client = make_client(effective_profile)
+    text, usage = client.generate_text(
+        system_prompt=system_prompt,
+        payload={"repair_request": repair_request},
+        max_output_tokens=output_limit,
+    )
+    meta = _response_meta(usage)
+    diagnostics = report_profile_diagnostics(effective_profile, requested_output_limit=output_limit)
+    _after_call(
+        effective_profile,
+        session_id=session_id,
+        project_id=project_id,
+        usage=usage,
+        project_usage_path=usage_path,
+        observability={
+            "report_pipeline_version": REPORT_PIPELINE_VERSION,
+            "report_type": report_type,
+            "operation": "targeted_repair",
+            "repair_kind": repair_request.get("repair_kind"),
+            "adapter_type": diagnostics["adapter_type"],
+            "effective_provider": diagnostics["provider_name"],
+            "effective_model": diagnostics["model"],
+            "reasoning_effort": effective_profile.reasoning_effort,
+            "requested_output_limit": output_limit,
+            "prompt_tokens": meta.get("prompt_tokens") or meta.get("input_tokens"),
+            "completion_tokens": meta.get("completion_tokens"),
+            "output_tokens": meta.get("output_tokens"),
+            "finish_reason": meta.get("finish_reason"),
+            "visible_output_char_count": len((text or "").strip()),
+        },
+    )
+    return (text or "").strip() + ("\n" if text and text.strip() else "")
+
+
 def run_grounding_validator(
     *, draft_report: str, report_context: dict[str, Any], llm_profile: LLMProfile,
     session_id: str | None = None, project_id: str | None = None,

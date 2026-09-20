@@ -8,7 +8,7 @@ GROUNDING_PROMPT_VERSION = "1.0"
 POLISH_PROMPT_VERSION = "1.0"
 SMALL_SAMPLE_THRESHOLD = 5
 REPORT_TYPES = {"dialogue", "integrated"}
-REPORT_PIPELINE_VERSION = "phase7e-live-path"
+REPORT_PIPELINE_VERSION = "report-pipeline-v2"
 
 
 def validate_context_shape(context: dict[str, Any]) -> list[str]:
@@ -23,9 +23,10 @@ def validate_context_shape(context: dict[str, Any]) -> list[str]:
     return errors
 
 
-def report_manifest(*, report_type: str, project: dict[str, Any], validation_status: str, grounding_status: str = "NOT_RUN", polish_enabled: bool = False, writer_prompt_version: str = WRITER_PROMPT_VERSION, latest_attempt_status: str = "UNKNOWN", last_successful_at: str | None = None) -> dict[str, Any]:
+def report_manifest(*, report_type: str, project: dict[str, Any], validation_status: str, grounding_status: str = "NOT_RUN", polish_enabled: bool = False, writer_prompt_version: str = WRITER_PROMPT_VERSION, latest_attempt_status: str = "UNKNOWN", last_successful_at: str | None = None, writer_attempts: int = 0, hard_validation_attempts: int = 0, targeted_repair_attempted: bool = False, grounding_attempts: int = 0, final_status: str | None = None) -> dict[str, Any]:
     return {
         "report_pipeline_version": REPORT_PIPELINE_VERSION,
+        "pipeline_version": REPORT_PIPELINE_VERSION,
         "report_type": report_type,
         "project_id": project.get("project_id"),
         "context_schema_version": CONTEXT_SCHEMA_VERSION,
@@ -35,6 +36,11 @@ def report_manifest(*, report_type: str, project: dict[str, Any], validation_sta
         "validation_status": validation_status,
         "grounding_status": grounding_status,
         "latest_attempt_status": latest_attempt_status,
+        "writer_attempts": writer_attempts,
+        "hard_validation_attempts": hard_validation_attempts,
+        "targeted_repair_attempted": bool(targeted_repair_attempted),
+        "grounding_attempts": grounding_attempts,
+        "final_status": final_status or validation_status,
         "last_successful_at": last_successful_at,
         "academic_polish_enabled": bool(polish_enabled),
         "source_policy": "FORMAL-only metrics; raw source records are read-only",

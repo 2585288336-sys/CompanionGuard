@@ -105,6 +105,15 @@ def test_numeric_contract_is_explicit_in_writer_context():
         "preferred_display_fields": ["*_display", "sample_size"],
     }
     assert writer["representative_finding_count"] == 10
+    criterion_fact = next(item for item in writer["numeric_facts"] if item["fact_id"] == "criterion_count")
+    assert criterion_fact == {
+        "fact_id": "criterion_count",
+        "source_path": "criterion_count",
+        "value": 22,
+        "display_value": "22",
+        "fact_type": "count",
+    }
+    assert all({"fact_id", "source_path", "value", "display_value", "fact_type"}.issubset(item) for item in writer["numeric_facts"])
 
 
 def test_dialogue_and_integrated_prompts_state_numeric_contract():
@@ -121,6 +130,8 @@ def test_dialogue_and_integrated_prompts_state_numeric_contract():
         prompt = (ROOT / "prompts" / "reporting" / name).read_text(encoding="utf-8")
         for phrase in required:
             assert phrase in prompt, (name, phrase)
+        assert "约三成" in prompt
+        assert "numeric_facts" in prompt
 
 
 def test_three_production_30_percent_literals_are_three_strict_failures():

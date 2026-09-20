@@ -22,6 +22,52 @@ NUMERIC_PROVENANCE_CONTRACT = {
 }
 
 
+def build_numeric_fact_registry(context: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expose deterministic numeric facts without asking the Writer to derive them."""
+    facts: list[dict[str, Any]] = []
+
+    def add(fact_id: str, source_path: str, value: Any, display_value: Any, fact_type: str) -> None:
+        if value is None and display_value is None:
+            return
+        facts.append({
+            "fact_id": fact_id,
+            "source_path": source_path,
+            "value": value,
+            "display_value": display_value if display_value is not None else str(value),
+            "fact_type": fact_type,
+        })
+
+    for key, value in (context.get("coverage") or {}).items():
+        if key.endswith("_count") and isinstance(value, (int, float)):
+            add(f"coverage.{key}", f"coverage.{key}", value, str(value), "count")
+    add("overall.macro_finding_rate", "overall.macro_finding_rate", (context.get("overall") or {}).get("macro_finding_rate"), (context.get("overall") or {}).get("macro_finding_rate_display"), "percentage")
+    for name, row in (context.get("products") or {}).items():
+        add(f"products.{name}.formal_cases", f"products.{name}.formal_cases", row.get("formal_cases"), str(row.get("formal_cases")) if row.get("formal_cases") is not None else None, "count")
+        add(f"products.{name}.finding_rate", f"products.{name}.finding_rate", row.get("finding_rate"), row.get("finding_rate_display"), "percentage")
+    for name, value in (context.get("modules") or {}).items():
+        add(f"modules.{name}.finding_rate", f"module_finding_rates_display.{name}", value, (context.get("module_finding_rates_display") or {}).get(name), "percentage")
+    for name, value in (context.get("module_criterion_counts") or {}).items():
+        add(f"modules.{name}.criterion_count", f"module_criterion_counts.{name}", value, str(value), "count")
+    for name, row in (context.get("criteria") or {}).items():
+        add(f"criteria.{name}.formal_cases", f"criteria.{name}.formal_cases", row.get("formal_cases"), str(row.get("formal_cases")) if row.get("formal_cases") is not None else None, "count")
+        add(f"criteria.{name}.finding_rate", f"criteria.{name}.finding_rate", row.get("finding_rate"), row.get("finding_rate_display"), "percentage")
+    for name, row in (context.get("conditions") or {}).items():
+        add(f"conditions.{name}.sample_size", f"conditions.{name}.sample_size", row.get("sample_size"), str(row.get("sample_size")) if row.get("sample_size") is not None else None, "count")
+        add(f"conditions.{name}.finding_rate", f"conditions.{name}.finding_rate", row.get("finding_rate"), row.get("finding_rate_display"), "percentage")
+    for name, row in (context.get("comparisons") or {}).items():
+        add(f"comparisons.{name}", f"comparisons.{name}.raw_value", row.get("raw_value"), row.get("display_value"), "pp")
+        add(f"comparisons.{name}.percentage_points", f"comparisons.{name}.percentage_points_display", None, row.get("percentage_points_display"), "pp")
+        add(f"comparisons.{name}.absolute_percentage_points", f"comparisons.{name}.absolute_percentage_points_display", None, row.get("absolute_percentage_points_display"), "pp")
+    reliability = context.get("reliability") or {}
+    display_reliability = context.get("reliability_display") or {}
+    add("reliability.n", "reliability.n", reliability.get("n"), str(reliability.get("n")) if reliability.get("n") is not None else None, "count")
+    add("reliability.human_no_finding_count", "reliability.human_no_finding_count", reliability.get("human_no_finding_count"), display_reliability.get("human_no_finding_count_display"), "count")
+    add("reliability.cohen_kappa", "reliability.cohen_kappa", reliability.get("cohen_kappa"), display_reliability.get("cohen_kappa_display") or context.get("cohen_kappa_display"), "ratio")
+    add("criterion_count", "criterion_count", context.get("criterion_count"), str(context.get("criterion_count")) if context.get("criterion_count") is not None else None, "count")
+    add("representative_finding_count", "representative_finding_count", context.get("representative_finding_count"), str(context.get("representative_finding_count")) if context.get("representative_finding_count") is not None else None, "count")
+    return facts
+
+
 COVERAGE_STATUS_NOT_IN_SCOPE = "NOT_IN_SCOPE"
 COVERAGE_STATUS_IN_SCOPE_NO_DATA = "IN_SCOPE_NO_DATA"
 COVERAGE_STATUS_IN_SCOPE_WITH_DATA = "IN_SCOPE_WITH_DATA"
@@ -94,6 +140,14 @@ def _pct(v: float | None) -> str:
 
 def _pp(v: float | None) -> str:
     return "N/A" if v is None else f"{v * 100:+.1f} pp"
+
+
+def _pp_zh(v: float | None) -> str:
+    return "N/A" if v is None else f"{v * 100:+.1f} 个百分点"
+
+
+def _pp_zh_absolute(v: float | None) -> str:
+    return "N/A" if v is None else f"{abs(v) * 100:.1f} 个百分点"
 
 
 def _escape(value: Any) -> str:
@@ -397,6 +451,7 @@ def build_dialogue_report_context(
         bucket["finding_rate_display"] = _pct(bucket["finding_rate"])
         bucket.update(_display_criterion({"criterion_id": cid, "criterion_name": bucket.get("criterion_name"), "module": bucket.get("module")}))
     criterion_count = len(criteria)
+    module_criterion_counts = Counter(str(row.get("module") or "") for row in formal if row.get("criterion_id") and row.get("module"))
     condition_rates = {}
     for condition in ("C0", "C1", "C2"):
         condition_rates[condition] = finding_rate([r for r in formal if r.get("condition") == condition])
@@ -476,12 +531,13 @@ def build_dialogue_report_context(
         "reliability_display": reliability_display,
         "cohen_kappa_display": reliability_display["cohen_kappa_display"],
         "modules": modules,
+        "module_criterion_counts": dict(module_criterion_counts),
         "criteria": criteria,
         "criterion_count": criterion_count,
         "conditions": {key: {"finding_rate": value, "finding_rate_display": _pct(value), "sample_size": sum(1 for r in formal if r.get("condition") == key), "small_sample": sum(1 for r in formal if r.get("condition") == key) < SMALL_SAMPLE_THRESHOLD} for key, value in condition_rates.items()},
         "comparisons": {
-            "pressure": {"supported": pressure is not None, "raw_value": pressure, "display_value": _pp(pressure), "allowed_interpretation": ["C1与C0的正式风险发现率差异"] if pressure is not None else []},
-            "multi_turn": {"supported": multi_turn is not None, "raw_value": multi_turn, "display_value": _pp(multi_turn), "allowed_interpretation": ["C2与C0的正式风险发现率差异"] if multi_turn is not None else []},
+            "pressure": {"supported": pressure is not None, "raw_value": pressure, "display_value": _pp(pressure), "percentage_points_display": _pp_zh(pressure), "absolute_percentage_points_display": _pp_zh_absolute(pressure), "allowed_interpretation": ["C1与C0的正式风险发现率差异"] if pressure is not None else []},
+            "multi_turn": {"supported": multi_turn is not None, "raw_value": multi_turn, "display_value": _pp(multi_turn), "percentage_points_display": _pp_zh(multi_turn), "absolute_percentage_points_display": _pp_zh_absolute(multi_turn), "allowed_interpretation": ["C2与C0的正式风险发现率差异"] if multi_turn is not None else []},
         },
         "representative_findings": representative,
         "representative_finding_count": len(representative),
@@ -616,7 +672,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
         "dialogue_analysis": {
             "project": context.get("project", {}), "overall": writer_overall, "products": writer_products,
             "product_layer_coverage": context.get("product_layer_coverage", []),
-            "modules": [{"module_key": key, "display_name_zh": _module_display_name(key), "finding_rate_display": _pct(value)} for key, value in (context.get("modules") or {}).items()],
+            "modules": [{"module_key": key, "display_name_zh": _module_display_name(key), "finding_rate_display": _pct(value), "criterion_count": (context.get("module_criterion_counts") or {}).get(key)} for key, value in (context.get("modules") or {}).items()],
             "criteria": criterion_rows,
             "conditions": {key: {"display_name_zh": {"C0": "C0｜标准条件", "C1": "C1｜压力条件", "C2": "C2｜多轮条件"}.get(key, key), **value} for key, value in writer_conditions.items()},
             "comparisons": writer_comparisons, "reliability": writer_reliability,
@@ -624,6 +680,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
         "layer2_analysis": {"records": layer2_rows, "record_count": len(layer2_rows)},
         "layer3_analysis": {"records": layer3_rows, "record_count": len(layer3_rows)},
         "cross_layer_topics": cross_layer_topics,
+        "numeric_facts": build_numeric_fact_registry(context),
         "representative_findings": context.get("representative_findings", []),
         "representative_finding_count": context.get("representative_finding_count"),
         "limitations": context.get("limitations", []),

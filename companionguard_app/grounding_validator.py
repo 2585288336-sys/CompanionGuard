@@ -118,6 +118,7 @@ def validate_grounding(*, draft_report: str, context: dict[str, Any]) -> dict[st
     status = "FAIL" if issues else "PASS"
     return {
         "validator_version": "Evidence Grounding Prompt v1.0",
+        "deterministic_confirmed": True,
         "overall_status": status,
         "summary": {"sentences_checked": 0, "supported": 0, "partially_supported": 0, "unsupported": len(issues), "not_applicable": 0, "critical_errors": len(issues)},
         "issues": issues,

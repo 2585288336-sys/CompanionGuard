@@ -254,4 +254,4 @@ def test_grounding_pass_with_zero_checked_sentences_is_failed(tmp_path):
     )
     assert result["grounding"]["overall_status"] == "FAIL"
     assert result["grounding"]["failure_type"] == "GROUNDING_ZERO_SENTENCES"
-    assert result["manifest"]["report_pipeline_version"] == "phase7e-live-path"
+    assert result["manifest"]["report_pipeline_version"] == "report-pipeline-v2"
