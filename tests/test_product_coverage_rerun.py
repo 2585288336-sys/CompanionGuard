@@ -32,7 +32,9 @@ class FakeStreamlit:
         self.coverage_layers = coverage_layers if coverage_layers is not None else ["layer1", "layer2", "layer3"]
         self.text_values = text_values or {}
         self.multiselect_calls = 0
+        self.multiselect_labels: list[list[str]] = []
         self.dataframes: list[Any] = []
+        self.captions: list[str] = []
         self.errors: list[str] = []
         self.successes: list[str] = []
         self.rerun_calls = 0
@@ -41,6 +43,7 @@ class FakeStreamlit:
         return None
 
     def caption(self, *_args, **_kwargs):
+        self.captions.append(str(_args[0]) if _args else "")
         return None
 
     def dataframe(self, data, **_kwargs):
@@ -55,8 +58,10 @@ class FakeStreamlit:
     def selectbox(self, _label, options, **_kwargs):
         return options[0]
 
-    def multiselect(self, _label, _options, default=None, **_kwargs):
+    def multiselect(self, _label, _options, default=None, format_func=None, **_kwargs):
         self.multiselect_calls += 1
+        if format_func is not None:
+            self.multiselect_labels.append([format_func(option) for option in _options])
         if self.submitted:
             return list(self.add_layers)
         if self.save_coverage and self.multiselect_calls == 2:
@@ -124,9 +129,16 @@ def test_published_browsing_renders_coverage_without_rerun_or_workspace(monkeypa
     assert fake.errors == []
     assert fake.dataframes
     rows = fake.dataframes[0]
-    assert all("Layer 1" in row["测试范围 / Evaluation Layers"] for row in rows)
-    assert all("Layer 2" in row["测试范围 / Evaluation Layers"] for row in rows)
-    assert all("Layer 3" in row["测试范围 / Evaluation Layers"] for row in rows)
+    assert all(row["测试范围 / Evaluation Layers"] == "L1 · L2 · L3" for row in rows)
+    assert any("L1 对话行为测试" in caption and "L3 公开制度材料核查" in caption for caption in fake.captions)
+    assert all(
+        labels == [
+            "Layer 1｜对话行为测试 / Dialogue Behavioral Testing",
+            "Layer 2｜产品安全机制检查 / Product Safeguard Checks",
+            "Layer 3｜公开制度材料核查 / Public Compliance Evidence Audit",
+        ]
+        for labels in fake.multiselect_labels
+    )
     assert fake.multiselect_calls == 2
 
 
