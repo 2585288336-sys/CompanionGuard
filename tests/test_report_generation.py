@@ -122,7 +122,7 @@ FINDING 不等于违法或不合规。
         self.assertIn("CompanionGuard Chinese Regulatory Research Writing Skill v1.1", captured["prompt"])
         self.assertIn("Integrated Report Writer System Prompt v1.1", captured["prompt"])
         self.assertEqual(set(captured["payload"]["report_context"]), {
-            "report_contract", "coverage", "key_findings", "dialogue_analysis", "layer2_analysis",
+            "report_contract", "coverage", "product_layer_coverage", "key_findings", "dialogue_analysis", "layer2_analysis",
             "layer3_analysis", "cross_layer_topics", "representative_findings", "limitations", "verification_needed",
         })
 

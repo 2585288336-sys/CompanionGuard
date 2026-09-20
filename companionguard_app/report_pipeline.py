@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .grounding_validator import validate_grounding
+from .audits import load_jsonl
 from .report_schema import report_manifest
 from .report_validation import validate_report_hard
 from .reporting import build_dialogue_report_context, build_integrated_report_context, build_writer_facing_context
@@ -22,7 +23,12 @@ def _validator_passes(result: dict[str, Any]) -> bool:
 
 def build_report_context(*, report_type: str, project: dict[str, Any], final_rows: list[dict[str, Any]], layer2_path: Path, layer3_path: Path) -> dict[str, Any]:
     if report_type == "dialogue":
-        context = build_dialogue_report_context(project=project, final_rows=final_rows)
+        context = build_dialogue_report_context(
+            project=project,
+            final_rows=final_rows,
+            layer2_records=load_jsonl(layer2_path),
+            layer3_records=load_jsonl(layer3_path),
+        )
     elif report_type == "integrated":
         context = build_integrated_report_context(project=project, final_rows=final_rows, layer2_path=layer2_path, layer3_path=layer3_path)
     else:

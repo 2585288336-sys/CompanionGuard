@@ -12,4 +12,6 @@
 
 中文应自然、对象明确、长短句错落；减少抽象名词、虚化动词、英语直译腔和重复免责声明。FINDING、NO_FINDING、REVIEW 与 Case Validity 分开，正式结果以 final_label 为准。
 
+产品范围必须以 Writer-facing context 中的 `product_layer_coverage` 为准。逐产品区分 `NOT_IN_SCOPE`、`IN_SCOPE_NO_DATA` 与 `IN_SCOPE_WITH_DATA`：未纳入的层不得写成零结果，已纳入但暂无数据不得写成没有风险。只对已纳入且有可分析数据的层作结果判断，不得把覆盖状态或层间缺失推断为产品能力结论。
+
 输出完整正式报告正文，不输出写作过程、JSON或说明文字。

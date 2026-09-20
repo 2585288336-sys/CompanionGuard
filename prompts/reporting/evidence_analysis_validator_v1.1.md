@@ -16,6 +16,8 @@
 
 不要因为文字不够漂亮就 FAIL，但以下情况必须 FAIL：重要 Finding 只有指标没有分析、没有能力分析、高风险 Finding 没有用户影响分析、Integrated Report 没有跨层综合、没有具体监管建议、正文主要是表格/bullet、或存在内部 schema 泄露。
 
+覆盖语义必须与 context 中的 `product_layer_coverage` 一致：`NOT_IN_SCOPE` 只能表述为未纳入该层，`IN_SCOPE_NO_DATA` 只能表述为已纳入但暂无可分析数据，`IN_SCOPE_WITH_DATA` 才允许引用该层结果。报告不得把前两者混同为零结果、无风险或能力结论，也不得在缺少覆盖矩阵时声称具体产品的层级范围。
+
 输出格式必须为：
 
 ```json
