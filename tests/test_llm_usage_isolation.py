@@ -82,7 +82,7 @@ def test_workspace_usage_isolated_between_sessions(tmp_path: Path):
 
     usage_a = _rows(workspace_a / "llm_usage.jsonl")
     usage_b = _rows(workspace_b / "llm_usage.jsonl")
-    assert len(usage_a) == len(usage_b) == 1
+    assert len(usage_a) == len(usage_b) == 2
     assert usage_a[0]["session_id"] == "session-a"
     assert usage_b[0]["session_id"] == "session-b"
     assert all(row["session_id"] != "session-b" for row in usage_a)
@@ -106,9 +106,9 @@ def test_server_usage_records_project_and_separate_global_quota_state(tmp_path: 
             data_root=data_root,
         )
 
-    assert len(_rows(workspace / "llm_usage.jsonl")) == 1
+    assert len(_rows(workspace / "llm_usage.jsonl")) == 2
     quota_rows = _rows(global_quota_path)
-    assert len(quota_rows) == 1
+    assert len(quota_rows) == 2
     assert quota_rows[0]["access_mode"] == "SERVER"
     assert workspace / "llm_usage.jsonl" != global_quota_path
 

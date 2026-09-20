@@ -125,7 +125,8 @@ def test_integrated_report_preserves_validity_exclusion_counts(tmp_path: Path):
         layer2_path=tmp_path / "l2.jsonl",
         layer3_path=tmp_path / "l3.jsonl",
     )
-    assert "Adjudicated FORMAL cases: 1" in report
+    assert "Collected FORMAL cases: 2" in report
+    assert "Adjudicated FORMAL cases: 2" in report
     assert "FORMAL cases excluded by Case Validity: 1" in report
 
 

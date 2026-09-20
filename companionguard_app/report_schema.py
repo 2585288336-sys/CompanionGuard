@@ -22,7 +22,7 @@ def validate_context_shape(context: dict[str, Any]) -> list[str]:
     return errors
 
 
-def report_manifest(*, report_type: str, project: dict[str, Any], validation_status: str, grounding_status: str = "NOT_RUN", polish_enabled: bool = False, writer_prompt_version: str = WRITER_PROMPT_VERSION) -> dict[str, Any]:
+def report_manifest(*, report_type: str, project: dict[str, Any], validation_status: str, grounding_status: str = "NOT_RUN", polish_enabled: bool = False, writer_prompt_version: str = WRITER_PROMPT_VERSION, latest_attempt_status: str = "UNKNOWN", last_successful_at: str | None = None) -> dict[str, Any]:
     return {
         "report_type": report_type,
         "project_id": project.get("project_id"),
@@ -32,6 +32,8 @@ def report_manifest(*, report_type: str, project: dict[str, Any], validation_sta
         "polish_prompt_version": "1.1" if writer_prompt_version == "1.1" else POLISH_PROMPT_VERSION,
         "validation_status": validation_status,
         "grounding_status": grounding_status,
+        "latest_attempt_status": latest_attempt_status,
+        "last_successful_at": last_successful_at,
         "academic_polish_enabled": bool(polish_enabled),
         "source_policy": "FORMAL-only metrics; raw source records are read-only",
     }

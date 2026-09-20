@@ -27,7 +27,7 @@ from .projects import (
 )
 from .reliability import LABELS, reliability_metrics
 from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
-from .report_pipeline import write_report_artifacts
+from .report_pipeline import report_artifact_dir, write_report_artifacts
 from .service import criteria_index, run_documentary_assist, run_grounding_validator, run_report_writer
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
@@ -666,18 +666,28 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    deterministic_path = paths.reports / "dialogue_report_deterministic.md"
-    deterministic = None
-    if deterministic_path.exists():
-        deterministic = deterministic_path.read_text(encoding="utf-8")
-    else:
-        st.info("当前项目尚未生成已保存的对话评测报告；只读 Published 页面不会在浏览时创建报告。")
     rows = load_final_results(paths.final_results)
-    if deterministic is not None:
+    dialogue_artifacts = report_artifact_dir(paths.reports, "dialogue")
+    dialogue_final = dialogue_artifacts / "final_report.md"
+    dialogue_manifest_path = dialogue_artifacts / "report_manifest.json"
+    dialogue_manifest = {}
+    if dialogue_manifest_path.exists():
+        try:
+            dialogue_manifest = json.loads(dialogue_manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            dialogue_manifest = {}
+    if dialogue_manifest.get("latest_attempt_status") not in {None, "PASS"}:
+        if dialogue_final.exists():
+            st.warning(f"最新一次报告生成失败（{dialogue_manifest['latest_attempt_status']}）。以下展示的是上一份成功报告；成功时间：{dialogue_manifest.get('last_successful_at') or '未知'}。")
+        else:
+            st.info("尚无通过验证的最终报告。")
+    elif not dialogue_final.exists():
+        st.info("尚无通过验证的最终报告。")
+    if dialogue_final.exists():
         with st.container():
             st.markdown('<span class="report-document-marker" aria-hidden="true"></span>', unsafe_allow_html=True)
-            st.markdown(deterministic)
-        st.download_button("下载确定性对话测试报告", data=deterministic.encode("utf-8"), file_name=f"{project['project_id']}_dialogue_report.md", mime="text/markdown")
+            st.markdown(dialogue_final.read_text(encoding="utf-8"))
+        st.download_button("下载 LLM 对话测试报告", data=dialogue_final.read_bytes(), file_name=f"{project['project_id']}_dialogue_llm_report.md", mime="text/markdown")
     st.markdown(
         '<div class="report-action-heading"><div class="report-action-eyebrow">LLM REPORT WRITER</div><div class="report-action-title">可选：LLM 撰写对话测试报告</div></div>',
         unsafe_allow_html=True,
@@ -697,36 +707,40 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
                     layer2_records=load_jsonl(paths.layer2_records),
                     layer3_records=load_jsonl(paths.layer3_records),
                 )
-                text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root)
+                writer_result = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root, return_metadata=True)
                 result = write_report_artifacts(
                     report_type="dialogue", project=project, final_rows=rows,
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
-                    reports_dir=paths.reports, draft_text=text, scope=runtime_context.scope,
+                    reports_dir=paths.reports, draft_text=writer_result["text"],
+                    writer_status=writer_result["status"], writer_metadata=writer_result.get("attempts", [{}])[-1] if writer_result.get("attempts") else {}, scope=runtime_context.scope,
                     workspace_root=paths.root,
                 )
                 if result["manifest"]["validation_status"] != "PASS":
-                    st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
-                else:
-                    st.session_state["dialogue_report_llm_text"] = result["paths"]["final"].read_text(encoding="utf-8")
+                    st.error(f"报告生成失败：{result['manifest'].get('latest_attempt_status')}。未覆盖上一份成功报告。")
             except Exception as e:
                 st.error(str(e))
-        if st.session_state.get("dialogue_report_llm_text"):
-            st.markdown(st.session_state["dialogue_report_llm_text"])
-
-
 def report_page(criteria: dict[str, dict[str, Any]]) -> None:
     project = active_project()
     paths = active_paths()
     if not project or not paths:
         st.warning("请先选择测试项目。")
         return
-    output = paths.reports / "final_report.md"
-    if not output.exists():
-        output = paths.reports / "integrated_report.md"
-    report = None
-    if output.exists():
-        report = output.read_text(encoding="utf-8")
-    else:
+    integrated_artifacts = report_artifact_dir(paths.reports, "integrated")
+    output = integrated_artifacts / "final_report.md"
+    manifest_path = integrated_artifacts / "report_manifest.json"
+    report = output.read_text(encoding="utf-8") if output.exists() else None
+    manifest = {}
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            manifest = {}
+    if manifest.get("latest_attempt_status") not in {None, "PASS"}:
+        if report is not None:
+            st.warning(f"最新一次报告生成失败（{manifest['latest_attempt_status']}）。以下展示的是上一份成功报告；成功时间：{manifest.get('last_successful_at') or '未知'}。")
+        else:
+            st.info("尚无通过验证的最终报告。")
+    elif report is None:
         st.info("当前项目尚未生成已保存的综合评测报告；只读 Published 页面不会在浏览时创建报告。")
     rows = load_final_results(paths.final_results)
     if report is not None:
@@ -749,20 +763,16 @@ def report_page(criteria: dict[str, dict[str, Any]]) -> None:
                 paths = runtime_context.paths
                 rows = load_final_results(paths.final_results)
                 context = build_integrated_report_context(project=project, final_rows=rows, layer2_path=paths.layer2_records, layer3_path=paths.layer3_records)
-                text = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root)
-                grounding = run_grounding_validator(draft_report=text, report_context=context, llm_profile=grounding_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root)
+                writer_result = run_report_writer(role="integrated_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root, return_metadata=True)
                 result = write_report_artifacts(
                     report_type="integrated", project=project, final_rows=rows,
                     layer2_path=paths.layer2_records, layer3_path=paths.layer3_records,
-                    reports_dir=paths.reports, draft_text=text,
-                    grounding_validator=lambda draft, report_context: grounding, scope=runtime_context.scope,
+                    reports_dir=paths.reports, draft_text=writer_result["text"],
+                    writer_status=writer_result["status"], writer_metadata=writer_result.get("attempts", [{}])[-1] if writer_result.get("attempts") else {},
+                    grounding_validator=lambda draft, report_context: run_grounding_validator(draft_report=draft, report_context=report_context, llm_profile=grounding_profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root), scope=runtime_context.scope,
                     workspace_root=paths.root,
                 )
                 if result["manifest"]["validation_status"] != "PASS":
-                    st.error("报告未通过硬校验或证据校验，未发布 final_report.md。请查看 grounding_result.json。")
-                else:
-                    st.session_state["integrated_report_llm_text"] = result["paths"]["final"].read_text(encoding="utf-8")
+                    st.error(f"报告生成失败：{result['manifest'].get('latest_attempt_status')}。未覆盖上一份成功报告。")
             except Exception as e:
                 st.error(str(e))
-        if st.session_state.get("integrated_report_llm_text"):
-            st.markdown(st.session_state["integrated_report_llm_text"])

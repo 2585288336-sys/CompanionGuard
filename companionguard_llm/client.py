@@ -10,6 +10,14 @@ from jsonschema import Draft202012Validator
 from .profiles import LLMProfile
 
 
+class LLMResponseError(RuntimeError):
+    """A provider response that cannot be used by the requested operation."""
+
+    def __init__(self, code: str, message: str = "") -> None:
+        self.code = code
+        super().__init__(message or code)
+
+
 class LLMClient(Protocol):
     profile: LLMProfile
 
@@ -20,6 +28,7 @@ class LLMClient(Protocol):
         payload: dict[str, Any],
         schema_name: str,
         schema: dict[str, Any],
+        max_output_tokens: int = 4096,
     ) -> tuple[dict[str, Any], dict[str, Any] | None]: ...
 
     def judge(
@@ -62,9 +71,11 @@ def _strip_json_fence(text: str) -> str:
 def _parse_json_object(text: str) -> dict[str, Any]:
     """Parse strict JSON, accepting a single fenced/surrounded JSON object."""
     value = _strip_json_fence(text)
+    if not value:
+        raise LLMResponseError("GROUNDING_EMPTY_RESPONSE")
     try:
         result = json.loads(value)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as original_error:
         decoder = json.JSONDecoder()
         result = None
         for index, char in enumerate(value):
@@ -78,10 +89,31 @@ def _parse_json_object(text: str) -> dict[str, Any]:
                 result = candidate
                 break
         if result is None:
-            raise
+            raise LLMResponseError("GROUNDING_NON_JSON_RESPONSE", str(original_error)) from original_error
     if not isinstance(result, dict):
         raise ValueError("LLM JSON response must be an object")
     return result
+
+
+def _with_response_metadata(usage: Any, metadata: dict[str, Any]) -> dict[str, Any]:
+    """Keep provider usage plus normalized response completion metadata."""
+    result = dict(usage.model_dump() if hasattr(usage, "model_dump") else (usage or {}))
+    for key, value in metadata.items():
+        if value is not None:
+            result[key] = value
+    return result
+
+
+def _reasoning_tokens(usage: Any) -> int | None:
+    if usage is None:
+        return None
+    details = getattr(usage, "output_tokens_details", None)
+    if details is not None:
+        return getattr(details, "reasoning_tokens", None)
+    if isinstance(usage, dict):
+        details = usage.get("output_tokens_details") or usage.get("completion_tokens_details") or {}
+        return details.get("reasoning_tokens")
+    return None
 
 
 class OpenAICompatibleClient:
@@ -114,27 +146,36 @@ class OpenAICompatibleClient:
         payload: dict[str, Any],
         schema_name: str,
         schema: dict[str, Any],
+        max_output_tokens: int = 4096,
     ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         kwargs: dict[str, Any] = {
             "model": self.profile.model,
             "instructions": system_prompt,
             "input": json.dumps(payload, ensure_ascii=False),
             "text": {"format": {"type": "json_schema", "name": schema_name, "schema": schema}},
-            "max_output_tokens": 4096,
+            "max_output_tokens": max_output_tokens,
         }
         if self.profile.reasoning_effort != "none":
             kwargs["reasoning"] = {"effort": self.profile.reasoning_effort}
         else:
             kwargs["temperature"] = self.profile.temperature
         response = self._get_client().responses.create(**kwargs)
-        if getattr(response, "status", None) != "completed":
+        status = getattr(response, "status", None)
+        incomplete = getattr(response, "incomplete_details", None)
+        metadata = {
+            "response_status": status,
+            "finish_reason": getattr(incomplete, "reason", None) if incomplete is not None else None,
+            "incomplete_reason": getattr(incomplete, "reason", None) if incomplete is not None else None,
+            "reasoning_tokens": _reasoning_tokens(getattr(response, "usage", None)),
+        }
+        if status != "completed":
             raise RuntimeError(
                 f"LLM response status={getattr(response, 'status', None)}; "
                 f"details={getattr(response, 'incomplete_details', None) or getattr(response, 'error', None)}"
             )
-        result = json.loads(response.output_text)
+        result = _parse_json_object(response.output_text)
         _validate_schema(result, schema)
-        usage = response.usage.model_dump() if getattr(response, "usage", None) is not None and hasattr(response.usage, "model_dump") else None
+        usage = _with_response_metadata(getattr(response, "usage", None), metadata)
         return result, usage
 
     def judge(self, *, system_prompt: str, payload: dict[str, Any], schema_name: str, schema: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
@@ -158,10 +199,16 @@ class OpenAICompatibleClient:
         else:
             kwargs["temperature"] = self.profile.temperature
         response = self._get_client().responses.create(**kwargs)
-        if getattr(response, "status", None) != "completed":
-            raise RuntimeError(f"LLM response status={getattr(response, 'status', None)}")
-        usage = response.usage.model_dump() if getattr(response, "usage", None) is not None and hasattr(response.usage, "model_dump") else None
-        return response.output_text, usage
+        status = getattr(response, "status", None)
+        incomplete = getattr(response, "incomplete_details", None)
+        metadata = {
+            "response_status": status,
+            "finish_reason": getattr(incomplete, "reason", None) if incomplete is not None else None,
+            "incomplete_reason": getattr(incomplete, "reason", None) if incomplete is not None else None,
+            "reasoning_tokens": _reasoning_tokens(getattr(response, "usage", None)),
+        }
+        usage = _with_response_metadata(getattr(response, "usage", None), metadata)
+        return response.output_text or "", usage
 
 
 class OpenAIChatCompatibleClient:
@@ -196,12 +243,19 @@ class OpenAIChatCompatibleClient:
             max_tokens=max_output_tokens,
             **({"response_format": {"type": "json_object"}} if schema is not None else {}),
         )
-        text = response.choices[0].message.content or ""
-        usage = response.usage.model_dump() if getattr(response, "usage", None) is not None and hasattr(response.usage, "model_dump") else None
+        choice = response.choices[0]
+        text = choice.message.content or ""
+        metadata = {
+            "response_status": "completed",
+            "finish_reason": getattr(choice, "finish_reason", None),
+            "incomplete_reason": "max_output_tokens" if getattr(choice, "finish_reason", None) == "length" else None,
+            "reasoning_tokens": _reasoning_tokens(getattr(response, "usage", None)),
+        }
+        usage = _with_response_metadata(getattr(response, "usage", None), metadata)
         return text, usage
 
-    def generate_json(self, *, system_prompt: str, payload: dict[str, Any], schema_name: str, schema: dict[str, Any]):
-        text, usage = self._call(system_prompt=system_prompt, payload=payload, max_output_tokens=4096, schema=schema)
+    def generate_json(self, *, system_prompt: str, payload: dict[str, Any], schema_name: str, schema: dict[str, Any], max_output_tokens: int = 4096):
+        text, usage = self._call(system_prompt=system_prompt, payload=payload, max_output_tokens=max_output_tokens, schema=schema)
         result = _parse_json_object(text)
         _validate_schema(result, schema)
         return result, usage
@@ -260,6 +314,7 @@ class AnthropicMessagesClient:
         payload: dict[str, Any],
         schema_name: str,
         schema: dict[str, Any],
+        max_output_tokens: int = 4096,
     ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         schema_instruction = (
             "\n\nReturn ONLY a JSON object matching this JSON Schema. Do not use markdown fences.\n"
@@ -267,15 +322,21 @@ class AnthropicMessagesClient:
         )
         body = {
             "model": self.profile.model,
-            "max_tokens": 4096,
+            "max_tokens": max_output_tokens,
             "temperature": self.profile.temperature,
             "system": system_prompt + schema_instruction,
             "messages": [{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
         }
         response = self._post(body)
-        result = json.loads(_strip_json_fence(self._text(response)))
+        text = self._text(response)
+        result = _parse_json_object(text)
         _validate_schema(result, schema)
-        return result, response.get("usage")
+        usage = _with_response_metadata(response.get("usage"), {
+            "response_status": "completed",
+            "finish_reason": response.get("stop_reason"),
+            "incomplete_reason": "max_tokens" if response.get("stop_reason") == "max_tokens" else None,
+        })
+        return result, usage
 
     def judge(self, *, system_prompt: str, payload: dict[str, Any], schema_name: str, schema: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
         return self.generate_json(system_prompt=system_prompt, payload=payload, schema_name=schema_name, schema=schema)
@@ -295,7 +356,11 @@ class AnthropicMessagesClient:
             "messages": [{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
         }
         response = self._post(body)
-        return self._text(response), response.get("usage")
+        return self._text(response), _with_response_metadata(response.get("usage"), {
+            "response_status": "completed",
+            "finish_reason": response.get("stop_reason"),
+            "incomplete_reason": "max_tokens" if response.get("stop_reason") == "max_tokens" else None,
+        })
 
 
 def make_client(profile: LLMProfile) -> LLMClient:

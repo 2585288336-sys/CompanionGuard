@@ -231,7 +231,7 @@ def build_integrated_report(
     formal_all = [r for r in final_rows if r.get("phase") == "FORMAL"]
     formal = valid_case_rows(formal_all)
     validity = case_validity_counts(formal_all)
-    reviewed_formal = [r for r in formal if (r.get("adjudication_status") or "REVIEWED") == "REVIEWED"]
+    reviewed_formal = [r for r in formal_all if (r.get("adjudication_status") or "REVIEWED") == "REVIEWED"]
     adjudication_status = Counter(str(r.get("adjudication_status") or "REVIEWED") for r in formal_all)
     policy = project.get("human_adjudication_policy", "FULL_ADJUDICATION")
     rel = reliability_metrics(formal)
@@ -261,6 +261,7 @@ def build_integrated_report(
         "",
         "## Layer 1｜对话行为测试 / Dialogue Behavioral Testing",
         "",
+        f"- FORMAL 案例总数 / Collected FORMAL cases: {len(formal_all)}",
         f"- 已人工复核的 FORMAL 案例 / Adjudicated FORMAL cases: {len(reviewed_formal)}",
         f"- 纳入分析的有效 FORMAL 案例 / Valid FORMAL cases included in analysis: {len(formal)}",
         f"- 人工复核策略 / Human Adjudication policy: {policy}",
@@ -360,7 +361,7 @@ def build_dialogue_report_context(
     formal_all = [r for r in final_rows if r.get("phase") == "FORMAL"]
     formal = valid_case_rows(formal_all)
     rel = reliability_metrics(formal)
-    reviewed_formal = [r for r in formal if (r.get("adjudication_status") or "REVIEWED") == "REVIEWED"]
+    reviewed_formal = [r for r in formal_all if (r.get("adjudication_status") or "REVIEWED") == "REVIEWED"]
     adjudication_status = Counter(str(r.get("adjudication_status") or "REVIEWED") for r in formal_all)
     product_names = [p.get("label") or p.get("name") or p.get("id", "") for p in project.get("products", [])]
     products: dict[str, Any] = {}
@@ -419,7 +420,16 @@ def build_dialogue_report_context(
     )
     return {
         "meta": {"context_schema_version": "1.0", "report_type": "dialogue", "project_id": project.get("project_id"), "source_policy": "FORMAL-only metrics"},
-        "coverage": {"formal_case_count": len(formal), "adjudicated_formal_case_count": len(reviewed_formal), "phases_included": ["FORMAL"]},
+        "coverage": {
+            "total_formal_case_count": len(formal_all),
+            "adjudicated_formal_case_count": len(reviewed_formal),
+            "valid_formal_case_count": len(formal),
+            "invalid_formal_case_count": validity["INVALID"],
+            "review_formal_case_count": validity["REVIEW"],
+            "formal_case_count": len(formal),
+            "formal_case_count_legacy_semantic": "valid FORMAL cases included in analysis",
+            "phases_included": ["FORMAL"],
+        },
         "overall": {"macro_finding_rate": overall_macro_finding_rate(formal), "macro_finding_rate_display": _pct(overall_macro_finding_rate(formal)), "case_validity": validity},
         "project": {
             "project_id": project.get("project_id"),
@@ -428,6 +438,10 @@ def build_dialogue_report_context(
         },
         "formal_case_count": len(formal),
         "adjudicated_formal_case_count": len(reviewed_formal),
+        "total_formal_case_count": len(formal_all),
+        "valid_formal_case_count": len(formal),
+        "invalid_formal_case_count": validity["INVALID"],
+        "review_formal_case_count": validity["REVIEW"],
         "formal_case_validity": case_validity_counts(formal_all),
         "human_adjudication_policy": project.get("human_adjudication_policy", "FULL_ADJUDICATION"),
         "adjudication_status_counts": {
@@ -605,7 +619,8 @@ def build_dialogue_report(
     lines = [
         f"# CompanionGuard Dialogue Report — {project.get('project_name', project.get('project_id'))}",
         "",
-        f"- FORMAL 案例数 / FORMAL cases: {context['formal_case_count']}",
+        f"- FORMAL 案例总数 / Collected FORMAL cases: {context['total_formal_case_count']}",
+        f"- FORMAL 有效案例数 / Valid FORMAL cases included in analysis: {context['valid_formal_case_count']}",
         f"- 已人工复核的 FORMAL 案例 / Adjudicated FORMAL cases: {context['adjudicated_formal_case_count']}",
         f"- 人工复核策略 / Human Adjudication policy: {context['human_adjudication_policy']}",
         f"- 分析标签 / Analysis labels: REVIEWED {context['adjudication_status_counts']['REVIEWED']}; UNREVIEWED {context['adjudication_status_counts']['UNREVIEWED']}",
