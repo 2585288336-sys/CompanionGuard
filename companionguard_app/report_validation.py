@@ -8,24 +8,26 @@ from .report_schema import CONTEXT_SCHEMA_VERSION, REPORT_TYPES, validate_contex
 FORBIDDEN_PHRASES = {
     "UNAUTHORIZED_SCORE": ("安全总分", "合规总分", "综合监管分", "综合安全分", "综合合规分", "安全评分", "合规评分", "三层平均得分"),
 }
-LEGAL_TERMS = ("不合规", "违法", "违规", "法律违反", "监管认定", "法律认定", "合规认定")
-LEGAL_BOUNDARY_NEGATIONS = ("不等于", "不构成", "并不表示", "不能据此认定", "不代表", "不作出", "不得理解为")
-EVIDENCE_ATTRIBUTION = (
-    "页面显示", "页面写明", "材料写明", "证据写有", "证据记录为", "证据原文", "证据引用",
-    "公开文本使用", "公开材料写明", "制度材料原文", "产品 UI 原文", "UI 原文",
-    "source excerpt", "evidence quote", "source text",
+LEGAL_SUBJECTS = ("产品", "企业", "公司", "平台", "服务商", "该产品", "该企业", "该公司", "该平台", "该服务商")
+LEGAL_PREDICATE_FAMILIES = {
+    "LEGAL_STATUS": ("违法违规", "不合规", "违法", "违规"),
+    "LEGAL_VIOLATION": (r"违反(?:[^。！？!?，,；;\n]{0,18}(?:法律|法规|规定|监管要求))",),
+    "COMPLIANCE_DETERMINATION": ("不符合监管要求",),
+    "LEGAL_DUTY_DETERMINATION": ("未履行法定义务", "未履行法律义务"),
+}
+LEGAL_BOUNDARY_MARKERS = ("不等于", "不构成", "并不表示", "不能据此认定", "不代表", "不作出", "不得理解为", "并非", "不认定", "不能认定", "不对")
+UI_ATTRIBUTION_MARKERS = (
+    "页面显示", "页面出现", "页面写明", "系统提示", "界面提示", "返回", "提示为", "标记为", "截图显示",
+    "页面", "画面", "界面", "回答", "输入", "给出", "显示", "原文", "证据显示", "记录显示",
 )
-EVIDENCE_QUOTE_CUES = (
-    "页面", "画面", "界面", "回答", "输入", "给出", "显示", "原文", "举报分类包括", "以",
+DOCUMENT_ATTRIBUTION_MARKERS = (
+    "用户协议", "隐私政策", "公开材料", "公开文本", "条款", "制度", "举报分类", "证据记录", "证据原文",
+    "材料写明", "证据写有", "证据引用", "制度材料原文", "产品 UI 原文", "UI 原文",
+    "source excerpt", "evidence quote", "source text",
 )
 LEGAL_INFERENCE_CONNECTORS = ("因此", "所以", "这说明", "表明", "可见", "意味着", "由此")
 L2_BAD = ("功能不存在", "机制失效")
 L3_BAD = ("未实施", "没有建立", "未履行义务")
-
-LEGAL_BOUNDARY_DISCLAIMERS = (
-    "本报告不生成统一安全分或合规分，也不作出正式法律合规结论。",
-    "NOT_FOUND 不等于未实施；NOT_PUBLICLY_VERIFIABLE 不等于不合规；DOCUMENTED 不等于实际执行到位；FINDING 不等于违法或不合规。",
-)
 
 INTEGRATED_REQUIRED_SECTIONS = (
     ("EXECUTIVE_SUMMARY", ("摘要", "执行摘要", "Executive Summary")),
@@ -101,80 +103,133 @@ def _report_numeric_literals(report_text: str) -> list[str]:
     return re.findall(r"(?<![A-Za-z0-9_.-])\d+(?:\.\d+)?(?:%|个百分点| pp)?(?![A-Za-z0-9_.-])", text)
 
 
-def _claim_text_without_boundary_disclaimers(report_text: str) -> str:
-    cleaned = report_text
-    for disclaimer in LEGAL_BOUNDARY_DISCLAIMERS:
-        cleaned = cleaned.replace(disclaimer, "")
-    # Remove only a complete, explicit boundary disclaimer.  A sentence that
-    # continues with an inference after the disclaimer remains claim text.
-    parts = re.split(r"(?<=[。！？!?])\s*|\n+", cleaned)
-    kept: list[str] = []
-    for part in parts:
-        if part and not _is_negated_legal_boundary(part):
-            kept.append(part)
-    return "\n".join(kept)
-
-
-def _is_negated_legal_boundary(sentence: str) -> bool:
-    """Recognize narrow legal-boundary disclaimers, not arbitrary negation."""
-    if not any(term in sentence for term in LEGAL_TERMS):
-        return False
-    if not any(marker in sentence for marker in ("FINDING", "本报告", "该发现", "该测试结果", "该结论", "NOT_FOUND", "NOT_PUBLICLY_VERIFIABLE")):
-        return False
-    if not any(negation in sentence for negation in LEGAL_BOUNDARY_NEGATIONS):
-        if not re.search(r"不对[^。！？!?\n]{0,40}(?:违法|违规|不合规|法律认定|合规认定)[^。！？!?\n]{0,20}(?:作出|作出判断|作出结论|进行判断)", sentence):
-            return False
-    for connector in LEGAL_INFERENCE_CONNECTORS:
-        if connector in sentence:
-            tail = sentence.split(connector, 1)[1]
-            if any(term in tail for term in LEGAL_TERMS):
-                return False
-    return True
-
-
 def _quoted_spans(sentence: str) -> list[tuple[int, int]]:
     return [
         match.span()
-        for match in re.finditer(r"“[^”]*”|‘[^’]*’|\"[^\"]*\"|'[^']*'", sentence)
+        for match in re.finditer(r"“[^”]*”|‘[^’]*’|「[^」]*」|『[^』]*』|\"[^\"]*\"|'[^']*'", sentence)
     ]
 
 
-def _is_attributed_quote(sentence: str, start: int) -> bool:
-    prefix = sentence[max(0, start - 24):start]
-    return any(marker in sentence for marker in EVIDENCE_ATTRIBUTION) or any(cue in prefix for cue in EVIDENCE_QUOTE_CUES)
+def _mask_spans(text: str, spans: list[tuple[int, int]]) -> str:
+    chars = list(text)
+    for start, end in spans:
+        for index in range(start, end):
+            if chars[index] not in "。！？!?\n":
+                chars[index] = " "
+    return "".join(chars)
 
 
-def _remove_attributed_legal_quotes(sentence: str) -> str:
-    """Remove legal wording quoted as product/page evidence, not report claims."""
-    spans = _quoted_spans(sentence)
-    for start, end in reversed(spans):
-        quoted = sentence[start:end]
-        if any(term in quoted for term in LEGAL_TERMS) and _is_attributed_quote(sentence, start):
-            sentence = sentence[:start] + sentence[end:]
-    return sentence
+def _attribution_spans(sentence: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    for marker in (*UI_ATTRIBUTION_MARKERS, *DOCUMENT_ATTRIBUTION_MARKERS):
+        start = 0
+        while True:
+            marker_start = sentence.find(marker, start)
+            if marker_start < 0:
+                break
+            end_candidates = [len(sentence)]
+            for boundary in ("。", "！", "？", "!", "?", "\n", "；", ";", "，", ","):
+                position = sentence.find(boundary, marker_start + len(marker))
+                if position >= 0:
+                    end_candidates.append(position + 1)
+            for connector in LEGAL_INFERENCE_CONNECTORS:
+                position = sentence.find(connector, marker_start + len(marker))
+                if position >= 0:
+                    end_candidates.append(position)
+            spans.append((marker_start, min(end_candidates)))
+            start = marker_start + len(marker)
+    return spans
 
 
-def _remove_behavioral_legal_terms(sentence: str) -> str:
-    """Keep behavioral descriptions distinct from a legal determination."""
-    return re.sub(r"违法行为(?=提供支持性回应|提供支持|得到支持|被支持)", "行为", sentence)
+def _boundary_spans(sentence: str) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    boundary_pattern = "|".join(map(re.escape, LEGAL_BOUNDARY_MARKERS))
+    for match in re.finditer(rf"(?:{boundary_pattern})", sentence):
+        end_candidates = [len(sentence)]
+        for connector in LEGAL_INFERENCE_CONNECTORS:
+            position = sentence.find(connector, match.end())
+            if position >= 0:
+                end_candidates.append(position)
+        for boundary in ("。", "！", "？", "!", "?", "\n", "；", ";", "，", ","):
+            position = sentence.find(boundary, match.end())
+            if position >= 0:
+                end_candidates.append(position + 1)
+        spans.append((match.start(), min(end_candidates)))
+    for match in re.finditer(r"(?:不构成|不生成|不提供|不使用|不作出)[^。！？!?\n]{0,40}(?:安全|合规)(?:总分|评分|分)", sentence):
+        spans.append(match.span())
+    return spans
 
 
-def _legal_claim_text(report_text: str) -> str:
-    """Return legal-claim text while exempting attributed evidence wording."""
-    sentences = [part for part in re.split(r"(?<=[。！？!?])\s*|\n+", report_text) if part]
-    claims: list[str] = []
-    for sentence in sentences:
-        if _is_negated_legal_boundary(sentence):
-            continue
-        if any(attribution in sentence for attribution in EVIDENCE_ATTRIBUTION):
-            split = re.split("|".join(map(re.escape, LEGAL_INFERENCE_CONNECTORS)), sentence, maxsplit=1)
-            if len(split) == 1:
-                continue
-            sentence = split[1]
-        sentence = _remove_attributed_legal_quotes(sentence)
-        sentence = _remove_behavioral_legal_terms(sentence)
-        claims.append(sentence)
-    return "\n".join(claims)
+def _protected_semantic_spans(sentence: str) -> list[tuple[int, int]]:
+    """Return quotation, attribution, and explicit-boundary spans to exclude from claims."""
+    return _quoted_spans(sentence) + _attribution_spans(sentence) + _boundary_spans(sentence)
+
+
+def _claim_text_without_boundary_disclaimers(report_text: str) -> str:
+    parts = re.split(r"(?<=[。！？!?])\s*|\n+", report_text)
+    return "\n".join(_mask_spans(part, _boundary_spans(part)) for part in parts if part)
+
+
+def _subject_pattern(context: dict[str, Any]) -> str:
+    subjects = set(LEGAL_SUBJECTS)
+    for product in (context.get("products") or {}):
+        if str(product).strip():
+            subjects.add(str(product).strip())
+    for item in context.get("product_layer_coverage") or []:
+        for key in ("product_id", "display_name"):
+            value = str(item.get(key) or "").strip()
+            if value:
+                subjects.add(value)
+    return "|".join(re.escape(subject) for subject in sorted(subjects, key=len, reverse=True))
+
+
+def _legal_claim_patterns(context: dict[str, Any]) -> tuple[tuple[str, re.Pattern[str]], ...]:
+    subject = _subject_pattern(context)
+    def predicate_pattern(category: str) -> str:
+        return "(?:" + "|".join(LEGAL_PREDICATE_FAMILIES[category]) + ")"
+
+    status_predicates = predicate_pattern("LEGAL_STATUS")
+    violation_predicates = predicate_pattern("LEGAL_VIOLATION")
+    compliance_predicates = predicate_pattern("COMPLIANCE_DETERMINATION")
+    duty_predicates = predicate_pattern("LEGAL_DUTY_DETERMINATION")
+    return (
+        (
+            "LEGAL_STATUS",
+            re.compile(
+                rf"(?P<subject>{subject})\s*(?:(?:存在|属于|是|为|构成|表现为|被认定为|认定为)\s*)?"
+                rf"(?P<predicate>{status_predicates})(?!内容|信息|分类|提示|情形|标签)"
+            ),
+        ),
+        (
+            "LEGAL_VIOLATION",
+            re.compile(rf"(?P<subject>{subject})\s*(?P<predicate>{violation_predicates})"),
+        ),
+        (
+            "COMPLIANCE_DETERMINATION",
+            re.compile(rf"(?P<subject>{subject})\s*(?P<predicate>{compliance_predicates})"),
+        ),
+        (
+            "LEGAL_DUTY_DETERMINATION",
+            re.compile(rf"(?P<subject>{subject})\s*(?P<predicate>{duty_predicates})"),
+        ),
+    )
+
+
+def _detect_legal_claims(report_text: str, context: dict[str, Any]) -> list[dict[str, str]]:
+    claims: list[dict[str, str]] = []
+    for sentence in (part for part in re.split(r"(?<=[。！？!?])\s*|\n+", report_text) if part.strip()):
+        protected = _protected_semantic_spans(sentence)
+        masked = _mask_spans(sentence, protected)
+        for category, pattern in _legal_claim_patterns(context):
+            for match in pattern.finditer(masked):
+                claims.append({
+                    "value": match.group("predicate"),
+                    "sentence_excerpt": sentence.strip(),
+                    "detected_subject": match.group("subject"),
+                    "detected_predicate": match.group("predicate"),
+                    "predicate_category": category,
+                })
+    return claims
 
 
 def _has_prose_synthesis(report_text: str) -> bool:
@@ -226,10 +281,16 @@ def validate_report_hard(*, report_text: str, context: dict[str, Any], report_ty
         for phrase in phrases:
             if phrase in claim_text:
                 issues.append({"issue_type": issue_type, "value": phrase, "reason": "forbidden legal or unified-score claim"})
-    legal_claim_text = _legal_claim_text(claim_text)
-    for phrase in LEGAL_TERMS:
-        if phrase in legal_claim_text:
-            issues.append({"issue_type": "LEGAL_OVERCLAIM", "value": phrase, "reason": "report text makes a legal determination rather than describing evidence or a boundary"})
+    for claim in _detect_legal_claims(report_text, context):
+        issues.append({
+            "issue_type": "LEGAL_OVERCLAIM",
+            "value": claim["value"],
+            "sentence_excerpt": claim["sentence_excerpt"],
+            "detected_subject": claim["detected_subject"],
+            "detected_predicate": claim["detected_predicate"],
+            "predicate_category": claim["predicate_category"],
+            "reason": "report text asserts a legal conclusion about the detected subject",
+        })
     if re.search(r"NOT_FOUND[^。\n]*(?:未实施|没有建立|未履行义务)", claim_text):
         issues.append({"issue_type": "L3_STATUS_SEMANTIC_ERROR", "reason": "NOT_FOUND is not evidence that a duty was not implemented"})
     if re.search(r"NOT_PUBLICLY_VERIFIABLE[^。\n]*(?:不合规|未实施)", claim_text):
