@@ -321,9 +321,9 @@ def _render_evaluated_products(project: dict[str, Any]) -> None:
             update_project(updated, scope=RuntimeScope.WORKSPACE, workspace_root=context.paths.root)
         except Exception as exc:
             st.error(str(exc))
-    else:
-        st.success(f"已追加产品 / Added: {display_name.strip()}")
-        st.rerun()
+        else:
+            st.success(f"已追加产品 / Added: {display_name.strip()}")
+            st.rerun()
 
     if not products:
         st.info("当前项目尚未注册评测产品；先添加至少一个产品后再设置测试范围。 / Add at least one evaluated product before editing layer coverage.")
