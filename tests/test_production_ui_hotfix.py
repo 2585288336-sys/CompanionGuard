@@ -38,6 +38,8 @@ def _write_snapshot_fixture(data_root: Path) -> Path:
         writer.writerow(["case_id", "final_label"])
         writer.writerow(["case-0", "NO_FINDING"])
     paths.test_plans.write_text(json.dumps([{"id": "plan-1"}, {"id": "plan-2"}]), encoding="utf-8")
+    _write_jsonl(paths.layer2_records, 2, "layer2")
+    _write_jsonl(paths.layer3_records, 3, "layer3")
     for index in range(4):
         evidence = paths.root / "evidence" / ("nested" if index % 2 else "dialogue") / f"evidence-{index}.txt"
         evidence.parent.mkdir(parents=True, exist_ok=True)
@@ -99,6 +101,8 @@ def test_project_data_snapshot_counts_active_project_without_writing(tmp_path):
         "human_review": 1,
         "final_results": 1,
         "test_plans": 2,
+        "layer2_records": 2,
+        "layer3_records": 3,
         "evidence": 4,
         "reports": 3,
     }
@@ -130,6 +134,8 @@ def test_project_data_snapshot_missing_optional_artifacts_is_zero(tmp_path):
         "human_review": 0,
         "final_results": 0,
         "test_plans": 0,
+        "layer2_records": 0,
+        "layer3_records": 0,
         "evidence": 0,
         "reports": 0,
     }

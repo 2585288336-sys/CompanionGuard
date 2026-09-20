@@ -369,6 +369,8 @@ def project_data_snapshot(paths: ProjectPaths) -> dict[str, int]:
         "human_review": _count_csv_records(paths.adjudication),
         "final_results": _count_csv_records(paths.final_results),
         "test_plans": _count_plan_records(paths.test_plans),
+        "layer2_records": _count_jsonl_records(paths.layer2_records),
+        "layer3_records": _count_jsonl_records(paths.layer3_records),
         "evidence": _count_regular_files(paths.root / "evidence"),
         "reports": _count_regular_files(paths.reports),
     }
