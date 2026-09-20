@@ -108,11 +108,14 @@ def test_deployment_seed_contains_only_reviewed_seed_files():
     }
     assert actual_project_files == set(manifest["files"])
     assert all(not path.is_symlink() for path in root.rglob("*"))
-    assert len(actual_project_files) == 104
-    assert sum(path.startswith("evidence/") for path in actual_project_files) == 87
-    assert sum(path.startswith("reports/") for path in actual_project_files) == 9
-    assert not any(path.startswith("layer2") for path in actual_project_files)
-    assert not any(path.startswith("layer3") for path in actual_project_files)
+    assert len(actual_project_files) == manifest["file_count"]
+    record_summary = manifest.get("record_summary", {})
+    assert sum(path.startswith("evidence/") for path in actual_project_files) == record_summary["evidence"]
+    assert sum(path.startswith("reports/") for path in actual_project_files) == record_summary["reports"]
+    layer2_rows = sum(1 for line in (root / "layer2_product_safeguards.jsonl").read_text(encoding="utf-8").splitlines() if line.strip())
+    layer3_rows = sum(1 for line in (root / "layer3_public_evidence.jsonl").read_text(encoding="utf-8").splitlines() if line.strip())
+    assert layer2_rows == record_summary["layer2"]
+    assert layer3_rows == record_summary["layer3"]
 
 
 def test_versioned_seed_rejects_unknown_artifact(tmp_path):

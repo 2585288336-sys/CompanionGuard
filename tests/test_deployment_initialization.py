@@ -15,8 +15,6 @@ from companionguard_app.publishing import _inventory, _snapshot_hash, load_deplo
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ID = "CompanionGuard-Formal-Full-Benchmark-2026-09"
 COMMITTED_SEED = ROOT / "data" / "deployment_seed" / PROJECT_ID
-EXPECTED_VERSION = "2026.09.19-01"
-EXPECTED_HASH = "94fd426bdfe6c0f6b3096d6eace5473c010b982f86391f177cd9ad2d4300435b"
 
 
 def _tree_fingerprint(root: Path) -> dict[str, str]:
@@ -64,12 +62,12 @@ def _assert_healthy_runtime(fixture: dict[str, Path]) -> None:
     runtime = fixture["runtime"]
     result = verify_published_runtime_integrity(runtime, manifest)
     assert result["valid"] is True
-    assert len(_inventory(runtime, reject_forbidden=False)) == 104
-    assert _snapshot_hash(_inventory(runtime, reject_forbidden=False)) == EXPECTED_HASH
+    assert len(_inventory(runtime, reject_forbidden=False)) == manifest["file_count"]
+    assert _snapshot_hash(_inventory(runtime, reject_forbidden=False)) == manifest["source_snapshot_hash"]
     runtime_manifest = json.loads((runtime / ".published_runtime_manifest.json").read_text(encoding="utf-8"))
     assert runtime_manifest["project_id"] == PROJECT_ID
-    assert runtime_manifest["published_version"] == EXPECTED_VERSION
-    assert runtime_manifest["source_snapshot_hash"] == EXPECTED_HASH
+    assert runtime_manifest["published_version"] == manifest["published_version"]
+    assert runtime_manifest["source_snapshot_hash"] == manifest["source_snapshot_hash"]
     assert runtime_manifest["content_hash_algorithm"] == "SHA-256"
 
 
