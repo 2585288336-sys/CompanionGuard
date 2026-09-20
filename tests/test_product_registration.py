@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -47,6 +48,33 @@ def test_add_project_product_is_add_only_and_rejects_invalid_identity():
         add_project_product(project, product_id="Product D/escape", display_name="D", role=PRIMARY_PRODUCT_ROLE)
     with pytest.raises(ValueError, match="display_name"):
         add_project_product(project, product_id="D", display_name=" ", role=PRIMARY_PRODUCT_ROLE)
+
+
+def test_new_project_defaults_are_empty_and_product_combinations_are_explicit():
+    configured = [
+        {"id": "MoMood", "label": "MoMood", "slug": "MoMood", "role": PRIMARY_PRODUCT_ROLE},
+        {"id": "Xingye", "label": "星野", "slug": "Xingye", "role": PRIMARY_PRODUCT_ROLE},
+        {"id": "Doubao", "label": "豆包", "slug": "Doubao", "role": PRIMARY_PRODUCT_ROLE},
+    ]
+
+    assert platform_ui._new_project_default_product_ids() == []
+    assert [item["id"] for item in platform_ui._build_new_project_products(configured, ["MoMood"], "")] == ["MoMood"]
+    assert [item["id"] for item in platform_ui._build_new_project_products(configured, ["Xingye", "Doubao"], "")] == ["Xingye", "Doubao"]
+    assert [item["id"] for item in platform_ui._build_new_project_products(configured, [], "Character.AI")] == ["Character.AI"]
+    assert [item["id"] for item in platform_ui._build_new_project_products(configured, ["MoMood"], "Character.AI")] == ["MoMood", "Character.AI"]
+
+
+def test_project_design_copy_distinguishes_create_and_current_project_sections():
+    source = Path(platform_ui.__file__).read_text(encoding="utf-8")
+    for expected in (
+        "选择评测产品 / Select evaluated products",
+        "添加其他评测产品（每行一个） / Add other evaluated products",
+        "当前项目评测产品 / Evaluated products in this project",
+        "添加评测产品到当前项目 / Add evaluated product to this project",
+    ):
+        assert expected in source
+    assert "预配置产品 / Configured products" not in source
+    assert "默认评测产品" not in source
 
 
 def test_product_registration_lazy_creates_workspace_and_preserves_published(tmp_path):

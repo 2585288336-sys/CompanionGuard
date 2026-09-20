@@ -72,14 +72,23 @@ def _configured_products() -> list[dict[str, Any]]:
     ]
 
 
-def _default_benchmark_product_ids(products: list[dict[str, Any]]) -> list[str]:
-    config = load_collector_config()
-    configured_ids = {p.get("id") for p in products}
-    return [
-        product_id
-        for product_id in config.get("formal_primary_product_ids", [])
-        if product_id in configured_ids
-    ]
+def _new_project_default_product_ids() -> list[str]:
+    """New projects require an explicit product choice; none are preselected."""
+
+    return []
+
+
+def _build_new_project_products(
+    configured: list[dict[str, Any]],
+    selected_ids: list[str],
+    custom_text: str,
+) -> list[dict[str, Any]]:
+    products = [dict(product) for product in configured if product["id"] in selected_ids]
+    for line in custom_text.splitlines():
+        value = line.strip()
+        if value:
+            products.append({"id": safe_slug(value), "label": value, "slug": safe_slug(value), "role": "User-defined product"})
+    return products
 
 
 def sidebar_project_selector() -> dict[str, Any] | None:
@@ -184,32 +193,24 @@ def projects_page() -> None:
             ) or ["product", "criterion_id", "condition"]
 
     configured = _configured_products()
-    default_product_ids = _default_benchmark_product_ids(configured) if mode == "BENCHMARK" else []
     selected_ids = st.multiselect(
-        "预配置产品 / Configured products",
+        "选择评测产品 / Select evaluated products",
         [p["id"] for p in configured],
-        default=default_product_ids,
+        default=_new_project_default_product_ids(),
         format_func=lambda x: next(p.get("label", x) for p in configured if p["id"] == x),
     )
     if mode == "BENCHMARK":
-        default_labels = [
-            p.get("label") or p.get("id", "")
-            for p in configured
-            if p.get("id") in default_product_ids
-        ]
         st.caption(
-            "FORMAL Full Benchmark 默认主产品："
-            + "、".join(default_labels)
-            + "。产品身份与 Test Plan 覆盖范围保持解耦。"
+            "MoMood、星野、豆包为当前 FORMAL Full Benchmark 已注册的主产品。创建新项目时，可根据需要自由选择或添加评测产品。 "
+            "MoMood, Xingye, and Doubao are registered primary products in the current FORMAL Full Benchmark. New projects can freely choose or add products according to their evaluation scope."
         )
-    custom_text = st.text_area("自定义产品（每行一个） / Additional custom products", placeholder="Character.AI\nNomi")
+    custom_text = st.text_area("添加其他评测产品（每行一个） / Add other evaluated products", placeholder="Character.AI\nNomi", help="用于添加上述列表中没有的产品。 / Use this field for products not listed above.")
     notes = st.text_area("项目备注（可选） / Project notes")
     if st.button("创建测试项目 / Create Test Project", type="primary"):
-        products = [dict(p) for p in configured if p["id"] in selected_ids]
-        for line in custom_text.splitlines():
-            value = line.strip()
-            if value:
-                products.append({"id": safe_slug(value), "label": value, "slug": safe_slug(value), "role": "User-defined product"})
+        products = _build_new_project_products(configured, selected_ids, custom_text)
+        if not products:
+            st.error("请至少选择或添加一个评测产品。 / Please select or add at least one evaluated product.")
+            return
         try:
             project = create_project(
                 name=name, project_id=pid or default_id, products=products, mode=mode, notes=notes,
@@ -229,14 +230,21 @@ def projects_page() -> None:
 
     project = active_project()
     if project:
+        st.divider()
+        st.caption("以下设置作用于当前已打开项目。 / The settings below apply to the currently opened project.")
         _render_evaluated_products(project)
 
 
 def _render_evaluated_products(project: dict[str, Any]) -> None:
     """Render the add-only product registration section for the active project."""
 
-    st.subheader("评测产品 / Evaluated Products")
-    st.caption("产品追加只写入当前 Workspace；如果当前是 Published，首次保存会自动创建本次会话的临时 Workspace。")
+    st.subheader("当前项目评测产品 / Evaluated products in this project")
+    st.caption("这里列出当前项目已纳入评测的产品。已添加的产品会用于后续项目配置，并出现在相关测试页面的产品选择中。\n\nThis section lists the products included in the current project. Added products become part of this project and appear where relevant in downstream evaluation pages.")
+    scope = active_scope()
+    if scope is RuntimeScope.PUBLISHED:
+        st.caption("当前正在查看官方发布版。若在此处新增产品，系统会先创建本次会话的临时工作区；修改只保存在该工作区中，不会改动官方发布版。\n\nYou are viewing the published version. Adding a product will create a temporary workspace for this session; changes will stay in that workspace and will not modify the published version.")
+    elif scope is RuntimeScope.WORKSPACE:
+        st.caption("当前修改保存在本次会话的临时工作区中。 / Current changes are saved in this session's temporary workspace.")
     products = project.get("products") or []
     st.dataframe(
         [
@@ -252,10 +260,10 @@ def _render_evaluated_products(project: dict[str, Any]) -> None:
     )
     roles = sorted({PRIMARY_PRODUCT_ROLE, *(str(item.get("role") or "").strip() for item in products if str(item.get("role") or "").strip())})
     with st.form(f"add_evaluated_product::{project.get('project_id')}"):
-        product_id = st.text_input("产品 ID / Product ID", help="唯一 canonical key；只允许字母、数字、'.'、'_'、'-'。")
-        display_name = st.text_input("显示名称 / Display name")
+        product_id = st.text_input("产品 ID / Product ID", help="用于系统内部识别，需保持唯一。 / Used for internal identification and must remain unique.")
+        display_name = st.text_input("显示名称 / Display name", help="用于页面展示。 / Used for display in the interface.")
         role = st.selectbox("角色 / Role", roles)
-        submitted = st.form_submit_button("追加评测产品 / Add Evaluated Product", type="primary")
+        submitted = st.form_submit_button("添加评测产品到当前项目 / Add evaluated product to this project", type="primary")
     if submitted:
         try:
             updated = add_project_product(project, product_id=product_id, display_name=display_name, role=role)
