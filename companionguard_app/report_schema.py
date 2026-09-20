@@ -8,6 +8,7 @@ GROUNDING_PROMPT_VERSION = "1.0"
 POLISH_PROMPT_VERSION = "1.0"
 SMALL_SAMPLE_THRESHOLD = 5
 REPORT_TYPES = {"dialogue", "integrated"}
+REPORT_PIPELINE_VERSION = "phase7e-live-path"
 
 
 def validate_context_shape(context: dict[str, Any]) -> list[str]:
@@ -24,6 +25,7 @@ def validate_context_shape(context: dict[str, Any]) -> list[str]:
 
 def report_manifest(*, report_type: str, project: dict[str, Any], validation_status: str, grounding_status: str = "NOT_RUN", polish_enabled: bool = False, writer_prompt_version: str = WRITER_PROMPT_VERSION, latest_attempt_status: str = "UNKNOWN", last_successful_at: str | None = None) -> dict[str, Any]:
     return {
+        "report_pipeline_version": REPORT_PIPELINE_VERSION,
         "report_type": report_type,
         "project_id": project.get("project_id"),
         "context_schema_version": CONTEXT_SCHEMA_VERSION,

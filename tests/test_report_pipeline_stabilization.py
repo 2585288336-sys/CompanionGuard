@@ -31,9 +31,10 @@ def _workspace(tmp_path: Path) -> tuple[Path, Path]:
 
 
 class TextClient:
-    def __init__(self, outputs: list[str], *, finish_reasons: list[str | None] | None = None):
+    def __init__(self, outputs: list[str], *, finish_reasons: list[str | None] | None = None, completion_tokens: list[int] | None = None):
         self.outputs = list(outputs)
         self.finish_reasons = list(finish_reasons or [None] * len(outputs))
+        self.completion_tokens = list(completion_tokens or [3] * len(outputs))
         self.calls: list[dict] = []
 
     def generate_text(self, **kwargs):
@@ -41,7 +42,7 @@ class TextClient:
         index = len(self.calls) - 1
         return self.outputs[index], {
             "prompt_tokens": 2,
-            "completion_tokens": 3,
+            "completion_tokens": self.completion_tokens[index],
             "finish_reason": self.finish_reasons[index],
         }
 
@@ -109,12 +110,28 @@ def test_integrated_truncation_fallback_can_fail_once(monkeypatch, tmp_path):
     assert len(result["attempts"]) == 2
 
 
+def test_missing_finish_at_requested_limit_is_suspected_truncation(monkeypatch, tmp_path):
+    data_root, workspace = _workspace(tmp_path)
+    client = TextClient(["partial"], completion_tokens=[32000])
+    monkeypatch.setattr("companionguard_app.service.make_client", lambda _profile: client)
+
+    result = run_report_writer(
+        role="dialogue_report", report_context={}, llm_profile=_profile("dialogue_report"),
+        scope=RuntimeScope.WORKSPACE, workspace_root=workspace, data_root=data_root,
+        return_metadata=True, minimum_visible_chars=1,
+    )
+
+    assert result["status"] == "WRITER_TRUNCATED_SUSPECTED"
+    assert result["attempts"][0]["requested_output_limit"] == 32000
+
+
 def _grounding_pass() -> dict:
     return {
         "validator_version": "fixture",
         "evidence_integrity": {"status": "PASS"},
         "report_quality": {"status": "PASS"},
         "overall_status": "PASS",
+        "summary": {"sentences_checked": 1, "supported": 1},
         "required_repairs": [],
     }
 
@@ -220,3 +237,18 @@ def test_numeric_format_equivalence_passes_but_new_number_fails():
     }
     assert validate_report_hard(report_text="比例为16.7%。", context=context, report_type="dialogue")["overall_status"] == "PASS"
     assert validate_report_hard(report_text="比例为17%。", context=context, report_type="dialogue")["overall_status"] == "FAIL"
+
+
+def test_grounding_pass_with_zero_checked_sentences_is_failed(tmp_path):
+    data_root, workspace = _workspace(tmp_path)
+    project = {"project_id": "fixture", "project_name": "Fixture", "products": []}
+    result = write_report_artifacts(
+        report_type="dialogue", project=project, final_rows=[],
+        layer2_path=workspace / "layer2_product_safeguards.jsonl", layer3_path=workspace / "layer3_public_evidence.jsonl",
+        reports_dir=workspace / "reports", draft_text="stable report", minimum_visible_chars=1,
+        grounding_validator=lambda _draft, _context: {"overall_status": "PASS", "summary": {"sentences_checked": 0}},
+        scope=RuntimeScope.WORKSPACE, workspace_root=workspace, data_root=data_root,
+    )
+    assert result["grounding"]["overall_status"] == "FAIL"
+    assert result["grounding"]["failure_type"] == "GROUNDING_ZERO_SENTENCES"
+    assert result["manifest"]["report_pipeline_version"] == "phase7e-live-path"
