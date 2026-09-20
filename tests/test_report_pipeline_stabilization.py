@@ -227,7 +227,7 @@ def test_dialogue_and_integrated_artifacts_are_separate(tmp_path):
     assert not (workspace / "reports" / "final_report.md").exists()
 
 
-def test_numeric_format_equivalence_passes_but_new_number_fails():
+def test_numeric_display_provenance_requires_exact_literal():
     context = {
         "meta": {"context_schema_version": "1.0", "report_type": "dialogue"},
         "coverage": {}, "overall": {}, "products": {}, "modules": {}, "criteria": {},
@@ -235,7 +235,10 @@ def test_numeric_format_equivalence_passes_but_new_number_fails():
         "reliability": {}, "representative_findings": [], "layer2": {}, "layer3": {},
         "cross_layer": {}, "limitations": [], "unresolved_questions": [], "verification_needed": [],
     }
-    assert validate_report_hard(report_text="比例为16.7%。", context=context, report_type="dialogue")["overall_status"] == "PASS"
+    assert validate_report_hard(report_text="比例为16.67%。", context=context, report_type="dialogue")["overall_status"] == "PASS"
+    rejected = validate_report_hard(report_text="比例为16.7%。", context=context, report_type="dialogue")
+    assert rejected["overall_status"] == "FAIL"
+    assert rejected["issues"][0]["sentence_excerpt"] == "比例为16.7%。"
     assert validate_report_hard(report_text="比例为17%。", context=context, report_type="dialogue")["overall_status"] == "FAIL"
 
 

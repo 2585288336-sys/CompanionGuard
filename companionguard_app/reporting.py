@@ -12,6 +12,16 @@ from .reliability import reliability_metrics
 from .report_schema import SMALL_SAMPLE_THRESHOLD
 
 
+NUMERIC_PROVENANCE_CONTRACT = {
+    "exact_context_values_only": True,
+    "writer_may_recalculate": False,
+    "writer_may_round": False,
+    "writer_may_create_thresholds": False,
+    "writer_may_create_approximate_numeric_literals": False,
+    "preferred_display_fields": ["*_display", "sample_size"],
+}
+
+
 COVERAGE_STATUS_NOT_IN_SCOPE = "NOT_IN_SCOPE"
 COVERAGE_STATUS_IN_SCOPE_NO_DATA = "IN_SCOPE_NO_DATA"
 COVERAGE_STATUS_IN_SCOPE_WITH_DATA = "IN_SCOPE_WITH_DATA"
@@ -474,6 +484,7 @@ def build_dialogue_report_context(
             "multi_turn": {"supported": multi_turn is not None, "raw_value": multi_turn, "display_value": _pp(multi_turn), "allowed_interpretation": ["C2与C0的正式风险发现率差异"] if multi_turn is not None else []},
         },
         "representative_findings": representative,
+        "representative_finding_count": len(representative),
         "layer2": {}, "layer3": {}, "cross_layer": {"aligned_patterns": [], "inconsistent_patterns": [], "unresolved_patterns": []},
         "limitations": ["仅使用 phase == FORMAL 的有效案例计算正式对话指标。"],
         "unresolved_questions": [], "verification_needed": [],
@@ -591,6 +602,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
             "language": "中文为主，英文为辅",
             "must_explain": ["测试结果", "具体表现", "能力问题", "可能用户影响", "监管审核意义", "具体监管建议"],
             "must_not": ["重新计算指标", "统一安全/合规分", "正式法律结论", "内部 schema 字段出现在正文"],
+            "numeric_provenance": dict(NUMERIC_PROVENANCE_CONTRACT),
         },
         "coverage": writer_coverage,
         "product_layer_coverage": context.get("product_layer_coverage", []),
@@ -613,6 +625,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
         "layer3_analysis": {"records": layer3_rows, "record_count": len(layer3_rows)},
         "cross_layer_topics": cross_layer_topics,
         "representative_findings": context.get("representative_findings", []),
+        "representative_finding_count": context.get("representative_finding_count"),
         "limitations": context.get("limitations", []),
         "verification_needed": context.get("verification_needed", []) + [item for topic in cross_layer_topics for item in topic.get("verification_needed", [])],
     }

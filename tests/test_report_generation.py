@@ -123,7 +123,7 @@ FINDING 不等于违法或不合规。
         self.assertIn("Integrated Report Writer System Prompt v1.1", captured["prompt"])
         self.assertEqual(set(captured["payload"]["report_context"]), {
             "report_contract", "coverage", "product_layer_coverage", "key_findings", "dialogue_analysis", "layer2_analysis",
-            "layer3_analysis", "cross_layer_topics", "representative_findings", "limitations", "verification_needed",
+            "layer3_analysis", "cross_layer_topics", "representative_findings", "representative_finding_count", "limitations", "verification_needed",
         })
 
     def test_chat_json_adapter_accepts_surrounded_object(self):
