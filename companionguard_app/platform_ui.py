@@ -32,7 +32,13 @@ from .service import criteria_index, run_documentary_assist, run_grounding_valid
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .storage import build_final_results, load_adjudications, load_final_results, load_judge_results
 from .runtime_scope import RuntimeScope
-from .runtime_workspace import RuntimeContext, ensure_active_workspace, get_runtime_context
+from .runtime_workspace import (
+    RuntimeContext,
+    WorkspaceRecoveryError,
+    ensure_active_workspace,
+    get_runtime_context,
+    workspace_recovery_failed,
+)
 from .collector_storage import load_raw_cases
 from .metrics import case_validity_counts, valid_case_rows
 from .display_labels import criterion_label, module_label, scenario_label
@@ -45,6 +51,8 @@ def active_project_id() -> str | None:
 
 
 def active_project() -> dict[str, Any] | None:
+    if workspace_recovery_failed():
+        return None
     context = active_runtime_context()
     if context is None:
         return None
@@ -56,11 +64,15 @@ def active_project() -> dict[str, Any] | None:
 
 
 def active_paths():
+    if workspace_recovery_failed():
+        return None
     context = active_runtime_context()
     return context.paths if context else None
 
 
 def active_runtime_context() -> RuntimeContext | None:
+    if workspace_recovery_failed():
+        return None
     pid = active_project_id()
     return get_runtime_context(pid) if pid else None
 
@@ -71,6 +83,10 @@ def active_scope() -> RuntimeScope | None:
 
 
 def ensure_active_workspace_for_write() -> RuntimeContext:
+    if workspace_recovery_failed():
+        raise WorkspaceRecoveryError(
+            "当前临时工作区无法恢复；请先返回官方发布版，再开始新的临时评测工作区。"
+        )
     context = active_runtime_context()
     if context is None:
         raise ValueError("请先选择测试项目，再开始评测操作。")

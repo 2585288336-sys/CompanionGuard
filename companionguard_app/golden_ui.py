@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from html import escape
 from typing import Any, Callable
+from urllib.parse import urlencode
 
 import streamlit as st
 
@@ -27,6 +28,12 @@ from .platform_ui import (
 )
 from .project_export import ProjectExportError, build_project_package
 from .projects import list_projects, project_data_snapshot
+from .runtime_workspace import (
+    clear_workspace_recovery,
+    resume_token_fingerprint,
+    resume_workspace_from_query,
+    workspace_recovery_failed,
+)
 from .ui import get_criteria, human_review_page, results_page, run_test_page
 
 
@@ -177,8 +184,17 @@ def _set_page(page_id: str) -> None:
         pass
 
 
+def _page_href(page_id: str) -> str:
+    params = {key: value for key, value in st.query_params.items()}
+    params["page"] = page_id
+    return "?" + urlencode(params, doseq=True)
+
+
 def home_page() -> None:
-    st.markdown(HOME_HTML, unsafe_allow_html=True)
+    st.markdown(
+        HOME_HTML.replace('href="?page=overview"', f'href="{escape(_page_href("overview"))}"'),
+        unsafe_allow_html=True,
+    )
 
 
 def _label(page_id: str) -> str:
@@ -224,7 +240,8 @@ def _project_selector() -> dict[str, Any] | None:
     project_name = str((active or {}).get("project_name") or "CompanionGuard Formal Full Benchmark 2026-09")
     runtime_context = active_runtime_context()
     if runtime_context and runtime_context.is_workspace:
-        scope_html = '<span class="pill amber">临时评测工作区 · 当前会话</span><div class="project-note">你的评测修改仅保存在本次临时工作区，不会修改官方数据。</div>'
+        fingerprint = resume_token_fingerprint(runtime_context)
+        scope_html = f'<span class="pill amber">Workspace: {escape(fingerprint or "active")}</span><div class="project-note">你的评测修改仅保存在本次临时工作区，不会修改官方数据。</div>'
     else:
         scope_html = '<span class="pill blue">官方发布版 · 只读</span>'
     st.sidebar.markdown(
@@ -249,8 +266,15 @@ def _project_selector() -> dict[str, Any] | None:
 
 def render_workspace_sidebar(page_id: str) -> dict[str, Any] | None:
     st.sidebar.markdown('<div class="cg-sidebar"><div class="sidebrand"><div class="brand"><span class="mark"></span>CompanionGuard</div></div></div>', unsafe_allow_html=True)
+    if workspace_recovery_failed():
+        st.sidebar.error("临时工作区恢复失败 / Workspace recovery failed")
+        st.sidebar.caption("系统不会自动切换到官方发布版，也不会创建新的工作区。")
+        return None
     project = _project_selector()
-    st.sidebar.markdown('<div class="cg-sidebar"><div class="navtree"><a class="navhome" href="?page=home">Home｜首页</a>', unsafe_allow_html=True)
+    st.sidebar.markdown(
+        f'<div class="cg-sidebar"><div class="navtree"><a class="navhome" href="{escape(_page_href("home"))}">Home｜首页</a>',
+        unsafe_allow_html=True,
+    )
     _group_heading("01 项目与测试", "Project Setup")
     for item in ("testdesign", "plan", "collector", "overview"):
         _nav_button(item, active=page_id == item)
@@ -271,8 +295,15 @@ def render_workspace_sidebar(page_id: str) -> dict[str, Any] | None:
 
 def render_workspace_topbar(page_id: str) -> None:
     zh, en = PAGE_META[page_id]
+    context = active_runtime_context()
+    if context and context.is_workspace:
+        status = f'<span class="workspace-pill amber">Workspace: {escape(resume_token_fingerprint(context) or "active")}</span>'
+    elif workspace_recovery_failed():
+        status = '<span class="workspace-pill amber">Workspace recovery failed</span>'
+    else:
+        status = '<span class="workspace-pill blue">官方发布版 · 只读</span>'
     st.markdown(
-        f'''<div class="workspace-bar"><div class="crumb">CompanionGuard <span>/</span> <b>{escape(zh)}</b></div><div class="baract"><span class="workspace-pill blue">产品列表 · 来自 project.json</span><span class="workspace-pill">FORMAL</span><a class="btn" href="?page=home">主页</a></div></div>''',
+        f'''<div class="workspace-bar"><div class="crumb">CompanionGuard <span>/</span> <b>{escape(zh)}</b></div><div class="baract">{status}<span class="workspace-pill">FORMAL</span><a class="btn" href="{escape(_page_href("home"))}">主页</a></div></div>''',
         unsafe_allow_html=True,
     )
 
@@ -293,16 +324,18 @@ def _render_project_data_snapshot(context: Any) -> None:
         ("人工复核", "Human Review", counts["human_review"]),
         ("最终结果", "Final Results", counts["final_results"]),
         ("测试计划", "Test Plans", counts["test_plans"]),
+        ("Layer 2 记录", "Layer 2 Records", counts["layer2_records"]),
+        ("Layer 3 记录", "Layer 3 Records", counts["layer3_records"]),
         ("证据文件", "Evidence", counts["evidence"]),
         ("报告文件", "Reports", counts["reports"]),
     )
     rows = []
-    for index in (0, 4):
+    for index in range(0, len(metrics), 4):
         cells = "".join(
             f'<div class="overview-metric"><div class="overview-metric-value">{value}</div>'
             f'<div class="overview-metric-zh">{escape(zh)}</div>'
             f'<div class="overview-metric-en">{escape(en)}</div></div>'
-            for zh, en, value in metrics[index:index + (4 if index == 0 else 3)]
+            for zh, en, value in metrics[index:index + 4]
         )
         rows.append(f'<div class="overview-metric-row">{cells}</div>')
     st.markdown(
@@ -384,6 +417,18 @@ def _workflow_nav(page_id: str) -> None:
             st.rerun()
 
 
+def _render_workspace_recovery_failure() -> None:
+    st.error(
+        "当前链接指向的临时工作区无法恢复。可能由于应用重启、重新部署或临时运行环境已被清理。"
+        "系统不会自动创建新的工作区，也不会将你静默切换为正式发布版。\n\n"
+        "The temporary Workspace linked by this URL could not be recovered. "
+        "The system will not create a new Workspace or silently switch to the Published benchmark."
+    )
+    if st.button("返回官方发布版 / Return to Published", type="primary", key="return-published-after-recovery-failure"):
+        clear_workspace_recovery()
+        st.rerun()
+
+
 def run_app() -> None:
     ensure_deployment_project()
     requested_page = st.query_params.get("page")
@@ -403,13 +448,19 @@ def run_app() -> None:
     if page_id not in PAGE_META:
         page_id = "home"
         st.session_state["nav_page"] = page_id
+    resume_workspace_from_query()
     if page_id == "home":
         home_page()
+        if workspace_recovery_failed():
+            _render_workspace_recovery_failure()
         return
     render_workspace_sidebar(page_id)
     render_workspace_topbar(page_id)
     st.markdown('<div class="workspace-canvas">', unsafe_allow_html=True)
     render_workspace_head(page_id)
-    render_page(page_id)
-    _workflow_nav(page_id)
+    if workspace_recovery_failed():
+        _render_workspace_recovery_failure()
+    else:
+        render_page(page_id)
+        _workflow_nav(page_id)
     st.markdown("</div>", unsafe_allow_html=True)
