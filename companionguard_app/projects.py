@@ -17,6 +17,90 @@ from .versioning import APP_VERSION, DATA_SCHEMA_VERSION, current_code_commit
 PROJECTS_DIR = DATA_DIR / "projects"
 PRIMARY_PRODUCT_ROLE = "Primary anthropomorphic AI product"
 _PRODUCT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+EVALUATION_LAYER_ORDER = ("layer1", "layer2", "layer3")
+EVALUATION_LAYER_SET = frozenset(EVALUATION_LAYER_ORDER)
+
+
+def normalize_evaluation_layers(
+    value: Any,
+    *,
+    allow_empty: bool = False,
+) -> list[str]:
+    """Normalize the single canonical per-product layer coverage field."""
+
+    if not isinstance(value, (list, tuple, set)):
+        raise ValueError("evaluation_layers must be a list of layer1, layer2, layer3")
+    requested = {str(item).strip().lower() for item in value}
+    unknown = sorted(requested - EVALUATION_LAYER_SET)
+    if unknown:
+        raise ValueError("Unknown evaluation layer(s): " + ", ".join(unknown))
+    if not requested and not allow_empty:
+        raise ValueError("At least one evaluation layer is required")
+    return [layer for layer in EVALUATION_LAYER_ORDER if layer in requested]
+
+
+def legacy_evaluation_layers(project: dict[str, Any], product: dict[str, Any]) -> list[str]:
+    """Return the effective coverage of a pre-coverage project manifest."""
+
+    if project.get("mode") != "BENCHMARK":
+        return list(EVALUATION_LAYER_ORDER)
+    if str(product.get("role") or "").startswith(PRIMARY_PRODUCT_ROLE):
+        return list(EVALUATION_LAYER_ORDER)
+    return ["layer1", "layer2"]
+
+
+def effective_evaluation_layers(project: dict[str, Any], product: dict[str, Any]) -> list[str]:
+    """Resolve explicit coverage first, then preserve legacy selector behavior."""
+
+    if "evaluation_layers" in product:
+        return normalize_evaluation_layers(product["evaluation_layers"])
+    return legacy_evaluation_layers(project, product)
+
+
+def materialize_evaluation_layers(project: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy with legacy product coverage made explicit."""
+
+    updated = dict(project)
+    updated["products"] = []
+    for product in project.get("products") or []:
+        item = dict(product)
+        item["evaluation_layers"] = effective_evaluation_layers(project, item)
+        updated["products"].append(item)
+    return updated
+
+
+def _product_ref_matches(product: dict[str, Any], product_ref: str) -> bool:
+    value = str(product_ref or "").strip()
+    return value in {
+        str(product.get("id") or "").strip(),
+        str(product.get("label") or "").strip(),
+        str(product.get("name") or "").strip(),
+    }
+
+
+def products_for_layer(project: dict[str, Any], layer: str) -> list[dict[str, Any]]:
+    normalized_layer = normalize_evaluation_layers([layer])[0]
+    return [
+        product
+        for product in project.get("products") or []
+        if normalized_layer in effective_evaluation_layers(project, product)
+    ]
+
+
+def assert_product_in_layer(project: dict[str, Any], product_ref: str, layer: str) -> None:
+    """Reject a product-layer write or collection outside declared scope."""
+
+    normalized_layer = normalize_evaluation_layers([layer])[0]
+    product = next(
+        (item for item in project.get("products") or [] if _product_ref_matches(item, product_ref)),
+        None,
+    )
+    if product is None or normalized_layer not in effective_evaluation_layers(project, product):
+        layer_number = normalized_layer[-1]
+        raise ValueError(
+            f"Product is not included in Layer {layer_number} evaluation scope. "
+            f"/ 该产品未纳入 Layer {layer_number} 评测范围。"
+        )
 
 
 def utc_now_iso() -> str:
@@ -44,6 +128,7 @@ def add_project_product(
     product_id: str,
     display_name: str,
     role: str,
+    evaluation_layers: list[str] | None = None,
 ) -> dict[str, Any]:
     """Return a copy of ``project`` with one new product appended.
 
@@ -57,7 +142,8 @@ def add_project_product(
     if not label:
         raise ValueError("display_name is required")
     selected_role = role.strip() if isinstance(role, str) else ""
-    existing_products = list(project.get("products") or [])
+    materialized = materialize_evaluation_layers(project)
+    existing_products = list(materialized.get("products") or [])
     if any(str(item.get("id") or "").strip() == canonical_id for item in existing_products):
         raise ValueError(f"Product ID already exists: {canonical_id}")
     valid_roles = {
@@ -69,7 +155,15 @@ def add_project_product(
     updated = dict(project)
     updated["products"] = [
         *existing_products,
-        {"id": canonical_id, "label": label, "slug": canonical_id, "role": selected_role},
+        {
+            "id": canonical_id,
+            "label": label,
+            "slug": canonical_id,
+            "role": selected_role,
+            "evaluation_layers": normalize_evaluation_layers(
+                evaluation_layers if evaluation_layers is not None else EVALUATION_LAYER_ORDER
+            ),
+        },
     ]
     return updated
 
@@ -348,6 +442,7 @@ def create_project(
         "human_adjudication_random_seed": human_adjudication_random_seed,
         "human_adjudication_strata": human_adjudication_strata or ["product", "criterion_id", "condition"],
     }
+    project = materialize_evaluation_layers(project)
     target_manifest.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
     assert_writable_target(scope, target_root / "reports", workspace_root=paths.root, data_root=data_root).mkdir(parents=True, exist_ok=True)
     return project
@@ -364,7 +459,7 @@ def update_project(
     pid = project.get("project_id")
     if not pid:
         raise ValueError("project_id is required")
-    updated = dict(project)
+    updated = materialize_evaluation_layers(project)
     updated["updated_at"] = utc_now_iso()
     if workspace_root is None:
         raise ValueError("update_project requires an explicit Workspace root.")

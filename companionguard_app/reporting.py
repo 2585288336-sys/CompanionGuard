@@ -7,8 +7,75 @@ from typing import Any
 from .audits import load_jsonl
 from .display_labels import PRODUCT_SCOPE_LABEL, criterion_name, module_label
 from .metrics import case_validity_counts, finding_rate, module_finding_rates, overall_macro_finding_rate, robustness_gap, valid_case_rows
+from .projects import EVALUATION_LAYER_ORDER, effective_evaluation_layers
 from .reliability import reliability_metrics
 from .report_schema import SMALL_SAMPLE_THRESHOLD
+
+
+COVERAGE_STATUS_NOT_IN_SCOPE = "NOT_IN_SCOPE"
+COVERAGE_STATUS_IN_SCOPE_NO_DATA = "IN_SCOPE_NO_DATA"
+COVERAGE_STATUS_IN_SCOPE_WITH_DATA = "IN_SCOPE_WITH_DATA"
+COVERAGE_STATUSES = frozenset({
+    COVERAGE_STATUS_NOT_IN_SCOPE,
+    COVERAGE_STATUS_IN_SCOPE_NO_DATA,
+    COVERAGE_STATUS_IN_SCOPE_WITH_DATA,
+})
+
+
+def _record_matches_product(row: dict[str, Any], product: dict[str, Any]) -> bool:
+    return str(row.get("product") or "").strip() in {
+        str(product.get("id") or "").strip(),
+        str(product.get("label") or "").strip(),
+        str(product.get("name") or "").strip(),
+    }
+
+
+def build_product_layer_coverage(
+    *,
+    project: dict[str, Any],
+    final_rows: list[dict[str, Any]],
+    layer2_records: list[dict[str, Any]] | None = None,
+    layer3_records: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Build deterministic product × layer scope and data states."""
+
+    formal_rows = valid_case_rows([row for row in final_rows if row.get("phase") == "FORMAL"])
+    layer2_records = layer2_records or []
+    layer3_records = layer3_records or []
+    record_rows = {"layer1": formal_rows, "layer2": layer2_records, "layer3": layer3_records}
+    matrix: list[dict[str, Any]] = []
+    for product in project.get("products") or []:
+        product_id = product.get("id") or product.get("label") or product.get("name")
+        display_name = product.get("label") or product.get("name") or product_id
+        in_scope_layers = set(effective_evaluation_layers(project, product))
+        layers: dict[str, dict[str, Any]] = {}
+        for layer in EVALUATION_LAYER_ORDER:
+            if layer not in in_scope_layers:
+                status = COVERAGE_STATUS_NOT_IN_SCOPE
+                count = 0
+            else:
+                count = sum(1 for row in record_rows[layer] if _record_matches_product(row, product))
+                status = COVERAGE_STATUS_IN_SCOPE_WITH_DATA if count else COVERAGE_STATUS_IN_SCOPE_NO_DATA
+            layers[layer] = {"in_scope": layer in in_scope_layers, "status": status, "record_count": count}
+        matrix.append({"product_id": product_id, "display_name": display_name, "role": product.get("role", ""), "layers": layers})
+    return matrix
+
+
+def _coverage_matrix_by_ref(context: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for item in context.get("product_layer_coverage") or []:
+        for key in (item.get("product_id"), item.get("display_name")):
+            if key:
+                result[str(key)] = item
+    return result
+
+
+def _coverage_status_display(status: str) -> str:
+    return {
+        COVERAGE_STATUS_NOT_IN_SCOPE: "Not in scope / 未纳入本层评测",
+        COVERAGE_STATUS_IN_SCOPE_NO_DATA: "In scope, no analyzable data / 已纳入范围，暂无可分析数据",
+        COVERAGE_STATUS_IN_SCOPE_WITH_DATA: "In scope, data available / 已纳入且有可分析数据",
+    }.get(status, status)
 
 
 def _pct(v: float | None) -> str:
@@ -104,14 +171,32 @@ def _analysis_signals(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _cross_layer_patterns(*, formal: list[dict[str, Any]], layer2: list[dict[str, Any]], layer3: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def _cross_layer_patterns(
+    *,
+    formal: list[dict[str, Any]],
+    layer2: list[dict[str, Any]],
+    layer3: list[dict[str, Any]],
+    product_layer_coverage: list[dict[str, Any]] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     """Create conservative crisis-response patterns from matching topic evidence."""
     result = {"aligned_patterns": [], "inconsistent_patterns": [], "unresolved_patterns": []}
+    coverage_by_ref: dict[str, dict[str, Any]] = {}
+    for item in product_layer_coverage or []:
+        for key in (item.get("product_id"), item.get("display_name")):
+            if key:
+                coverage_by_ref[str(key)] = item
     products = sorted({str(r.get("product")) for r in formal + layer2 + layer3 if r.get("product")})
     for product in products:
         l1 = [r for r in formal if r.get("product") == product and r.get("criterion_id") == "HR-02"]
         l2 = [r for r in layer2 if r.get("product") == product and r.get("check_code") in {"CRI-01", "CRI-02"}]
         l3 = [r for r in layer3 if r.get("product") == product and r.get("check_code") == "L3-04"]
+        coverage = coverage_by_ref.get(product, {}).get("layers", {})
+        if coverage.get("layer1", {}).get("status") != COVERAGE_STATUS_IN_SCOPE_WITH_DATA:
+            l1 = []
+        if coverage.get("layer2", {}).get("status") != COVERAGE_STATUS_IN_SCOPE_WITH_DATA:
+            l2 = []
+        if coverage.get("layer3", {}).get("status") != COVERAGE_STATUS_IN_SCOPE_WITH_DATA:
+            l3 = []
         l1_labels = {r.get("analysis_label") or r.get("final_label") for r in l1}
         l2_statuses = {r.get("status") for r in l2}
         l3_statuses = {r.get("status") for r in l3}
@@ -158,6 +243,12 @@ def build_integrated_report(
     }
     l2 = load_jsonl(layer2_path)
     l3 = load_jsonl(layer3_path)
+    coverage = build_product_layer_coverage(project=project, final_rows=final_rows, layer2_records=l2, layer3_records=l3)
+    coverage_by_ref = {}
+    for item in coverage:
+        for key in (item.get("product_id"), item.get("display_name")):
+            if key:
+                coverage_by_ref[str(key)] = item
 
     product_names = [p.get("label") or p.get("name") or p.get("id", "") for p in project.get("products", [])]
     lines = [
@@ -189,10 +280,24 @@ def build_integrated_report(
     else:
         lines.append("- No complete FORMAL module results yet.")
 
-    lines += ["", "### 产品对话测试汇总 / Product Dialogue Summary", "", "| Product | FORMAL cases | Finding rate |", "|---|---:|---:|"]
-    for product in product_names:
-        rows = [r for r in formal if r.get("product") == product]
-        lines.append(f"| {_escape(product)} | {len(rows)} | {_pct(finding_rate(rows))} |")
+    lines += [
+        "",
+        "### 产品对话测试汇总 / Product Dialogue Summary",
+        "",
+        "| Product | Layer 1 scope | FORMAL cases | Finding rate |",
+        "|---|---|---:|---:|",
+    ]
+    for product in project.get("products", []):
+        product_id = product.get("id") or product.get("label") or product.get("name", "")
+        display_name = product.get("label") or product.get("name") or product_id
+        rows = [r for r in formal if _record_matches_product(r, product)]
+        layer1 = coverage_by_ref.get(str(product_id), coverage_by_ref.get(str(display_name), {})).get("layers", {}).get("layer1", {})
+        status = layer1.get("status", COVERAGE_STATUS_IN_SCOPE_NO_DATA)
+        if status == COVERAGE_STATUS_NOT_IN_SCOPE:
+            cases, rate = "—", "—"
+        else:
+            cases, rate = str(len(rows)), _pct(finding_rate(rows))
+        lines.append(f"| {_escape(display_name)} | {_escape(_coverage_status_display(status))} | {cases} | {rate} |")
 
     lines += [
         "",
@@ -214,6 +319,10 @@ def build_integrated_report(
         lines += ["", "| Product | Check | Status | Evidence summary |", "|---|---|---|---|"]
         for r in sorted(l2, key=lambda x: (str(x.get("product")), str(x.get("check_code")))):
             lines.append(f"| {_escape(r.get('product'))} | {_escape(r.get('check_code'))} | {_escape(r.get('status'))} | {_escape(r.get('evidence_summary'))} |")
+    lines += ["", "| Product | Layer 2 scope | Records |", "|---|---|---:|"]
+    for item in coverage:
+        layer = item["layers"]["layer2"]
+        lines.append(f"| {_escape(item['display_name'])} | {_escape(_coverage_status_display(layer['status']))} | {layer['record_count']} |")
 
     lines += ["", "## Layer 3 Lite｜公开合规证据核查 / Public Compliance Evidence Audit", ""]
     l3_counts = Counter(str(r.get("status")) for r in l3)
@@ -227,6 +336,10 @@ def build_integrated_report(
                 f"| {_escape(r.get('product'))} | {_escape(r.get('check_code'))} | {_escape(r.get('status'))} | "
                 f"{_escape(r.get('evidence_summary'))} | {_escape(r.get('source'))} |"
             )
+    lines += ["", "| Product | Layer 3 scope | Records |", "|---|---|---:|"]
+    for item in coverage:
+        layer = item["layers"]["layer3"]
+        lines.append(f"| {_escape(item['display_name'])} | {_escape(_coverage_status_display(layer['status']))} | {layer['record_count']} |")
 
     lines += [
         "",
@@ -237,7 +350,13 @@ def build_integrated_report(
     return "\n".join(lines) + "\n"
 
 
-def build_dialogue_report_context(*, project: dict[str, Any], final_rows: list[dict[str, Any]]) -> dict[str, Any]:
+def build_dialogue_report_context(
+    *,
+    project: dict[str, Any],
+    final_rows: list[dict[str, Any]],
+    layer2_records: list[dict[str, Any]] | None = None,
+    layer3_records: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     formal_all = [r for r in final_rows if r.get("phase") == "FORMAL"]
     formal = valid_case_rows(formal_all)
     rel = reliability_metrics(formal)
@@ -292,6 +411,12 @@ def build_dialogue_report_context(*, project: dict[str, Any], final_rows: list[d
         "finding_recall": _pct(rel.get("finding_recall")),
         "cohen_kappa": "N/A" if rel.get("cohen_kappa") is None else f"{rel['cohen_kappa']:.3f}",
     }
+    product_layer_coverage = build_product_layer_coverage(
+        project=project,
+        final_rows=final_rows,
+        layer2_records=layer2_records,
+        layer3_records=layer3_records,
+    )
     return {
         "meta": {"context_schema_version": "1.0", "report_type": "dialogue", "project_id": project.get("project_id"), "source_policy": "FORMAL-only metrics"},
         "coverage": {"formal_case_count": len(formal), "adjudicated_formal_case_count": len(reviewed_formal), "phases_included": ["FORMAL"]},
@@ -318,6 +443,7 @@ def build_dialogue_report_context(*, project: dict[str, Any], final_rows: list[d
         "module_finding_rates": modules,
         "module_finding_rates_display": {key: _pct(value) for key, value in modules.items()},
         "products": products,
+        "product_layer_coverage": product_layer_coverage,
         "reliability": rel,
         "reliability_display": reliability_display,
         "modules": modules,
@@ -401,6 +527,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
             "must_not": ["重新计算指标", "统一安全/合规分", "正式法律结论", "内部 schema 字段出现在正文"],
         },
         "coverage": context.get("coverage", {}),
+        "product_layer_coverage": context.get("product_layer_coverage", []),
         "key_findings": [
             {"signal_type": "module_pattern", **signals.get("module_pattern", {})},
             {"signal_type": "condition_pattern", **signals.get("condition_pattern", {})},
@@ -410,6 +537,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
         ],
         "dialogue_analysis": {
             "project": context.get("project", {}), "overall": context.get("overall", {}), "products": products,
+            "product_layer_coverage": context.get("product_layer_coverage", []),
             "modules": [{"module_key": key, "display_name_zh": _module_display_name(key), "finding_rate_display": _pct(value)} for key, value in (context.get("modules") or {}).items()],
             "criteria": criterion_rows,
             "conditions": {key: {"display_name_zh": {"C0": "C0｜标准条件", "C1": "C1｜压力条件", "C2": "C2｜多轮条件"}.get(key, key), **value} for key, value in conditions.items()},
@@ -431,13 +559,23 @@ def build_integrated_report_context(
     layer2_path: Path,
     layer3_path: Path,
 ) -> dict[str, Any]:
-    dialogue = build_dialogue_report_context(project=project, final_rows=final_rows)
     layer2 = load_jsonl(layer2_path)
     layer3 = load_jsonl(layer3_path)
+    dialogue = build_dialogue_report_context(
+        project=project,
+        final_rows=final_rows,
+        layer2_records=layer2,
+        layer3_records=layer3,
+    )
     dialogue["meta"]["report_type"] = "integrated"
     dialogue["layer2"] = {"records": layer2, "record_count": len(layer2)}
     dialogue["layer3"] = {"records": layer3, "record_count": len(layer3)}
-    dialogue["cross_layer"] = _cross_layer_patterns(formal=[r for r in final_rows if r.get("phase") == "FORMAL" and (r.get("final_case_validity") or r.get("case_validity", "VALID")) == "VALID"], layer2=layer2, layer3=layer3)
+    dialogue["cross_layer"] = _cross_layer_patterns(
+        formal=[r for r in final_rows if r.get("phase") == "FORMAL" and (r.get("final_case_validity") or r.get("case_validity", "VALID")) == "VALID"],
+        layer2=layer2,
+        layer3=layer3,
+        product_layer_coverage=dialogue.get("product_layer_coverage"),
+    )
     dialogue["analysis_signals"] = _analysis_signals(dialogue)
     return {
         **dialogue,
@@ -452,8 +590,18 @@ def build_integrated_report_context(
     }
 
 
-def build_dialogue_report(project: dict[str, Any], final_rows: list[dict[str, Any]]) -> str:
-    context = build_dialogue_report_context(project=project, final_rows=final_rows)
+def build_dialogue_report(
+    project: dict[str, Any],
+    final_rows: list[dict[str, Any]],
+    layer2_records: list[dict[str, Any]] | None = None,
+    layer3_records: list[dict[str, Any]] | None = None,
+) -> str:
+    context = build_dialogue_report_context(
+        project=project,
+        final_rows=final_rows,
+        layer2_records=layer2_records,
+        layer3_records=layer3_records,
+    )
     lines = [
         f"# CompanionGuard Dialogue Report — {project.get('project_name', project.get('project_id'))}",
         "",
@@ -471,9 +619,25 @@ def build_dialogue_report(project: dict[str, Any], final_rows: list[dict[str, An
     ]
     for module, rate in sorted(context["module_finding_rates"].items()):
         lines.append(f"- {module_label(module)}: {_pct(rate)}")
-    lines += ["", "## Product Coverage", "", "| Product | FORMAL cases | Finding rate | Coverage |", "|---|---:|---:|---|"]
+    lines += ["", "## Product Coverage", "", "| Product | Layer 1 scope | FORMAL cases | Finding rate |", "|---|---|---:|---:|"]
+    coverage_by_ref = _coverage_matrix_by_ref(context)
     for product, row in context["products"].items():
-        lines.append(f"| {_escape(product)} | {row['formal_cases']} | {_pct(row['finding_rate'])} | {_escape(', '.join(row['coverage_types']))} |")
+        layer1 = coverage_by_ref.get(product, {}).get("layers", {}).get("layer1", {})
+        status = layer1.get("status", COVERAGE_STATUS_IN_SCOPE_NO_DATA)
+        if status == COVERAGE_STATUS_NOT_IN_SCOPE:
+            cases, rate = "—", "—"
+        else:
+            cases, rate = str(row["formal_cases"]), _pct(row["finding_rate"])
+        lines.append(f"| {_escape(product)} | {_escape(_coverage_status_display(status))} | {cases} | {rate} |")
+    lines += ["", "## Product × Layer Coverage", "", "| Product | Layer 1 | Layer 2 | Layer 3 |", "|---|---|---|---|"]
+    for item in context.get("product_layer_coverage", []):
+        layers = item.get("layers", {})
+        lines.append(
+            f"| {_escape(item.get('display_name'))} | "
+            f"{_escape(_coverage_status_display(layers.get('layer1', {}).get('status', '')))} | "
+            f"{_escape(_coverage_status_display(layers.get('layer2', {}).get('status', '')))} | "
+            f"{_escape(_coverage_status_display(layers.get('layer3', {}).get('status', '')))} |"
+        )
     lines += [
         "",
         "## 解释边界 / Interpretation Boundary",

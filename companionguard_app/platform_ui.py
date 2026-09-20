@@ -11,7 +11,20 @@ import streamlit as st
 from .adjudication import FULL_ADJUDICATION, RANDOM_SAMPLE, SAMPLED_ADJUDICATION, STRATIFIED_SAMPLE, adjudication_policy
 from .audits import load_json, load_jsonl, make_audit_row, save_audit_evidence, upsert_jsonl
 from .collector import load_collector_config
-from .projects import PRIMARY_PRODUCT_ROLE, add_project_product, create_project, delete_project, get_project, list_projects, safe_slug, update_project
+from .projects import (
+    EVALUATION_LAYER_ORDER,
+    PRIMARY_PRODUCT_ROLE,
+    add_project_product,
+    assert_product_in_layer,
+    create_project,
+    delete_project,
+    get_project,
+    list_projects,
+    materialize_evaluation_layers,
+    products_for_layer,
+    safe_slug,
+    update_project,
+)
 from .reliability import LABELS, reliability_metrics
 from .reporting import build_dialogue_report, build_dialogue_report_context, build_integrated_report, build_integrated_report_context
 from .report_pipeline import write_report_artifacts
@@ -87,7 +100,15 @@ def _build_new_project_products(
     for line in custom_text.splitlines():
         value = line.strip()
         if value:
-            products.append({"id": safe_slug(value), "label": value, "slug": safe_slug(value), "role": "User-defined product"})
+            products.append({
+                "id": safe_slug(value),
+                "label": value,
+                "slug": safe_slug(value),
+                "role": "User-defined product",
+                "evaluation_layers": list(EVALUATION_LAYER_ORDER),
+            })
+    for product in products:
+        product.setdefault("evaluation_layers", list(EVALUATION_LAYER_ORDER))
     return products
 
 
@@ -204,6 +225,10 @@ def projects_page() -> None:
             "MoMood、星野、豆包为当前 FORMAL Full Benchmark 已注册的主产品。创建新项目时，可根据需要自由选择或添加评测产品。 "
             "MoMood, Xingye, and Doubao are registered primary products in the current FORMAL Full Benchmark. New projects can freely choose or add products according to their evaluation scope."
         )
+    st.caption(
+        "新建项目中的产品初始纳入全部三层；创建后可在‘当前项目评测产品’中调整各产品测试范围。 "
+        "New project products initially include all three layers; adjust each product's evaluation scope after creation in ‘Evaluated products in this project’."
+    )
     custom_text = st.text_area("添加其他评测产品（每行一个） / Add other evaluated products", placeholder="Character.AI\nNomi", help="用于添加上述列表中没有的产品。 / Use this field for products not listed above.")
     notes = st.text_area("项目备注（可选） / Project notes")
     if st.button("创建测试项目 / Create Test Project", type="primary"):
@@ -239,19 +264,29 @@ def _render_evaluated_products(project: dict[str, Any]) -> None:
     """Render the add-only product registration section for the active project."""
 
     st.subheader("当前项目评测产品 / Evaluated products in this project")
-    st.caption("这里列出当前项目已纳入评测的产品。已添加的产品会用于后续项目配置，并出现在相关测试页面的产品选择中。\n\nThis section lists the products included in the current project. Added products become part of this project and appear where relevant in downstream evaluation pages.")
+    st.caption("这里维护当前项目的评测产品及其测试范围。每个产品可分别纳入 Layer 1 对话行为测试、Layer 2 产品安全机制检查和 Layer 3 公开制度材料核查。\n\nThis section maintains the evaluated products and their evaluation scope. Each product can be included separately in Layer 1 Dialogue Behavioral Testing, Layer 2 Product Safeguard Checks, and Layer 3 Public Compliance Evidence Audit.")
     scope = active_scope()
     if scope is RuntimeScope.PUBLISHED:
         st.caption("当前正在查看官方发布版。若在此处新增产品，系统会先创建本次会话的临时工作区；修改只保存在该工作区中，不会改动官方发布版。\n\nYou are viewing the published version. Adding a product will create a temporary workspace for this session; changes will stay in that workspace and will not modify the published version.")
     elif scope is RuntimeScope.WORKSPACE:
         st.caption("当前修改保存在本次会话的临时工作区中。 / Current changes are saved in this session's temporary workspace.")
     products = project.get("products") or []
+    layer_labels = {
+        "layer1": "Layer 1｜对话行为测试 / Dialogue Behavioral Testing",
+        "layer2": "Layer 2｜产品安全机制检查 / Product Safeguard Checks",
+        "layer3": "Layer 3｜公开制度材料核查 / Public Compliance Evidence Audit",
+    }
     st.dataframe(
         [
             {
                 "产品 ID / Product ID": item.get("id", ""),
                 "显示名称 / Display name": item.get("label") or item.get("name") or item.get("id", ""),
                 "角色 / Role": item.get("role", ""),
+                "测试范围 / Evaluation Layers": " · ".join(
+                    layer_labels[layer]
+                    for layer in item.get("evaluation_layers", EVALUATION_LAYER_ORDER)
+                    if layer in layer_labels
+                ),
             }
             for item in products
         ],
@@ -263,16 +298,68 @@ def _render_evaluated_products(project: dict[str, Any]) -> None:
         product_id = st.text_input("产品 ID / Product ID", help="用于系统内部识别，需保持唯一。 / Used for internal identification and must remain unique.")
         display_name = st.text_input("显示名称 / Display name", help="用于页面展示。 / Used for display in the interface.")
         role = st.selectbox("角色 / Role", roles)
+        evaluation_layers = st.multiselect(
+            "测试范围 / Evaluation layers",
+            list(EVALUATION_LAYER_ORDER),
+            default=list(EVALUATION_LAYER_ORDER),
+            format_func=lambda layer: layer_labels[layer],
+            help="至少选择一个评测层。 / Select at least one evaluation layer.",
+        )
         submitted = st.form_submit_button("添加评测产品到当前项目 / Add evaluated product to this project", type="primary")
     if submitted:
         try:
-            updated = add_project_product(project, product_id=product_id, display_name=display_name, role=role)
+            if not evaluation_layers:
+                raise ValueError("请至少选择一个评测层。 / Select at least one evaluation layer.")
+            updated = add_project_product(
+                project,
+                product_id=product_id,
+                display_name=display_name,
+                role=role,
+                evaluation_layers=evaluation_layers,
+            )
+            context = ensure_active_workspace_for_write()
+            update_project(updated, scope=RuntimeScope.WORKSPACE, workspace_root=context.paths.root)
+        except Exception as exc:
+            st.error(str(exc))
+    else:
+        st.success(f"已追加产品 / Added: {display_name.strip()}")
+        st.rerun()
+
+    if not products:
+        st.info("当前项目尚未注册评测产品；先添加至少一个产品后再设置测试范围。 / Add at least one evaluated product before editing layer coverage.")
+        return
+
+    st.markdown("#### 调整当前产品测试范围 / Edit product evaluation scope")
+    product_options = [item.get("id") for item in products if item.get("id")]
+    selected_product_id = st.selectbox(
+        "选择产品 / Select product",
+        product_options,
+        format_func=lambda pid: next((item.get("label") or pid for item in products if item.get("id") == pid), pid),
+        key=f"coverage_product::{project.get('project_id')}",
+    )
+    selected_product = next(item for item in products if item.get("id") == selected_product_id)
+    selected_layers = st.multiselect(
+        "测试范围 / Evaluation layers",
+        list(EVALUATION_LAYER_ORDER),
+        default=list(selected_product.get("evaluation_layers", EVALUATION_LAYER_ORDER)),
+        format_func=lambda layer: layer_labels[layer],
+        key=f"coverage_layers::{project.get('project_id')}::{selected_product_id}",
+    )
+    if st.button("保存测试范围 / Save evaluation scope", type="primary", key=f"save_coverage::{project.get('project_id')}"):
+        try:
+            if not selected_layers:
+                raise ValueError("请至少选择一个评测层。 / Select at least one evaluation layer.")
+            updated = materialize_evaluation_layers(project)
+            for item in updated["products"]:
+                if item.get("id") == selected_product_id:
+                    item["evaluation_layers"] = list(selected_layers)
+                    break
             context = ensure_active_workspace_for_write()
             update_project(updated, scope=RuntimeScope.WORKSPACE, workspace_root=context.paths.root)
         except Exception as exc:
             st.error(str(exc))
         else:
-            st.success(f"已追加产品 / Added: {display_name.strip()}")
+            st.success("测试范围已保存到当前 Workspace。 / Evaluation scope saved to the current Workspace.")
             st.rerun()
 
 
@@ -281,17 +368,12 @@ def _project_product_names(project: dict[str, Any]) -> list[str]:
 
 
 def layer3_product_names(project: dict[str, Any]) -> list[str]:
-    """Return the product scope shown by the current Layer 3 policy."""
-    products = _project_product_names(project)
-    if project.get("mode") != "BENCHMARK":
-        return products
-    primary = [
+    """Return products in effective Layer 3 scope."""
+    return [
         p.get("label") or p.get("name") or p.get("id")
-        for p in project.get("products", [])
-        if str(p.get("role", "")).startswith("Primary anthropomorphic AI product")
-        and (p.get("label") or p.get("name") or p.get("id"))
+        for p in products_for_layer(project, "layer3")
+        if p.get("label") or p.get("name") or p.get("id")
     ]
-    return primary or products
 
 
 def data_explorer_page() -> None:
@@ -378,9 +460,13 @@ def layer2_page() -> None:
         return
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer2_checks.json")
     st.caption("产品机制观察，不评价模型回复。四种观察状态与 Dialogue FINDING 标签完全分离。")
-    products = _project_product_names(project)
+    products = [
+        p.get("label") or p.get("name") or p.get("id")
+        for p in products_for_layer(project, "layer2")
+        if p.get("label") or p.get("name") or p.get("id")
+    ]
     if not products:
-        st.error("当前项目没有产品。")
+        st.error("当前项目没有纳入 Layer 2 的产品。 / No products are included in Layer 2 for this project.")
         return
     product = st.selectbox("产品 / Product", products)
     with st.expander("标准化九步检查路径 / Standardized 9-step inspection path"):
@@ -400,6 +486,7 @@ def layer2_page() -> None:
     files = st.file_uploader("截图/录屏证据 / Screenshot or screen-record evidence", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"l2::{product}::{check['code']}")
     if st.button("保存 Layer 2 检查 / Save Layer 2 Check", type="primary"):
         try:
+            assert_product_in_layer(project, product, "layer2")
             context = ensure_active_workspace_for_write()
             project = active_project()
             paths = context.paths
@@ -438,8 +525,11 @@ def layer3_page() -> None:
     config = load_json(Path(__file__).resolve().parents[1] / "config" / "layer3_checks.json")
     st.caption("只核查公开正式材料能否为关键后台治理义务提供证据；不做Layer 3合规率。LLM仅辅助提取/初判，人工状态为最终记录。")
     products = layer3_product_names(project)
+    if not products:
+        st.error("当前项目没有纳入 Layer 3 的产品。 / No products are included in Layer 3 for this project.")
+        return
     if project.get("mode") == "BENCHMARK":
-        st.caption("BENCHMARK 模式：Layer 3 Lite 默认显示项目中标记为正式主产品的产品；比较产品和扩展产品不自动纳入。")
+        st.caption("BENCHMARK 模式：Layer 3 Lite 按产品测试范围显示；旧项目继续兼容正式主产品角色筛选。")
     product = st.selectbox("产品 / Product", products)
     check = st.selectbox("核查项 / Check", config["checks"], format_func=lambda x: f"{x['code']} · {x['name_zh']} · {x['regulation']}")
     existing = {(r.get("product"), r.get("check_code")): r for r in load_jsonl(paths.layer3_records)}
@@ -476,6 +566,7 @@ def layer3_page() -> None:
     files = st.file_uploader("公开材料/截图（可选） / Supporting document", type=["png", "jpg", "jpeg", "webp", "pdf", "txt", "md"], accept_multiple_files=True, key=f"l3::{product}::{check['code']}")
     if st.button("保存 Layer 3 核查 / Save Layer 3 Audit", type="primary"):
         try:
+            assert_product_in_layer(project, product, "layer3")
             context = ensure_active_workspace_for_write()
             project = active_project()
             paths = context.paths
@@ -571,7 +662,12 @@ def dialogue_report_page(criteria: dict[str, dict[str, Any]]) -> None:
                 project = active_project()
                 paths = runtime_context.paths
                 rows = load_final_results(paths.final_results)
-                context = build_dialogue_report_context(project=project, final_rows=rows)
+                context = build_dialogue_report_context(
+                    project=project,
+                    final_rows=rows,
+                    layer2_records=load_jsonl(paths.layer2_records),
+                    layer3_records=load_jsonl(paths.layer3_records),
+                )
                 text = run_report_writer(role="dialogue_report", report_context=context, llm_profile=profile, session_id=llm_session_id(), project_id=project.get("project_id"), scope=runtime_context.scope, workspace_root=runtime_context.paths.root)
                 result = write_report_artifacts(
                     report_type="dialogue", project=project, final_rows=rows,

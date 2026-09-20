@@ -40,6 +40,7 @@ def test_add_project_product_is_add_only_and_rejects_invalid_identity():
     assert [item["id"] for item in project["products"]] == ["A", "B", "C"]
     assert updated["products"][-1] == {
         "id": "D", "label": "Product Delta", "slug": "D", "role": PRIMARY_PRODUCT_ROLE,
+        "evaluation_layers": ["layer1", "layer2", "layer3"],
     }
 
     with pytest.raises(ValueError, match="already exists"):

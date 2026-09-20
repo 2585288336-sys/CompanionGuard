@@ -47,6 +47,7 @@ from .service import criteria_index, run_single_case
 from .llm_ui import llm_session_id, render_llm_profile_selector
 from .testplans import upsert_test_plan
 from .platform_ui import active_project, active_paths, ensure_active_workspace_for_write
+from .projects import assert_product_in_layer, products_for_layer
 from .storage import completed_case_ids
 from .config import OFFICIAL_MODULE_ORDER
 from .display_labels import criterion_label, module_label, scenario_label, structure_label, turn_label
@@ -180,6 +181,7 @@ def _render_single_setup(criteria: dict[str, dict[str, Any]], config: dict[str, 
         return
     st.subheader("独立测试案例 / Single Test Case")
     product_id, product_name, product_slug, pconfig = _render_product_selector(config, prefix="collector_single")
+    assert_product_in_layer(active_project() or {}, product_id, "layer1")
     available = allowed_criteria_for_product(criteria, config, product_id)
     criterion_items = sorted(available.items())
     selected = st.selectbox("测试项目 / Criterion", criterion_items, format_func=_criterion_label, key="collector_single_criterion")
@@ -258,6 +260,7 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
     st.subheader("测试方案与采集队列 / Test Plan & Collection Queue")
     st.caption("产品与测试覆盖彼此独立。先选择被测产品，再按模块组合具体测试项目、场景和实验条件。")
     product_id, product_name, product_slug, pconfig = _render_product_selector(config, prefix="collector_queue")
+    assert_product_in_layer(active_project() or {}, product_id, "layer1")
 
     preset_path = __import__("pathlib").Path(__file__).resolve().parents[1] / "config" / "test_plan_presets.json"
     presets = json.loads(preset_path.read_text(encoding="utf-8"))["presets"]
@@ -381,6 +384,7 @@ def _render_queue_builder(criteria: dict[str, dict[str, Any]], config: dict[str,
         st.rerun()
 
 def _start_queue_case(queue: dict[str, Any], item: dict[str, Any], criteria: dict[str, dict[str, Any]]) -> None:
+    assert_product_in_layer(active_project() or {}, queue.get("product_id") or queue.get("product"), "layer1")
     runtime_context = ensure_active_workspace_for_write()
     paths = runtime_context.paths
     if not paths:
@@ -584,6 +588,11 @@ def _render_active_session(criteria: dict[str, dict[str, Any]], session_id: str)
         st.error("未找到已保存的采集案例。")
         st.session_state.pop("collector_active_session", None)
         return
+    try:
+        assert_product_in_layer(active_project() or {}, session.get("product_id") or session.get("product"), "layer1")
+    except ValueError as exc:
+        st.error(str(exc))
+        return
     if session.get("collection_status") == "COMPLETE":
         _render_completed_session(criteria, session)
         return
@@ -742,7 +751,10 @@ def data_collection_page() -> None:
     criteria = criteria_index()
     config = load_collector_config()
     config = dict(config)
-    config["products"] = project.get("products", config.get("products", []))
+    config["products"] = products_for_layer(project, "layer1")
+    if not config["products"]:
+        st.warning("当前项目没有纳入 Layer 1 的产品。 / No products are included in Layer 1 for this project.")
+        return
 
     active_session = st.session_state.get("collector_active_session")
     if active_session:

@@ -14,7 +14,11 @@ def make_integrated_fixture(root: Path) -> tuple[dict, list[dict], Path, Path]:
         "project_id": "reporting-integrated-fixture",
         "project_name": "Integrated Report Writer Fixture",
         "mode": "BENCHMARK",
-        "products": [{"id": "MoMood", "label": "MoMood"}, {"id": "Xingye", "label": "星野"}, {"id": "Doubao", "label": "豆包"}],
+        "products": [
+            {"id": "MoMood", "label": "MoMood", "role": "Primary anthropomorphic AI product"},
+            {"id": "Xingye", "label": "星野", "role": "Primary anthropomorphic AI product"},
+            {"id": "Doubao", "label": "豆包", "role": "Primary anthropomorphic AI product"},
+        ],
         "human_adjudication_policy": "FULL_ADJUDICATION",
     }
     patterns = {
