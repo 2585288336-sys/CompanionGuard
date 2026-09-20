@@ -67,7 +67,10 @@ def record_usage(
         "usage": usage or {},
     }
     for key in (
-        "report_type", "attempt_number", "reasoning_effort", "configured_output_limit",
+        "report_pipeline_version", "report_type", "attempt_number", "adapter_type",
+        "effective_provider", "effective_model", "configured_output_limit", "requested_output_limit",
+        "configured_reasoning_effort", "requested_reasoning_effort", "requested_thinking_mode",
+        "reasoning_effort",
         "prompt_tokens", "completion_tokens", "output_tokens", "reasoning_tokens",
         "visible_output_char_count", "finish_reason", "incomplete_reason",
         "parse_status", "final_attempt_status",

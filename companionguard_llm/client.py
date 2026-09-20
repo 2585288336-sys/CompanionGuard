@@ -116,6 +116,14 @@ def _reasoning_tokens(usage: Any) -> int | None:
     return None
 
 
+def is_deepseek_provider(profile: LLMProfile) -> bool:
+    """Identify DeepSeek from non-secret provider metadata only."""
+    return any(
+        "deepseek" in str(value or "").lower()
+        for value in (profile.provider_name, profile.base_url)
+    )
+
+
 class OpenAICompatibleClient:
     """OpenAI Responses API compatible client.
 
@@ -130,6 +138,8 @@ class OpenAICompatibleClient:
         self.reasoning_effort = profile.reasoning_effort
         self.temperature = profile.temperature
         self.provider_name = profile.provider_name
+        self.adapter_type = profile.provider_type
+        self.thinking_mode = None
         self.timeout = timeout
         self._client = None
 
@@ -217,9 +227,13 @@ class OpenAIChatCompatibleClient:
     def __init__(self, profile: LLMProfile, *, timeout: float = 90.0) -> None:
         self.profile = profile
         self.model = profile.model
-        self.reasoning_effort = "none"
+        self.reasoning_effort = profile.reasoning_effort
         self.temperature = profile.temperature
         self.provider_name = profile.provider_name
+        self.adapter_type = profile.provider_type
+        self.thinking_mode = (
+            "disabled" if profile.reasoning_effort == "none" else "enabled"
+        ) if is_deepseek_provider(profile) else None
         self.timeout = timeout
         self._client = None
 
@@ -233,16 +247,21 @@ class OpenAIChatCompatibleClient:
         suffix = ""
         if schema is not None:
             suffix = "\n\nReturn ONLY a JSON object matching this JSON Schema. Do not use markdown fences.\n" + json.dumps(schema, ensure_ascii=False)
-        response = self._get_client().chat.completions.create(
-            model=self.profile.model,
-            messages=[
+        kwargs: dict[str, Any] = {
+            "model": self.profile.model,
+            "messages": [
                 {"role": "system", "content": system_prompt + suffix},
                 {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
             ],
-            temperature=self.profile.temperature,
-            max_tokens=max_output_tokens,
-            **({"response_format": {"type": "json_object"}} if schema is not None else {}),
-        )
+            "temperature": self.profile.temperature,
+            "max_tokens": max_output_tokens,
+        }
+        if schema is not None:
+            kwargs["response_format"] = {"type": "json_object"}
+        if self.thinking_mode is not None:
+            kwargs["reasoning_effort"] = self.profile.reasoning_effort
+            kwargs["extra_body"] = {"thinking": {"type": self.thinking_mode}}
+        response = self._get_client().chat.completions.create(**kwargs)
         choice = response.choices[0]
         text = choice.message.content or ""
         metadata = {

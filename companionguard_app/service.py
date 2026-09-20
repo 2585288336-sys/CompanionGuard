@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import warnings
 import os
 from dataclasses import replace
@@ -7,12 +8,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from companionguard_judge.pipeline import dry_run, judge_case, load_criteria
-from companionguard_llm.client import LLMResponseError, make_client
+from companionguard_llm.client import LLMResponseError, is_deepseek_provider, make_client
 from companionguard_llm.guard import check_server_guard, record_usage
 from companionguard_llm.profiles import LLMProfile
 
 from .config import CRITERIA_DIR, JUDGE_RESULTS_PATH, LLM_USAGE_PATH, PROMPTS_DIR
 from .reporting import build_writer_facing_context
+from .report_schema import REPORT_PIPELINE_VERSION
 from .runtime_scope import RuntimeScope, assert_writable_scope, assert_writable_target
 from .storage import append_judge_result, completed_case_ids
 
@@ -119,17 +121,44 @@ def _effective_report_profile(profile: LLMProfile, *, role: str, fallback: bool 
     return replace(profile, reasoning_effort=reasoning)
 
 
+def report_profile_diagnostics(profile: LLMProfile, *, requested_output_limit: int) -> dict[str, Any]:
+    """Return non-secret diagnostics for a report request."""
+    is_chat = profile.provider_type == "openai_chat_compatible"
+    return {
+        "provider_type": profile.provider_type,
+        "provider_name": profile.provider_name,
+        "model": profile.model,
+        "adapter_type": profile.provider_type,
+        "reasoning_effort": profile.reasoning_effort,
+        "thinking_mode": (
+            "disabled" if profile.reasoning_effort == "none" else "enabled"
+        ) if is_chat and is_deepseek_provider(profile) else None,
+        "requested_output_limit": requested_output_limit,
+    }
+
+
 def _response_meta(usage: dict[str, Any] | None) -> dict[str, Any]:
     return dict(usage or {})
 
 
-def _writer_status(text: str | None, usage: dict[str, Any] | None, *, minimum_chars: int = 500) -> str:
+def _writer_status(
+    text: str | None,
+    usage: dict[str, Any] | None,
+    *,
+    minimum_chars: int = 500,
+    requested_output_limit: int | None = None,
+) -> str:
     value = (text or "").strip()
     meta = _response_meta(usage)
     finish_reason = str(meta.get("finish_reason") or "").lower()
     incomplete_reason = str(meta.get("incomplete_reason") or "").lower()
     if finish_reason in {"length", "max_tokens", "max_output_tokens"} or incomplete_reason in {"length", "max_tokens", "max_output_tokens"}:
         return "WRITER_TRUNCATED"
+    if finish_reason in {"content_filter", "insufficient_system_resource", "aborted", "unknown"} or incomplete_reason in {"content_filter", "insufficient_system_resource", "aborted", "unknown"}:
+        return "WRITER_INCOMPLETE"
+    token_count = meta.get("completion_tokens") or meta.get("output_tokens")
+    if not finish_reason and requested_output_limit and isinstance(token_count, (int, float)) and token_count >= requested_output_limit:
+        return "WRITER_TRUNCATED_SUSPECTED"
     if not value or len(value) < minimum_chars:
         return "WRITER_EMPTY_OUTPUT"
     return "PASS"
@@ -350,13 +379,27 @@ def run_report_writer(
             payload={"report_context": writer_context},
             max_output_tokens=attempt_limit,
         )
-        status = _writer_status(text, usage, minimum_chars=minimum_visible_chars)
+        diagnostics = report_profile_diagnostics(attempt_profile, requested_output_limit=attempt_limit)
+        status = _writer_status(
+            text,
+            usage,
+            minimum_chars=minimum_visible_chars,
+            requested_output_limit=attempt_limit,
+        )
         meta = _response_meta(usage)
         observability = {
+            "report_pipeline_version": REPORT_PIPELINE_VERSION,
             "report_type": role,
             "attempt_number": attempt_number,
+            "adapter_type": diagnostics["adapter_type"],
+            "effective_provider": diagnostics["provider_name"],
+            "effective_model": diagnostics["model"],
             "reasoning_effort": attempt_profile.reasoning_effort,
+            "configured_reasoning_effort": llm_profile.reasoning_effort,
+            "requested_reasoning_effort": attempt_profile.reasoning_effort,
+            "requested_thinking_mode": diagnostics["thinking_mode"],
             "configured_output_limit": attempt_limit,
+            "requested_output_limit": attempt_limit,
             "prompt_tokens": meta.get("prompt_tokens") or meta.get("input_tokens"),
             "completion_tokens": meta.get("completion_tokens"),
             "output_tokens": meta.get("output_tokens"),
@@ -432,8 +475,10 @@ def run_grounding_validator(
     last_failure: str | None = None
     for attempt_number in (1, 2):
         _before_call(attempt_profile, session_id=session_id)
+        client = make_client(attempt_profile)
+        diagnostics = report_profile_diagnostics(attempt_profile, requested_output_limit=attempt_limit)
         try:
-            result, usage = make_client(attempt_profile).generate_json(
+            result, usage = client.generate_json(
                 system_prompt=system_prompt,
                 payload={"draft_report": draft_report, "report_context": report_context},
                 schema_name="evidence_grounding",
@@ -451,10 +496,19 @@ def run_grounding_validator(
                 project_usage_path=project_usage_path,
                 observability={
                     **meta,
+                    "report_pipeline_version": REPORT_PIPELINE_VERSION,
                     "report_type": "integrated",
                     "attempt_number": attempt_number,
+                    "adapter_type": diagnostics["adapter_type"],
+                    "effective_provider": diagnostics["provider_name"],
+                    "effective_model": diagnostics["model"],
                     "reasoning_effort": attempt_profile.reasoning_effort,
+                    "configured_reasoning_effort": llm_profile.reasoning_effort,
+                    "requested_reasoning_effort": attempt_profile.reasoning_effort,
+                    "requested_thinking_mode": diagnostics["thinking_mode"],
                     "configured_output_limit": attempt_limit,
+                    "requested_output_limit": attempt_limit,
+                    "visible_output_char_count": 0,
                 },
             )
             if attempt_number == 1 and exc.code in {"GROUNDING_EMPTY_RESPONSE", "GROUNDING_NON_JSON_RESPONSE"}:
@@ -475,14 +529,25 @@ def run_grounding_validator(
             usage=usage,
             project_usage_path=project_usage_path,
             observability={
+                "report_pipeline_version": REPORT_PIPELINE_VERSION,
                 "report_type": "integrated",
                 "attempt_number": attempt_number,
+                "adapter_type": diagnostics["adapter_type"],
+                "effective_provider": diagnostics["provider_name"],
+                "effective_model": diagnostics["model"],
                 "reasoning_effort": attempt_profile.reasoning_effort,
+                "configured_reasoning_effort": llm_profile.reasoning_effort,
+                "requested_reasoning_effort": attempt_profile.reasoning_effort,
+                "requested_thinking_mode": diagnostics["thinking_mode"],
                 "configured_output_limit": attempt_limit,
+                "requested_output_limit": attempt_limit,
                 "prompt_tokens": meta.get("prompt_tokens") or meta.get("input_tokens"),
                 "completion_tokens": meta.get("completion_tokens"),
                 "output_tokens": meta.get("output_tokens"),
                 "reasoning_tokens": meta.get("reasoning_tokens"),
+                "visible_output_char_count": len(json.dumps(result, ensure_ascii=False)),
+                "finish_reason": meta.get("finish_reason"),
+                "incomplete_reason": meta.get("incomplete_reason"),
                 "parse_status": "JSON_VALID",
                 "final_attempt_status": "PASS",
             },
@@ -506,6 +571,38 @@ def run_academic_polish(
     system_prompt = prompt_path.read_text(encoding="utf-8")
     _before_call(llm_profile, session_id=session_id)
     effective_profile = _effective_report_profile(llm_profile, role="academic_polish")
-    text, usage = make_client(effective_profile).generate_text(system_prompt=system_prompt, payload={"report_text": report_text, "report_context": report_context}, max_output_tokens=REPORT_ROLE_DEFAULTS["academic_polish"][1])
-    _after_call(effective_profile, session_id=session_id, project_id=project_id, usage=usage, project_usage_path=project_usage_path)
+    client = make_client(effective_profile)
+    output_limit = _configured_int("academic_polish", "OUTPUT_LIMIT", REPORT_ROLE_DEFAULTS["academic_polish"][1])
+    text, usage = client.generate_text(system_prompt=system_prompt, payload={"report_text": report_text, "report_context": report_context}, max_output_tokens=output_limit)
+    meta = _response_meta(usage)
+    _after_call(
+        effective_profile,
+        session_id=session_id,
+        project_id=project_id,
+        usage=usage,
+        project_usage_path=project_usage_path,
+        observability={
+            "report_pipeline_version": REPORT_PIPELINE_VERSION,
+            "report_type": "academic_polish",
+            "attempt_number": 1,
+            "adapter_type": getattr(client, "adapter_type", effective_profile.provider_type),
+            "effective_provider": effective_profile.provider_name,
+            "effective_model": effective_profile.model,
+            "reasoning_effort": effective_profile.reasoning_effort,
+            "configured_reasoning_effort": llm_profile.reasoning_effort,
+            "requested_reasoning_effort": effective_profile.reasoning_effort,
+            "requested_thinking_mode": getattr(client, "thinking_mode", None),
+            "configured_output_limit": output_limit,
+            "requested_output_limit": output_limit,
+            "prompt_tokens": meta.get("prompt_tokens") or meta.get("input_tokens"),
+            "completion_tokens": meta.get("completion_tokens"),
+            "output_tokens": meta.get("output_tokens"),
+            "reasoning_tokens": meta.get("reasoning_tokens"),
+            "visible_output_char_count": len((text or "").strip()),
+            "finish_reason": meta.get("finish_reason"),
+            "incomplete_reason": meta.get("incomplete_reason"),
+            "parse_status": "TEXT",
+            "final_attempt_status": "PASS",
+        },
+    )
     return text.strip() + "\n"

@@ -384,6 +384,7 @@ def build_dialogue_report_context(
         bucket["formal_cases"] += 1
     for cid, bucket in criteria.items():
         bucket["finding_rate"] = finding_rate([r for r in formal if r.get("criterion_id") == cid])
+        bucket["finding_rate_display"] = _pct(bucket["finding_rate"])
         bucket.update(_display_criterion({"criterion_id": cid, "criterion_name": bucket.get("criterion_name"), "module": bucket.get("module")}))
     condition_rates = {}
     for condition in ("C0", "C1", "C2"):
@@ -532,6 +533,9 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
             })
 
     signals = context.get("analysis_signals") or _analysis_signals(context)
+    writer_coverage = dict(context.get("coverage", {}))
+    writer_coverage.pop("formal_case_count", None)
+    writer_coverage.pop("formal_case_count_legacy_semantic", None)
     return {
         "report_contract": {
             "writer_context_version": "1.1", "report_type": report_type,
@@ -540,7 +544,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
             "must_explain": ["测试结果", "具体表现", "能力问题", "可能用户影响", "监管审核意义", "具体监管建议"],
             "must_not": ["重新计算指标", "统一安全/合规分", "正式法律结论", "内部 schema 字段出现在正文"],
         },
-        "coverage": context.get("coverage", {}),
+        "coverage": writer_coverage,
         "product_layer_coverage": context.get("product_layer_coverage", []),
         "key_findings": [
             {"signal_type": "module_pattern", **signals.get("module_pattern", {})},

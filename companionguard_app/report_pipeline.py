@@ -27,13 +27,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _writer_status(text: str | None, metadata: dict[str, Any] | None, *, minimum_visible_chars: int = WRITER_MIN_VISIBLE_CHARS) -> str:
+def _writer_status(text: str | None, metadata: dict[str, Any] | None, *, minimum_visible_chars: int = WRITER_MIN_VISIBLE_CHARS, requested_output_limit: int | None = None) -> str:
     value = (text or "").strip()
     metadata = metadata or {}
     finish_reason = str(metadata.get("finish_reason") or "").lower()
     incomplete_reason = str(metadata.get("incomplete_reason") or "").lower()
     if finish_reason in {"length", "max_tokens", "max_output_tokens"} or incomplete_reason in {"length", "max_tokens", "max_output_tokens"}:
         return "WRITER_TRUNCATED"
+    if finish_reason in {"content_filter", "insufficient_system_resource", "aborted", "unknown"} or incomplete_reason in {"content_filter", "insufficient_system_resource", "aborted", "unknown"}:
+        return "WRITER_INCOMPLETE"
+    token_count = metadata.get("completion_tokens") or metadata.get("output_tokens")
+    if not finish_reason and requested_output_limit and isinstance(token_count, (int, float)) and token_count >= requested_output_limit:
+        return "WRITER_TRUNCATED_SUSPECTED"
     if not value or len(value) < minimum_visible_chars:
         return "WRITER_EMPTY_OUTPUT"
     return "PASS"
@@ -122,7 +127,8 @@ def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_r
     writer_context_path = target_reports_dir / "writer_context.json"
     writer_context_path.write_text(json.dumps(build_writer_facing_context(context), ensure_ascii=False, indent=2), encoding="utf-8")
     draft = draft_text if draft_text is not None else (writer(context) if writer else "")
-    writer_status = writer_status or _writer_status(draft, writer_metadata, minimum_visible_chars=minimum_visible_chars)
+    requested_limit = (writer_metadata or {}).get("requested_output_limit") or (writer_metadata or {}).get("configured_output_limit")
+    writer_status = writer_status or _writer_status(draft, writer_metadata, minimum_visible_chars=minimum_visible_chars, requested_output_limit=requested_limit)
     draft_path = target_reports_dir / "draft_report.md"
     draft_path.write_text(draft, encoding="utf-8")
     if writer_status != "PASS":
@@ -137,6 +143,16 @@ def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_r
             if hard["overall_status"] == "PASS"
             else _skipped_grounding("HARD_VALIDATION_FAILED")
         )
+        if grounding_validator and grounding.get("overall_status") == "PASS":
+            summary = grounding.get("summary") or {}
+            if summary.get("sentences_checked") == 0:
+                grounding = dict(grounding)
+                grounding["overall_status"] = "FAIL"
+                grounding["failure_type"] = "GROUNDING_ZERO_SENTENCES"
+                grounding["issues"] = list(grounding.get("issues") or []) + [{
+                    "issue_type": "GROUNDING_ZERO_SENTENCES",
+                    "message": "Grounding returned PASS without checking any sentences.",
+                }]
     hard = _persistable_hard_result(hard)
     hard_validation_path = target_reports_dir / "hard_validation_result.json"
     hard_validation_path.write_text(json.dumps(hard, ensure_ascii=False, indent=2), encoding="utf-8")
