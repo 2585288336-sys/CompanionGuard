@@ -52,6 +52,30 @@ def _allowed_numbers(context: dict[str, Any]) -> set[str]:
     return values
 
 
+def _numeric_token(value: str) -> tuple[float, str] | None:
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)(%|个百分点| pp)?", value.strip())
+    if not match:
+        return None
+    return float(match.group(1)), match.group(2) or "bare"
+
+
+def _number_is_context_supported(literal: str, allowed: set[str]) -> bool:
+    if literal in allowed:
+        return True
+    parsed = _numeric_token(literal)
+    if parsed is None:
+        return False
+    value, semantic = parsed
+    for candidate in allowed:
+        other = _numeric_token(candidate)
+        if other is None or other[1] != semantic:
+            continue
+        tolerance = 0.05 if semantic in {"%", "个百分点", " pp"} else 1e-9
+        if abs(value - other[0]) <= tolerance:
+            return True
+    return False
+
+
 def _report_numeric_literals(report_text: str) -> list[str]:
     """Return report numbers while ignoring headings and identifier tokens."""
     lines = []
@@ -119,7 +143,7 @@ def validate_report_hard(*, report_text: str, context: dict[str, Any], report_ty
     allowed = _allowed_numbers(context)
     numeric_text = re.sub(r"Layer\s+[123]|0[–-]100", "", report_text)
     for literal in _report_numeric_literals(numeric_text):
-        if literal not in allowed:
+        if not _number_is_context_supported(literal, allowed):
             issues.append({"issue_type": "NUMBER_MISMATCH", "value": literal, "reason": "number is not present in report_context"})
     if re.search(r"(?:增加|减少|高于|低于)\s*\d+(?:\.\d+)?\s*个百分点", report_text):
         comparison_text = " ".join(_context_strings(context.get("comparisons", {})))

@@ -443,7 +443,7 @@ def test_report_routes_generate_dialogue_and_integrated_artifacts_in_workspace(t
         scope=RuntimeScope.WORKSPACE, workspace_root=context.paths.root, data_root=tmp_path,
     )
     assert integrated_result["paths"]["draft"].is_file()
-    assert fake.text_calls == 2
+    assert fake.text_calls == 3  # Dialogue once; Integrated retries a short fixture once.
     assert fake.json_calls == 1
     assert (context.paths.root / "llm_usage.jsonl").is_file()
     assert _tree_snapshot(published) == before

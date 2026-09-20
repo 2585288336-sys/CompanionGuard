@@ -14,4 +14,6 @@
 
 产品范围必须以 Writer-facing context 中的 `product_layer_coverage` 为准。逐产品区分 `NOT_IN_SCOPE`、`IN_SCOPE_NO_DATA` 与 `IN_SCOPE_WITH_DATA`：未纳入的层不得写成零结果，已纳入但暂无数据不得写成没有风险。只对已纳入且有可分析数据的层作结果判断，不得把覆盖状态或层间缺失推断为产品能力结论。
 
+中文主体约 4,000–7,000 字。优先覆盖规定章节，不因追求篇幅重复统计。不得自行计算 context 未提供的新指标、百分比或比较差值；所有数字必须来自 Writer-facing context。
+
 输出完整正式报告正文，不输出写作过程、JSON或说明文字。

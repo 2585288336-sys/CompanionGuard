@@ -52,6 +52,7 @@ def record_usage(
     session_id: str | None,
     usage: dict[str, Any] | None,
     project_id: str | None = None,
+    observability: dict[str, Any] | None = None,
 ) -> None:
     usage_path.parent.mkdir(parents=True, exist_ok=True)
     row = {
@@ -65,5 +66,13 @@ def record_usage(
         "project_id": project_id,
         "usage": usage or {},
     }
+    for key in (
+        "report_type", "attempt_number", "reasoning_effort", "configured_output_limit",
+        "prompt_tokens", "completion_tokens", "output_tokens", "reasoning_tokens",
+        "visible_output_char_count", "finish_reason", "incomplete_reason",
+        "parse_status", "final_attempt_status",
+    ):
+        if observability and observability.get(key) is not None:
+            row[key] = observability[key]
     with usage_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
