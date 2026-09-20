@@ -48,6 +48,8 @@ def build_numeric_fact_registry(context: dict[str, Any]) -> list[dict[str, Any]]
         add(f"modules.{name}.finding_rate", f"module_finding_rates_display.{name}", value, (context.get("module_finding_rates_display") or {}).get(name), "percentage")
     for name, value in (context.get("module_criterion_counts") or {}).items():
         add(f"modules.{name}.criterion_count", f"module_criterion_counts.{name}", value, str(value), "count")
+    for name, value in (context.get("module_formal_case_counts") or {}).items():
+        add(f"modules.{name}.formal_case_count", f"module_formal_case_counts.{name}", value, str(value), "count")
     for name, row in (context.get("criteria") or {}).items():
         add(f"criteria.{name}.formal_cases", f"criteria.{name}.formal_cases", row.get("formal_cases"), str(row.get("formal_cases")) if row.get("formal_cases") is not None else None, "count")
         add(f"criteria.{name}.finding_rate", f"criteria.{name}.finding_rate", row.get("finding_rate"), row.get("finding_rate_display"), "percentage")
@@ -159,6 +161,22 @@ def _module_display_name(module: str | None) -> str:
     label = module_label(module)
     chinese = label.split(" / ", 1)[0]
     return chinese.split("｜", 1)[-1]
+
+
+def _validate_report_context_invariants(context: dict[str, Any]) -> None:
+    module_criterion_counts = context.get("module_criterion_counts") or {}
+    module_formal_case_counts = context.get("module_formal_case_counts") or {}
+    validity = context.get("formal_case_validity") or {}
+    products = context.get("products") or {}
+    checks = (
+        sum(module_criterion_counts.values()) == context.get("criterion_count"),
+        sum(module_formal_case_counts.values()) == context.get("valid_formal_case_count"),
+        not products or sum(row.get("formal_cases", 0) for row in products.values()) == context.get("valid_formal_case_count"),
+        sum(validity.get(key, 0) for key in ("VALID", "INVALID", "REVIEW")) == context.get("total_formal_case_count"),
+        context.get("representative_finding_count") == len(context.get("representative_findings") or []),
+    )
+    if not all(checks):
+        raise ValueError("REPORT_CONTEXT_INVARIANT_FAILED")
 
 
 CRITERION_REGULATORY_QUESTIONS = {
@@ -429,10 +447,10 @@ def build_dialogue_report_context(
     adjudication_status = Counter(str(r.get("adjudication_status") or "REVIEWED") for r in formal_all)
     product_names = [p.get("label") or p.get("name") or p.get("id", "") for p in project.get("products", [])]
     products: dict[str, Any] = {}
-    for product in product_names:
-        rows = [r for r in formal if r.get("product") == product]
+    for product_name, product in zip(product_names, project.get("products", [])):
+        rows = [r for r in formal if _record_matches_product(r, product)]
         coverage_types = sorted({str(r.get("coverage_type") or r.get("metadata", {}).get("coverage_type") or "UNKNOWN") for r in rows})
-        products[product] = {
+        products[product_name] = {
             "formal_cases": len(rows),
             "finding_rate": finding_rate(rows),
             "finding_rate_display": _pct(finding_rate(rows)),
@@ -451,7 +469,16 @@ def build_dialogue_report_context(
         bucket["finding_rate_display"] = _pct(bucket["finding_rate"])
         bucket.update(_display_criterion({"criterion_id": cid, "criterion_name": bucket.get("criterion_name"), "module": bucket.get("module")}))
     criterion_count = len(criteria)
-    module_criterion_counts = Counter(str(row.get("module") or "") for row in formal if row.get("criterion_id") and row.get("module"))
+    module_criterion_counts = Counter()
+    module_formal_case_counts = Counter()
+    for criterion in criteria.values():
+        module = str(criterion.get("module") or "")
+        if module:
+            module_criterion_counts[module] += 1
+            module_formal_case_counts[module] += int(criterion.get("formal_cases") or 0)
+    represented_formal_cases = sum(module_formal_case_counts.values())
+    if represented_formal_cases < len(formal):
+        module_formal_case_counts["__unattributed__"] += len(formal) - represented_formal_cases
     condition_rates = {}
     for condition in ("C0", "C1", "C2"):
         condition_rates[condition] = finding_rate([r for r in formal if r.get("condition") == condition])
@@ -487,7 +514,7 @@ def build_dialogue_report_context(
         layer2_records=layer2_records,
         layer3_records=layer3_records,
     )
-    return {
+    context = {
         "meta": {"context_schema_version": "1.0", "report_type": "dialogue", "project_id": project.get("project_id"), "source_policy": "FORMAL-only metrics"},
         "coverage": {
             "total_formal_case_count": len(formal_all),
@@ -532,6 +559,7 @@ def build_dialogue_report_context(
         "cohen_kappa_display": reliability_display["cohen_kappa_display"],
         "modules": modules,
         "module_criterion_counts": dict(module_criterion_counts),
+        "module_formal_case_counts": dict(module_formal_case_counts),
         "criteria": criteria,
         "criterion_count": criterion_count,
         "conditions": {key: {"finding_rate": value, "finding_rate_display": _pct(value), "sample_size": sum(1 for r in formal if r.get("condition") == key), "small_sample": sum(1 for r in formal if r.get("condition") == key) < SMALL_SAMPLE_THRESHOLD} for key, value in condition_rates.items()},
@@ -551,6 +579,8 @@ def build_dialogue_report_context(
             "subset_warning": "BENCHMARK_SUBSET/CUSTOM coverage must not be presented as directly equivalent to a full benchmark aggregate.",
         },
     }
+    _validate_report_context_invariants(context)
+    return context
 
 
 def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
@@ -560,6 +590,8 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
     projection removes duplicated database-like fields and does not export
     raw conversation text or human review notes to an external Writer.
     """
+    if "module_criterion_counts" in context or "module_formal_case_counts" in context:
+        _validate_report_context_invariants(context)
     report_type = context.get("meta", {}).get("report_type", "integrated")
     products = context.get("products") or {}
     criteria = context.get("criteria") or {}
@@ -672,7 +704,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
         "dialogue_analysis": {
             "project": context.get("project", {}), "overall": writer_overall, "products": writer_products,
             "product_layer_coverage": context.get("product_layer_coverage", []),
-            "modules": [{"module_key": key, "display_name_zh": _module_display_name(key), "finding_rate_display": _pct(value), "criterion_count": (context.get("module_criterion_counts") or {}).get(key)} for key, value in (context.get("modules") or {}).items()],
+            "modules": [{"module_key": key, "display_name_zh": _module_display_name(key), "finding_rate_display": _pct(value), "criterion_count": (context.get("module_criterion_counts") or {}).get(key), "formal_case_count": (context.get("module_formal_case_counts") or {}).get(key)} for key, value in (context.get("modules") or {}).items()],
             "criteria": criterion_rows,
             "conditions": {key: {"display_name_zh": {"C0": "C0｜标准条件", "C1": "C1｜压力条件", "C2": "C2｜多轮条件"}.get(key, key), **value} for key, value in writer_conditions.items()},
             "comparisons": writer_comparisons, "reliability": writer_reliability,

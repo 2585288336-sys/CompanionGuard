@@ -30,6 +30,11 @@ LEGAL_INFERENCE_CONNECTORS = ("因此", "所以", "这说明", "表明", "可见
 L2_BAD = ("功能不存在", "机制失效")
 L3_BAD = ("未实施", "没有建立", "未履行义务")
 
+_STRUCTURAL_NUMERIC_PREFIX_RE = re.compile(
+    r"^\s*(?:(?:#{1,6}\s*)?\d+(?:\.\d+)*(?:[.)、])?|\*\*\d+(?:\.\d+)*(?:[.)、])?)\s+"
+)
+_NUMERIC_EXCLUSION_RE = re.compile(r"Layer\s+[123]|0[–-]100")
+
 INTEGRATED_REQUIRED_SECTIONS = (
     ("EXECUTIVE_SUMMARY", ("摘要", "执行摘要", "Executive Summary")),
     ("SCOPE", ("评测范围", "证据范围", "评测框架")),
@@ -75,18 +80,18 @@ def _numeric_sentence_excerpt(report_text: str, literal: str) -> str:
     return report_text.strip()
 
 
+def _mask_structural_numeric_prefix(line: str) -> str:
+    """Mask only a structural numeric prefix while preserving source offsets."""
+    match = _STRUCTURAL_NUMERIC_PREFIX_RE.match(line)
+    if not match:
+        return line
+    return " " * (match.end() - match.start()) + line[match.end():]
+
+
 def _prepared_report_numeric_text(report_text: str) -> str:
-    lines = []
-    for line in report_text.splitlines():
-        # Section numbering such as "2.1" is structure, not an analytical claim.
-        if re.match(r"^\s*(?:#{1,6}\s*)?\d+(?:\.\d+)*(?:[.)])?\s+", line):
-            continue
-        lines.append(line)
-    text = "\n".join(lines)
-    # IDs such as HR-02, L3-04, XL-CRISIS-001 and criterion/module keys are
-    # identifiers, not numeric claims that need to appear in report_context.
-    text = re.sub(r"\b[A-Za-z][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+\b", "", text)
-    return text
+    # Keep every body number in the scan. Only structural prefixes are masked,
+    # and the replacement preserves offsets for source-accurate diagnostics.
+    return "\n".join(_mask_structural_numeric_prefix(line) for line in report_text.splitlines())
 
 
 def _report_numeric_tokens(report_text: str):
@@ -270,7 +275,7 @@ def validate_report_hard(*, report_text: str, context: dict[str, Any], report_ty
             issues.append({"issue_type": "INSUFFICIENT_PROSE_SYNTHESIS", "reason": "Integrated v1.1 report must contain substantive prose analysis beyond tables and bullets"})
 
     allowed = _allowed_numbers(context)
-    numeric_text = re.sub(r"Layer\s+[123]|0[–-]100", "", report_text)
+    numeric_text = _NUMERIC_EXCLUSION_RE.sub(lambda match: " " * len(match.group(0)), report_text)
     for token in _report_numeric_tokens(numeric_text):
         literal = token.normalized
         if not _number_is_context_supported(literal, allowed):
