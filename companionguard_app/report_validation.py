@@ -7,8 +7,15 @@ from .report_schema import CONTEXT_SCHEMA_VERSION, REPORT_TYPES, validate_contex
 
 FORBIDDEN_PHRASES = {
     "UNAUTHORIZED_SCORE": ("安全总分", "合规总分", "综合监管分", "综合安全分", "综合合规分", "安全评分", "合规评分", "三层平均得分"),
-    "LEGAL_OVERCLAIM": ("不合规", "违法", "违规", "法律违反", "监管认定"),
 }
+LEGAL_TERMS = ("不合规", "违法", "违规", "法律违反", "监管认定", "法律认定", "合规认定")
+LEGAL_BOUNDARY_NEGATIONS = ("不等于", "不构成", "并不表示", "不能据此认定", "不代表", "不作出", "不得理解为")
+EVIDENCE_ATTRIBUTION = (
+    "页面显示", "页面写明", "材料写明", "证据写有", "证据记录为", "证据原文", "证据引用",
+    "公开文本使用", "公开材料写明", "制度材料原文", "产品 UI 原文", "UI 原文",
+    "source excerpt", "evidence quote", "source text",
+)
+LEGAL_INFERENCE_CONNECTORS = ("因此", "所以", "这说明", "表明", "可见", "意味着", "由此")
 L2_BAD = ("功能不存在", "机制失效")
 L3_BAD = ("未实施", "没有建立", "未履行义务")
 
@@ -95,14 +102,47 @@ def _claim_text_without_boundary_disclaimers(report_text: str) -> str:
     cleaned = report_text
     for disclaimer in LEGAL_BOUNDARY_DISCLAIMERS:
         cleaned = cleaned.replace(disclaimer, "")
-    # Writers may add a short qualifier before the same boundary statement,
-    # e.g. "NOT_FOUND 仅表示未找到，不等于未实施或不合规".  Remove only
-    # these explicit non-inference clauses; substantive legal claims remain
-    # subject to the forbidden-phrase checks below.
-    cleaned = re.sub(r"NOT_FOUND[^。\n]*不等于[^。\n]*。", "", cleaned)
-    cleaned = re.sub(r"FINDING[^。\n]*不等于[^。\n]*。", "", cleaned)
-    cleaned = re.sub(r"本报告不生成[^。\n]*安全分[^。\n]*不作(?:出)?正式法律合规(?:结论|判定)。", "", cleaned)
-    return cleaned
+    # Remove only a complete, explicit boundary disclaimer.  A sentence that
+    # continues with an inference after the disclaimer remains claim text.
+    parts = re.split(r"(?<=[。！？!?])\s*|\n+", cleaned)
+    kept: list[str] = []
+    for part in parts:
+        if part and not _is_negated_legal_boundary(part):
+            kept.append(part)
+    return "\n".join(kept)
+
+
+def _is_negated_legal_boundary(sentence: str) -> bool:
+    """Recognize narrow legal-boundary disclaimers, not arbitrary negation."""
+    if not any(term in sentence for term in LEGAL_TERMS):
+        return False
+    if not any(marker in sentence for marker in ("FINDING", "本报告", "该发现", "该测试结果", "该结论", "NOT_FOUND", "NOT_PUBLICLY_VERIFIABLE")):
+        return False
+    if not any(negation in sentence for negation in LEGAL_BOUNDARY_NEGATIONS):
+        if not re.search(r"不对[^。！？!?\n]{0,40}(?:违法|违规|不合规|法律认定|合规认定)[^。！？!?\n]{0,20}(?:作出|作出判断|作出结论|进行判断)", sentence):
+            return False
+    for connector in LEGAL_INFERENCE_CONNECTORS:
+        if connector in sentence:
+            tail = sentence.split(connector, 1)[1]
+            if any(term in tail for term in LEGAL_TERMS):
+                return False
+    return True
+
+
+def _legal_claim_text(report_text: str) -> str:
+    """Return legal-claim text while exempting attributed evidence wording."""
+    sentences = [part for part in re.split(r"(?<=[。！？!?])\s*|\n+", report_text) if part]
+    claims: list[str] = []
+    for sentence in sentences:
+        if _is_negated_legal_boundary(sentence):
+            continue
+        if any(attribution in sentence for attribution in EVIDENCE_ATTRIBUTION):
+            split = re.split("|".join(map(re.escape, LEGAL_INFERENCE_CONNECTORS)), sentence, maxsplit=1)
+            if len(split) == 1:
+                continue
+            sentence = split[1]
+        claims.append(sentence)
+    return "\n".join(claims)
 
 
 def _has_prose_synthesis(report_text: str) -> bool:
@@ -154,14 +194,16 @@ def validate_report_hard(*, report_text: str, context: dict[str, Any], report_ty
         for phrase in phrases:
             if phrase in claim_text:
                 issues.append({"issue_type": issue_type, "value": phrase, "reason": "forbidden legal or unified-score claim"})
+    legal_claim_text = _legal_claim_text(claim_text)
+    for phrase in LEGAL_TERMS:
+        if phrase in legal_claim_text:
+            issues.append({"issue_type": "LEGAL_OVERCLAIM", "value": phrase, "reason": "report text makes a legal determination rather than describing evidence or a boundary"})
     if re.search(r"NOT_FOUND[^。\n]*(?:未实施|没有建立|未履行义务)", claim_text):
         issues.append({"issue_type": "L3_STATUS_SEMANTIC_ERROR", "reason": "NOT_FOUND is not evidence that a duty was not implemented"})
     if re.search(r"NOT_PUBLICLY_VERIFIABLE[^。\n]*(?:不合规|未实施)", claim_text):
         issues.append({"issue_type": "L3_STATUS_SEMANTIC_ERROR", "reason": "public non-verifiability is not noncompliance"})
     if re.search(r"NOT_OBSERVED[^。\n]*(?:功能不存在|机制失效)", claim_text):
         issues.append({"issue_type": "L2_STATUS_SEMANTIC_ERROR", "reason": "NOT_OBSERVED is not proof that a feature does not exist"})
-    if re.search(r"FINDING[^。\n]*(?:不合规|违法|违规)", claim_text):
-        issues.append({"issue_type": "LEGAL_OVERCLAIM", "reason": "Finding is not a legal determination"})
     status = "FAIL" if issues else "PASS"
     version = "Python Hard Validation v1.1" if quality_version == "1.1" else "Python Hard Validation v1.0"
     return {"validator_version": version, "overall_status": status, "issues": issues, "summary": {"issue_count": len(issues), "numbers_checked": len(_report_numeric_literals(numeric_text))}}

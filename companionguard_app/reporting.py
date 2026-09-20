@@ -412,6 +412,7 @@ def build_dialogue_report_context(
         "finding_precision": _pct(rel.get("finding_precision")),
         "finding_recall": _pct(rel.get("finding_recall")),
         "cohen_kappa": "N/A" if rel.get("cohen_kappa") is None else f"{rel['cohen_kappa']:.3f}",
+        "cohen_kappa_display": "N/A" if rel.get("cohen_kappa") is None else f"{rel['cohen_kappa']:.3f}",
     }
     product_layer_coverage = build_product_layer_coverage(
         project=project,
@@ -461,6 +462,7 @@ def build_dialogue_report_context(
         "product_layer_coverage": product_layer_coverage,
         "reliability": rel,
         "reliability_display": reliability_display,
+        "cohen_kappa_display": reliability_display["cohen_kappa_display"],
         "modules": modules,
         "criteria": criteria,
         "conditions": {key: {"finding_rate": value, "finding_rate_display": _pct(value), "sample_size": sum(1 for r in formal if r.get("condition") == key), "small_sample": sum(1 for r in formal if r.get("condition") == key) < SMALL_SAMPLE_THRESHOLD} for key, value in condition_rates.items()},
@@ -504,7 +506,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
             "module_display_zh": row.get("module_display_zh") or _module_display_name(row.get("module")),
             "regulatory_question_zh": row.get("regulatory_question_zh"),
             "formal_cases": row.get("formal_cases"),
-            "finding_rate_display": _pct(row.get("finding_rate")),
+            "finding_rate_display": row.get("finding_rate_display") or _pct(row.get("finding_rate")),
         })
 
     layer2_rows = [
@@ -536,6 +538,48 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
     writer_coverage = dict(context.get("coverage", {}))
     writer_coverage.pop("formal_case_count", None)
     writer_coverage.pop("formal_case_count_legacy_semantic", None)
+
+    writer_products = {}
+    for product, row in products.items():
+        projected = dict(row)
+        projected.pop("finding_rate", None)
+        projected["finding_rate_display"] = row.get("finding_rate_display") or _pct(row.get("finding_rate"))
+        writer_products[product] = projected
+
+    writer_conditions = {}
+    for condition, row in conditions.items():
+        projected = dict(row)
+        projected.pop("finding_rate", None)
+        projected["finding_rate_display"] = row.get("finding_rate_display") or _pct(row.get("finding_rate"))
+        writer_conditions[condition] = projected
+
+    writer_overall = dict(context.get("overall", {}))
+    writer_overall.pop("macro_finding_rate", None)
+    writer_overall["macro_finding_rate_display"] = (
+        writer_overall.get("macro_finding_rate_display")
+        or context.get("overall_macro_finding_rate_display")
+        or _pct(context.get("overall_macro_finding_rate"))
+    )
+
+    writer_comparisons = {}
+    for name, comparison in (context.get("comparisons") or {}).items():
+        projected = dict(comparison)
+        projected.pop("raw_value", None)
+        writer_comparisons[name] = projected
+
+    raw_reliability = context.get("reliability") or {}
+    display_reliability = context.get("reliability_display") or {}
+    writer_reliability = {
+        "n": raw_reliability.get("n"),
+        "exact_agreement_display": display_reliability.get("exact_agreement"),
+        "finding_precision_display": display_reliability.get("finding_precision"),
+        "finding_recall_display": display_reliability.get("finding_recall"),
+        "cohen_kappa_display": (
+            display_reliability.get("cohen_kappa_display")
+            or display_reliability.get("cohen_kappa")
+            or context.get("cohen_kappa_display")
+        ),
+    }
     return {
         "report_contract": {
             "writer_context_version": "1.1", "report_type": report_type,
@@ -554,12 +598,12 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
             {"signal_type": "cross_layer_pattern", **signals.get("cross_layer_pattern", {})},
         ],
         "dialogue_analysis": {
-            "project": context.get("project", {}), "overall": context.get("overall", {}), "products": products,
+            "project": context.get("project", {}), "overall": writer_overall, "products": writer_products,
             "product_layer_coverage": context.get("product_layer_coverage", []),
             "modules": [{"module_key": key, "display_name_zh": _module_display_name(key), "finding_rate_display": _pct(value)} for key, value in (context.get("modules") or {}).items()],
             "criteria": criterion_rows,
-            "conditions": {key: {"display_name_zh": {"C0": "C0｜标准条件", "C1": "C1｜压力条件", "C2": "C2｜多轮条件"}.get(key, key), **value} for key, value in conditions.items()},
-            "comparisons": context.get("comparisons", {}), "reliability": context.get("reliability", {}),
+            "conditions": {key: {"display_name_zh": {"C0": "C0｜标准条件", "C1": "C1｜压力条件", "C2": "C2｜多轮条件"}.get(key, key), **value} for key, value in writer_conditions.items()},
+            "comparisons": writer_comparisons, "reliability": writer_reliability,
         },
         "layer2_analysis": {"records": layer2_rows, "record_count": len(layer2_rows)},
         "layer3_analysis": {"records": layer3_rows, "record_count": len(layer3_rows)},
