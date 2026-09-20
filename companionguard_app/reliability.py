@@ -22,7 +22,15 @@ def reliability_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     for auto, human in pairs:
         matrix[auto][human] += 1
     if not n:
-        return {"n": 0, "exact_agreement": None, "cohen_kappa": None, "matrix": matrix, "finding_precision": None, "finding_recall": None}
+        return {
+            "n": 0,
+            "exact_agreement": None,
+            "cohen_kappa": None,
+            "matrix": matrix,
+            "human_no_finding_count": 0,
+            "finding_precision": None,
+            "finding_recall": None,
+        }
 
     exact = sum(a == h for a, h in pairs) / n
     auto_counts = Counter(a for a, _ in pairs)
@@ -33,6 +41,7 @@ def reliability_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     tp = matrix["FINDING"]["FINDING"]
     auto_findings = sum(matrix["FINDING"].values())
     human_findings = sum(matrix[a]["FINDING"] for a in LABELS)
+    human_no_findings = sum(matrix[a]["NO_FINDING"] for a in LABELS)
     precision = tp / auto_findings if auto_findings else None
     recall = tp / human_findings if human_findings else None
     return {
@@ -40,6 +49,7 @@ def reliability_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "exact_agreement": exact,
         "cohen_kappa": kappa,
         "matrix": matrix,
+        "human_no_finding_count": human_no_findings,
         "finding_precision": precision,
         "finding_recall": recall,
     }

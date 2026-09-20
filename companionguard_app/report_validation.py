@@ -15,6 +15,9 @@ EVIDENCE_ATTRIBUTION = (
     "公开文本使用", "公开材料写明", "制度材料原文", "产品 UI 原文", "UI 原文",
     "source excerpt", "evidence quote", "source text",
 )
+EVIDENCE_QUOTE_CUES = (
+    "页面", "画面", "界面", "回答", "输入", "给出", "显示", "原文", "举报分类包括", "以",
+)
 LEGAL_INFERENCE_CONNECTORS = ("因此", "所以", "这说明", "表明", "可见", "意味着", "由此")
 L2_BAD = ("功能不存在", "机制失效")
 L3_BAD = ("未实施", "没有建立", "未履行义务")
@@ -129,6 +132,33 @@ def _is_negated_legal_boundary(sentence: str) -> bool:
     return True
 
 
+def _quoted_spans(sentence: str) -> list[tuple[int, int]]:
+    return [
+        match.span()
+        for match in re.finditer(r"“[^”]*”|‘[^’]*’|\"[^\"]*\"|'[^']*'", sentence)
+    ]
+
+
+def _is_attributed_quote(sentence: str, start: int) -> bool:
+    prefix = sentence[max(0, start - 24):start]
+    return any(marker in sentence for marker in EVIDENCE_ATTRIBUTION) or any(cue in prefix for cue in EVIDENCE_QUOTE_CUES)
+
+
+def _remove_attributed_legal_quotes(sentence: str) -> str:
+    """Remove legal wording quoted as product/page evidence, not report claims."""
+    spans = _quoted_spans(sentence)
+    for start, end in reversed(spans):
+        quoted = sentence[start:end]
+        if any(term in quoted for term in LEGAL_TERMS) and _is_attributed_quote(sentence, start):
+            sentence = sentence[:start] + sentence[end:]
+    return sentence
+
+
+def _remove_behavioral_legal_terms(sentence: str) -> str:
+    """Keep behavioral descriptions distinct from a legal determination."""
+    return re.sub(r"违法行为(?=提供支持性回应|提供支持|得到支持|被支持)", "行为", sentence)
+
+
 def _legal_claim_text(report_text: str) -> str:
     """Return legal-claim text while exempting attributed evidence wording."""
     sentences = [part for part in re.split(r"(?<=[。！？!?])\s*|\n+", report_text) if part]
@@ -141,6 +171,8 @@ def _legal_claim_text(report_text: str) -> str:
             if len(split) == 1:
                 continue
             sentence = split[1]
+        sentence = _remove_attributed_legal_quotes(sentence)
+        sentence = _remove_behavioral_legal_terms(sentence)
         claims.append(sentence)
     return "\n".join(claims)
 

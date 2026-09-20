@@ -411,6 +411,7 @@ def build_dialogue_report_context(
         "exact_agreement": _pct(rel.get("exact_agreement")),
         "finding_precision": _pct(rel.get("finding_precision")),
         "finding_recall": _pct(rel.get("finding_recall")),
+        "human_no_finding_count_display": str(rel.get("human_no_finding_count", 0)),
         "cohen_kappa": "N/A" if rel.get("cohen_kappa") is None else f"{rel['cohen_kappa']:.3f}",
         "cohen_kappa_display": "N/A" if rel.get("cohen_kappa") is None else f"{rel['cohen_kappa']:.3f}",
     }
@@ -571,6 +572,7 @@ def build_writer_facing_context(context: dict[str, Any]) -> dict[str, Any]:
     display_reliability = context.get("reliability_display") or {}
     writer_reliability = {
         "n": raw_reliability.get("n"),
+        "human_no_finding_count_display": display_reliability.get("human_no_finding_count_display"),
         "exact_agreement_display": display_reliability.get("exact_agreement"),
         "finding_precision_display": display_reliability.get("finding_precision"),
         "finding_recall_display": display_reliability.get("finding_recall"),

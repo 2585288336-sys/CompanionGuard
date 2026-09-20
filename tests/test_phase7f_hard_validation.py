@@ -4,7 +4,7 @@ from pathlib import Path
 
 from companionguard_app.report_pipeline import write_report_artifacts
 from companionguard_app.report_validation import validate_report_hard
-from companionguard_app.reporting import build_writer_facing_context
+from companionguard_app.reporting import build_dialogue_report_context, build_writer_facing_context
 from companionguard_app.runtime_scope import RuntimeScope
 
 
@@ -69,6 +69,41 @@ def test_attributed_evidence_wording_is_not_a_report_legal_claim():
     result = _check("证据写有违规，因此企业违规。")
     assert result['overall_status'] == "FAIL"
     assert any(issue["issue_type"] == "LEGAL_OVERCLAIM" for issue in result['issues'])
+
+
+def test_phase7g_real_integrated_legal_sentences_are_classified_by_context():
+    assert _check('FINDING 不等于产品违法或不合规。')['overall_status'] == 'PASS'
+    assert _check('FINDING 不构成正式法律认定。')['overall_status'] == 'PASS'
+    assert _check('页面显示“输入内容包含违规信息，已被撤回”。')['overall_status'] == 'PASS'
+    assert _check('页面显示“输入内容包含违规信息，已被撤回”，因此该产品违规。')['overall_status'] == 'FAIL'
+    assert _check('举报分类包括“违法犯罪”。')['overall_status'] == 'PASS'
+    assert _check('模型在特定叙事框架下为暴力或违法行为提供支持性回应。')['overall_status'] == 'PASS'
+    assert _check('该产品违法。')['overall_status'] == 'FAIL'
+    assert _check('该企业违规。')['overall_status'] == 'FAIL'
+    assert _check('本次 Finding 证明企业不合规。')['overall_status'] == 'FAIL'
+
+
+def test_phase7g_human_no_finding_count_is_explicit_and_displayed():
+    context = _context()
+    context["reliability"]["human_no_finding_count"] = 175
+    context["reliability_display"]["human_no_finding_count_display"] = "175"
+    result = validate_report_hard(
+        report_text="人工 NO_FINDING 的 175 例中，Judge 误判为 FINDING 的有 3 例。",
+        context=context,
+        report_type="dialogue",
+    )
+    assert result["overall_status"] == "PASS"
+    writer = build_writer_facing_context(context)
+    assert writer["dialogue_analysis"]["reliability"]["human_no_finding_count_display"] == "175"
+
+    rows = [
+        {"phase": "FORMAL", "auto_label": "NO_FINDING", "human_label": "NO_FINDING"},
+        {"phase": "FORMAL", "auto_label": "FINDING", "human_label": "NO_FINDING"},
+        {"phase": "FORMAL", "auto_label": "FINDING", "human_label": "FINDING"},
+    ]
+    generated = build_dialogue_report_context(project={"project_id": "p", "products": []}, final_rows=rows)
+    assert generated["reliability"]["human_no_finding_count"] == 2
+    assert generated["reliability_display"]["human_no_finding_count_display"] == "2"
 
 
 def test_writer_facing_context_exposes_display_values_not_raw_kappa_or_rates():
