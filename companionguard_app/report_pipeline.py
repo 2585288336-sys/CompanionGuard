@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
-from .grounding_validator import validate_grounding
+from .grounding_validator import normalize_grounding_result, validate_grounding
 from .audits import load_jsonl
 from .report_schema import report_manifest
 from .report_validation import validate_report_hard
@@ -136,13 +136,14 @@ def write_report_artifacts(*, report_type: str, project: dict[str, Any], final_r
         grounding = _skipped_grounding(writer_status)
     else:
         hard = validate_report_hard(report_text=draft, context=context, report_type=report_type, quality_version=writer_prompt_version)
-        grounding = (
+        raw_grounding = (
             grounding_validator(draft, context)
             if hard["overall_status"] == "PASS" and grounding_validator
             else validate_grounding(draft_report=draft, context=context)
             if hard["overall_status"] == "PASS"
             else _skipped_grounding("HARD_VALIDATION_FAILED")
         )
+        grounding = normalize_grounding_result(raw_grounding, context)
         if grounding_validator and grounding.get("overall_status") == "PASS":
             summary = grounding.get("summary") or {}
             if summary.get("sentences_checked") == 0:

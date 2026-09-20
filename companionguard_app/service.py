@@ -13,6 +13,7 @@ from companionguard_llm.guard import check_server_guard, record_usage
 from companionguard_llm.profiles import LLMProfile
 
 from .config import CRITERIA_DIR, JUDGE_RESULTS_PATH, LLM_USAGE_PATH, PROMPTS_DIR
+from .grounding_validator import normalize_grounding_result
 from .reporting import build_writer_facing_context
 from .report_schema import REPORT_PIPELINE_VERSION
 from .runtime_scope import RuntimeScope, assert_writable_scope, assert_writable_target
@@ -552,7 +553,7 @@ def run_grounding_validator(
                 "final_attempt_status": "PASS",
             },
         )
-        return result
+        return normalize_grounding_result(result, report_context)
     return {"overall_status": "FAIL", "failure_type": "GROUNDING_VALIDATOR_RESPONSE_ERROR", "response_error": last_failure or "UNKNOWN"}
 
 

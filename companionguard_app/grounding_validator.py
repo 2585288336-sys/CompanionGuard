@@ -8,6 +8,7 @@ ISSUE_TYPES = {"NUMBER_MISMATCH", "UNAUTHORIZED_CALCULATION", "LEGAL_OVERCLAIM",
 _NOT_IN_SCOPE_PHRASES = ("not included", "not in scope", "out of scope", "未纳入", "不在范围", "不参加")
 _NO_DATA_PHRASES = ("no analyzable data", "data are missing", "data is missing", "not yet available", "暂无可分析数据", "暂无数据", "数据缺失")
 _LAYER_LABELS = {"layer1": ("layer 1", "layer1", "层 1", "层1"), "layer2": ("layer 2", "layer2", "层 2", "层2"), "layer3": ("layer 3", "layer3", "层 3", "层3")}
+_PRODUCT_LIST_SPLIT_RE = re.compile(r"\s*(?:以及|、|，|,|/|和|及)\s*")
 
 
 def _alias_in_text(alias: str, text: str) -> bool:
@@ -16,6 +17,68 @@ def _alias_in_text(alias: str, text: str) -> bool:
     if re.search(r"[A-Za-z0-9_]", alias):
         return re.search(rf"(?<![A-Za-z0-9_]){re.escape(alias)}(?![A-Za-z0-9_])", text) is not None
     return alias in text
+
+
+def _known_product_names(context: dict[str, Any]) -> set[str]:
+    names = {str(name).strip() for name in (context.get("products") or {}) if str(name).strip()}
+    for item in context.get("product_layer_coverage") or []:
+        for key in ("product_id", "display_name"):
+            value = str(item.get(key) or "").strip()
+            if value:
+                names.add(value)
+    return names
+
+
+def _known_product_candidate(candidate: str, known_products: set[str]) -> bool:
+    candidate = candidate.strip().strip("。；;：:")
+    if not candidate:
+        return False
+    if candidate in known_products:
+        return True
+    if not _PRODUCT_LIST_SPLIT_RE.search(candidate):
+        return False
+    tokens = [token.strip().strip("。；;：:") for token in _PRODUCT_LIST_SPLIT_RE.split(candidate)]
+    return len(tokens) > 1 and all(token in known_products for token in tokens)
+
+
+def _is_known_product_entity_issue(issue: dict[str, Any], known_products: set[str]) -> bool:
+    if set(issue.get("issue_types") or []) != {"ENTITY_MISMATCH"}:
+        return False
+    match = re.fullmatch(r"product not in context:\s*(.+?)\s*", str(issue.get("reason") or ""), flags=re.IGNORECASE)
+    return bool(match and _known_product_candidate(match.group(1), known_products))
+
+
+def normalize_grounding_result(result: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    """Normalize only exact known-product entity-list false positives after grounding."""
+    normalized = dict(result)
+    issues = [dict(issue) for issue in (result.get("issues") or [])]
+    if not issues:
+        return normalized
+
+    known_products = _known_product_names(context)
+    kept_issues = [issue for issue in issues if not _is_known_product_entity_issue(issue, known_products)]
+    removed_count = len(issues) - len(kept_issues)
+    if not removed_count:
+        return normalized
+
+    normalized["issues"] = kept_issues
+    normalized["overall_status"] = "PASS" if not kept_issues else "FAIL"
+    summary = dict(result.get("summary") or {})
+    if not summary.get("sentences_checked"):
+        summary["sentences_checked"] = removed_count
+        summary["supported"] = int(summary.get("supported") or 0) + removed_count
+    summary["unsupported"] = len(kept_issues)
+    summary["critical_errors"] = len(kept_issues)
+    normalized["summary"] = summary
+    if "legal_overclaim_errors" in normalized:
+        normalized["legal_overclaim_errors"] = [
+            issue for issue in kept_issues if "LEGAL_OVERCLAIM" in issue.get("issue_types", [])
+        ]
+    if not kept_issues:
+        normalized["final_decision"] = "可以进入后续流程"
+        if "failure_type" in normalized:
+            normalized["failure_type"] = None
+    return normalized
 
 
 def validate_grounding(*, draft_report: str, context: dict[str, Any]) -> dict[str, Any]:
