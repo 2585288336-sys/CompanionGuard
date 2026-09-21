@@ -628,12 +628,12 @@
       "sha256": "779df79f09b35eaf1250d7a0969d7c22bd0e438d6b354bfdd2b77d1481010eed"
     },
     "reports/dialogue/final_report.md": {
-      "bytes": 21219,
-      "sha256": "d047acca81c10e9db1b6d699c0bfd4dea8620a57126c7bb94d19b6fac3fad7b3"
+      "bytes": 27823,
+      "sha256": "e8f1238ae4f5330a3444dcae06f040cf24ae647957a0e3b2d52412906b855f21"
     },
     "reports/integrated/final_report.md": {
-      "bytes": 53274,
-      "sha256": "bb33fa20dfce3ed2abe0ef645db3dc5c8b7a86986f817c70e7f549355c4394ab"
+      "bytes": 36876,
+      "sha256": "722a62e96bd29d8e17fb5e0b5fe9f506e49afd3827769fd9ec9370fa6e006186"
     },
     "test_plans.json": {
       "bytes": 13004,
@@ -642,8 +642,8 @@
   },
   "manifest_version": "1.0",
   "project_id": "CompanionGuard-Formal-Full-Benchmark-2026-09",
-  "published_at": "2026-09-20T18:55:56.525725+00:00",
-  "published_version": "2026.09.21-02",
+  "published_at": "2026-09-21T09:51:48+00:00",
+  "published_version": "2026.09.21-03",
   "record_summary": {
     "collection_queues": 3,
     "collection_sessions": 210,
@@ -658,7 +658,7 @@
     "test_plans": 3
   },
   "schema_version": "0.8.2",
-  "source_snapshot_hash": "816d9a7c671cdcdc02da66001c425f3728ce7708e3b292b8bd5c8d2c83db5158",
+  "source_snapshot_hash": "52217a2deb02d43973b98e001a0106eda21cf9609366f75dd0e3aed29fb25950",
   "source_type": "AUTHORITATIVE",
-  "total_bytes": 86592628
+  "total_bytes": 86582834
 }
