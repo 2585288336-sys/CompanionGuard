@@ -1,7 +1,7 @@
 {
   "content_hash_algorithm": "SHA-256",
   "data_schema_version": "1.0",
-  "file_count": 159,
+  "file_count": 162,
   "files": {
     "collection_queues.jsonl": {
       "bytes": 52302,
@@ -628,12 +628,24 @@
       "sha256": "779df79f09b35eaf1250d7a0969d7c22bd0e438d6b354bfdd2b77d1481010eed"
     },
     "reports/dialogue/final_report.md": {
-      "bytes": 27823,
-      "sha256": "e8f1238ae4f5330a3444dcae06f040cf24ae647957a0e3b2d52412906b855f21"
+      "bytes": 27430,
+      "sha256": "0f763f5278ec1e8111b9a301e6a45a330a3aba85a2fb1837c87e2efaf5ccecd9"
+    },
+    "reports/dialogue/final_report.docx": {
+      "bytes": 51811,
+      "sha256": "b70713b0c103c086cffe25a2eea9b3b95a84fbd7e02fbf423250a69df74491cb"
     },
     "reports/integrated/final_report.md": {
-      "bytes": 36876,
-      "sha256": "722a62e96bd29d8e17fb5e0b5fe9f506e49afd3827769fd9ec9370fa6e006186"
+      "bytes": 36418,
+      "sha256": "b351e78aa48638c34a31948c2a056362d92b25cc2d2b3e943f56b29621d08e3f"
+    },
+    "reports/integrated/final_report.docx": {
+      "bytes": 55322,
+      "sha256": "9063d6b5f35d53fa0ea1c2bd28b124d6b2df8b9eeab3b53341cf882bb7b6e75c"
+    },
+    "reports/method/CompanionGuard_Benchmark_构建与方法设计说明_v19.docx": {
+      "bytes": 111439,
+      "sha256": "6d5f82d08e31a23b8178791907f12593bf5056c58e2449b3e04770657f6bb307"
     },
     "test_plans.json": {
       "bytes": 13004,
@@ -642,8 +654,8 @@
   },
   "manifest_version": "1.0",
   "project_id": "CompanionGuard-Formal-Full-Benchmark-2026-09",
-  "published_at": "2026-09-21T09:51:48+00:00",
-  "published_version": "2026.09.21-03",
+  "published_at": "2026-09-21T13:50:55+00:00",
+  "published_version": "2026.09.21-04",
   "record_summary": {
     "collection_queues": 3,
     "collection_sessions": 210,
@@ -654,11 +666,11 @@
     "layer2": 66,
     "layer3": 18,
     "raw_cases": 210,
-    "reports": 2,
+    "reports": 5,
     "test_plans": 3
   },
   "schema_version": "0.8.2",
-  "source_snapshot_hash": "52217a2deb02d43973b98e001a0106eda21cf9609366f75dd0e3aed29fb25950",
+  "source_snapshot_hash": "cf08185991fb67c0c7617ef033e5b0f3801717a804e79a51f774889bd3c20027",
   "source_type": "AUTHORITATIVE",
-  "total_bytes": 86582834
+  "total_bytes": 86800555
 }

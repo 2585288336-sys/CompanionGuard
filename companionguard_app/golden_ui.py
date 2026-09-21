@@ -7,7 +7,9 @@ backend workflows remain the functional baseline.
 
 from __future__ import annotations
 
+import base64
 from html import escape
+from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlencode
 
@@ -69,6 +71,61 @@ NAV_LABELS: dict[str, tuple[str, str, int]] = {
     "dialogue_report": ("对话评测报告", "Dialogue Report", 3),
     "report": ("综合评测报告", "Integrated Report", 3),
 }
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEPLOYMENT_REPORT_ROOT = PROJECT_ROOT / "data" / "deployment_seed" / "CompanionGuard-Formal-Full-Benchmark-2026-09" / "reports"
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+HOME_DOCX_PATHS = {
+    "dialogue": DEPLOYMENT_REPORT_ROOT / "dialogue" / "final_report.docx",
+    "integrated": DEPLOYMENT_REPORT_ROOT / "integrated" / "final_report.docx",
+    "method": DEPLOYMENT_REPORT_ROOT / "method" / "CompanionGuard_Benchmark_构建与方法设计说明_v19.docx",
+}
+
+
+def _download_href(path: Path) -> str:
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing homepage download asset: {path}")
+    payload = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:{DOCX_MIME};base64,{payload}"
+
+
+def _home_html() -> str:
+    html = HOME_HTML
+    html = html.replace(
+        '<div class="condition-grid">',
+        '<div class="condition-heading">同一安全要求，要通过不同互动条件测试</div><div class="condition-grid">',
+        1,
+    )
+    html = html.replace(
+        "首页仅展示 CompanionGuard 的主要设计。完整方法说明保留监管映射、正式判定边界、标准测试语句和可复现性细节。",
+        "首页仅展示 CompanionGuard 的主要设计。完整方法文档进一步说明监管要求如何转化为具体测试、每项考察如何确定判定边界，以及标准场景、实验条件和复核方法如何设计。",
+        1,
+    )
+    html = html.replace(
+        "先确定《人工智能拟人化互动服务管理暂行办法》监管规范要求平台避免什么行为、履行什么义务，再将其拆解为可以观察和记录的测试要求。",
+        "项目从《人工智能拟人化互动服务管理暂行办法》的监管要求出发，并结合相关伦理原则、学术研究和既有 AI 安全评测方法，明确拟人化互动中的风险构念和测试边界，再将这些要求转化为可以在真实产品上执行、记录和复核的测试。",
+        1,
+    )
+    html = html.replace(
+        '<a class="btn primary" href="#method">下载《CompanionGuard Benchmark 构建与方法设计说明》</a>',
+        '<a class="btn primary" download="CompanionGuard_Benchmark_构建与方法设计说明_v19.docx" href="__METHOD_DOCX_HREF__">下载《CompanionGuard Benchmark 构建与方法设计说明》</a>',
+        1,
+    )
+    formal_results = r'''
+  <div class="home-section divider-section" id="cg-formal-results-v19"><div class="section-intro"><div class="kicker">FORMAL BENCHMARK RESULTS</div><h2>一轮真实产品测试，我们观察到了什么</h2><p class="formal-prose">CompanionGuard Formal Full Benchmark 2026-09 已在 MoMood、星野和豆包三款真实产品上完成正式评测。以下结果来自人工裁定后的正式数据及其确定性后分析。</p></div><div class="formal-stats-grid"><div class="formal-stat-card"><div class="formal-stat-value">209</div><div class="formal-stat-label">有效正式案例</div><div class="formal-stat-meta">Layer 1 · Human-adjudicated</div></div><div class="formal-stat-card"><div class="formal-stat-value">18.5%</div><div class="formal-stat-label">五模块宏平均风险发现率</div><div class="formal-stat-meta">Overall Macro Finding Rate</div></div><div class="formal-stat-card"><div class="formal-stat-value">94.7%</div><div class="formal-stat-label">LLM Judge–Human 完全一致率</div><div class="formal-stat-meta">Evaluation Reliability</div></div><div class="formal-stat-card"><div class="formal-stat-value">+6.9 pp</div><div class="formal-stat-label">压力鲁棒性差值</div><div class="formal-stat-meta">Pressure Robustness · C1 vs. C0</div></div><div class="formal-stat-card"><div class="formal-stat-value">−2.8 pp</div><div class="formal-stat-label">多轮鲁棒性差值</div><div class="formal-stat-meta">Multi-turn Robustness · C2 vs. C0</div></div><div class="formal-stat-card"><div class="formal-stat-value">8.3%</div><div class="formal-stat-label">明确诱导后的风险转变</div><div class="formal-stat-meta">8 / 96 个适用案例</div></div></div><div class="formal-findings"><article class="formal-finding"><div class="formal-finding-kicker">01 · CRISIS RESPONSE</div><h3>自伤自杀安全应对是本轮最需要关注的方向</h3><p class="formal-prose">HR-02 的风险发现率为 66.7%，是全部考察项中最高的一项。测试不仅检查模型是否避免危险回应，也关注急性风险阶段是否真正提供必要的保护性回应。</p></article><article class="formal-finding"><div class="formal-finding-kicker">02 · MINOR PROTECTION</div><h3>未成年人风险同时涉及内容与关系边界</h3><p class="formal-prose">未成年人虚拟亲密关系边界测试检查模型在已知用户为未成年人时，是否仍会接受或推动虚拟恋人、家人等亲密关系，本轮有 33.3% 的案例出现此类风险；未成年人内容保护专项测试检查是否输出不适宜内容，风险发现率为 29.6%。未成年人保护因此不能只依赖内容过滤。</p></article><article class="formal-finding"><div class="formal-finding-kicker">03 · ROBUSTNESS</div><h3>第一次回答安全，不代表持续互动中仍能守住边界</h3><p class="formal-prose">压力条件下的风险发现率较标准条件高 6.9 个百分点；96 个最初未出现目标风险的案例中，有 8 个在后续推动下转为风险案例。一次回答安全，不代表持续互动中仍能守住边界。</p></article></div><div class="formal-layer-grid"><div><div class="formal-layer-title">Layer 1</div><b>209 VALID 对话案例</b></div><div><div class="formal-layer-title">Layer 2</div><b>66 条产品安全机制记录</b></div><div><div class="formal-layer-title">Layer 3</div><b>18 条公开制度材料记录</b></div></div><div class="formal-downloads"><a class="btn primary" download="CompanionGuard_dialogue_report_human_reviewed_v3.docx" href="__DIALOGUE_REPORT_DOCX_HREF__">下载对话评测报告</a><a class="btn primary" download="CompanionGuard_integrated_report_human_reviewed_v3.docx" href="__INTEGRATED_REPORT_DOCX_HREF__">下载综合评测报告</a></div></div>'''
+    html = html.replace('<div class="home-section divider-section" id="method">', formal_results + '\n  <div class="home-section divider-section" id="method">', 1)
+    why_section = r'''
+  <div class="home-section divider-section" id="cg-why-it-matters-v19"><div class="why-matters-inner"><div class="kicker">WHY IT MATTERS</div><h2>让伦理原则真正进入产品，让治理要求真正经得起测试</h2><p class="formal-prose">人工智能治理的难点，不只在于提出正确的原则，更在于这些原则能否进入真实产品、经受真实互动，并留下可以核验的证据。CompanionGuard 尝试建立的，正是伦理规范进入治理实践的这一环节：把“应当如何”转化为可以观察、测试和复核的问题，再通过真实对话、产品机制和公开制度材料，检验这些要求是否真正得到落实。</p><p class="formal-prose">本轮真实产品测试也表明，自伤自杀、未成年人保护和关系安全仍是拟人化 AI 中需要重点关注的领域。随着 AI 从信息生成工具进一步进入陪伴、情感和关系场景，安全的含义也需要随之扩展：不仅要关注内容是否安全，还要关注关系是否健康、边界是否稳定，以及处于脆弱状态的用户是否得到充分保护。</p><p class="why-emphasis">能力越强，越需要边界；关系越近，越需要治理。</p><p class="formal-prose">CompanionGuard 希望让快速发展的 AI 始终运行在可测试、可复核、可治理的框架中，让技术进步最终服务于真实的人。</p><p class="why-closing">让技术向前，也让技术向善。</p></div></div>'''
+    html = html.replace('<div class="footer">', why_section + '\n  <div class="footer">', 1)
+    html = html.replace('<div class="cg-home">', '<div class="cg-home"><style>.cg-home .condition-heading{font-size:18px;line-height:1.35;font-weight:750;color:#1d2939;margin:-2px 0 18px}.formal-prose{text-indent:2em}.formal-stats-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:28px}.formal-stat-card{background:#fff;border:1px solid #dce6ff;border-radius:12px;padding:20px}.formal-stat-value{font-size:32px;line-height:1.1;font-weight:800;color:#3156d9}.formal-stat-label{font-size:13px;line-height:1.45;font-weight:750;color:#344054;margin-top:10px}.formal-stat-meta{font-size:10.5px;line-height:1.4;color:#98a2b3;margin-top:4px}.formal-findings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:28px}.formal-finding{background:#fff;border:1px solid #e4e7ec;border-radius:11px;padding:19px}.formal-finding-kicker{font-size:10px;line-height:1.3;letter-spacing:.08em;color:#3156d9;font-weight:800;margin-bottom:8px}.formal-finding h3{font-size:14px;line-height:1.45;color:#101828;margin:0 0 8px}.formal-finding p{font-size:11.5px;line-height:1.7;color:#667085;margin:0}.formal-layer-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:24px}.formal-layer-grid>div{background:#f8faff;border:1px solid #dce6ff;border-radius:10px;padding:16px}.formal-layer-title{font-size:10px;letter-spacing:.08em;color:#3156d9;font-weight:800;margin-bottom:6px}.formal-layer-grid b{font-size:12px;color:#344054}.formal-downloads{display:flex;flex-wrap:wrap;gap:10px}.why-matters-inner{background:#eef3ff;border:1px solid #dce6ff;border-radius:13px;padding:28px 30px}.why-matters-inner h2{font-size:30px;letter-spacing:-.025em;margin:0 0 16px;color:#101828}.why-matters-inner p{font-size:13px;line-height:1.8;color:#475467;margin:0 0 16px}.why-emphasis{font-size:18px!important;line-height:1.5!important;font-weight:800;color:#3156d9!important;margin:24px 0!important}.why-closing{font-size:15px!important;font-weight:750;color:#1d2939!important;margin:24px 0 0!important}@media(max-width:760px){.formal-stats-grid,.formal-findings,.formal-layer-grid{grid-template-columns:1fr}.formal-stat-value{font-size:28px}.why-matters-inner{padding:22px 20px}.why-matters-inner h2{font-size:25px}}</style>', 1)
+    replacements = {
+        "__DIALOGUE_REPORT_DOCX_HREF__": _download_href(HOME_DOCX_PATHS["dialogue"]),
+        "__INTEGRATED_REPORT_DOCX_HREF__": _download_href(HOME_DOCX_PATHS["integrated"]),
+        "__METHOD_DOCX_HREF__": _download_href(HOME_DOCX_PATHS["method"]),
+    }
+    for marker, value in replacements.items():
+        html = html.replace(marker, value)
+    return html
 
 # The shell's sidebar order is a presentation concern.  Workflow navigation
 # uses an explicit route contract so a page insertion cannot silently change
@@ -192,7 +249,7 @@ def _page_href(page_id: str) -> str:
 
 def home_page() -> None:
     st.markdown(
-        HOME_HTML.replace('href="?page=overview"', f'href="{escape(_page_href("overview"))}"'),
+        _home_html().replace('href="?page=overview"', f'href="{escape(_page_href("overview"))}"'),
         unsafe_allow_html=True,
     )
 
